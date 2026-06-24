@@ -6,28 +6,28 @@ A 股价值投资选股 + 多 agent 研判系统。当前处于**设计讨论阶
 
 | 目录 | 角色 |
 |---|---|
-| `design/260623-design-v1.md` | **当前设计稿**（第一参考源）——第一性原理、借鉴与砍掉的范围、目标架构、分阶段实施路径、技术决策 |
+| `design/total-design.md` | **当前设计稿**（第一参考源）——第一性原理、借鉴与砍掉的范围、目标架构、分阶段实施路径、技术决策 |
 | `design/prd-rule&case.md` | **补充 PRD**——RULE.md 分层体系 + 历史案例库设计 |
-| `design/2bdiscuss.md` | **待讨论话题清单**——design-v1 未覆盖的 8 个细节，含优先级和状态标记 |
+| `design/2bdiscuss.md` | **待讨论话题清单**——total-design 未覆盖的 8 个细节，含优先级和状态标记 |
 | `uzi-skill/` | 借鉴资产——开源股票分析 Claude plugin（v3.9.0，可运行，独立 git 仓库） |
-| `old-archive/` | 初版产品构想草稿，已被 design-v1 融合吸收 |
+| `old-archive/` | 初版产品构想草稿，已被 total-design 融合吸收 |
 
-**动手前必读 `design/260623-design-v1.md`**。需求细节和架构仍在深入讨论中，设计未稳定的部分先讨论再动手，不要自行假设填空。
+**动手前必读 `design/total-design.md`**。需求细节和架构仍在深入讨论中，设计未稳定的部分先讨论再动手，不要自行假设填空。
 
-新代码目标目录：`value-screener/`（见 design-v1「八、实施路径」，尚未创建）。
+新代码目标目录：`value-screener/`（见 total-design「八、实施路径」，尚未创建）。
 
 ## 技术栈
 
 Python 3.10+，数据层 akshare，LLM 调用框架待定。
 
-**部署与前端**（见 design-v1「九、技术决策」）：
+**部署与前端**（见 total-design「九、技术决策」）：
 - Docker 容器化部署（`Dockerfile` + `docker-compose.yml`）
 - MVP 前端用 **Streamlit**（纯 Python 数据看板，无需前端代码）
 - 后续如需复杂交互可迁移到 FastAPI + React
 
 ## 目标架构要点
 
-快筛（L1 量化 + L2 LLM）和深研（L3 天团辩论）是**两条独立管线**，通过 watchlist 接口连接；L4 监控是独立层。详见 design-v1「八、实施路径」。
+快筛（L1 量化 + L2 LLM）和深研（L3 天团辩论）是**两条独立管线**，通过 watchlist 接口连接；L4 监控是独立层。详见 total-design「八、实施路径」。
 
 **硬约束**：
 - 借鉴 UZI 数据层（采集 / 容错 / 并发 / resume / 特征层 / 金融模型），重做决策层（agent 天团替代规则引擎）
@@ -48,7 +48,7 @@ council/prompts/*.md            ← Agent 个性化学术立场
 
 ## L3 天团辩论：不用 Multi-Agent 框架
 
-**不需要 AgentScope / LangGraph 等框架**（见 design-v1「六、6.5 为什么不用 Multi-Agent 框架」）：
+**不需要 AgentScope / LangGraph 等框架**（见 total-design「六、6.5 为什么不用 Multi-Agent 框架」）：
 
 - 天团辩论本质是「带上下文的串行 LLM 调用」，不是分布式多 agent 系统
 - `council/debate.py` 是唯一的消息总线和状态持有者——agent 之间不直接通信

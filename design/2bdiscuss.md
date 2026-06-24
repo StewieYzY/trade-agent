@@ -1,6 +1,6 @@
 # 待讨论话题清单
 
-> 来自 2026-06-23 设计讨论，design-v1 未充分覆盖的细节话题
+> 来自 2026-06-23 设计讨论，total-design 未充分覆盖的细节话题
 > 最后更新：2026-06-23
 
 ---
@@ -20,7 +20,7 @@
 
 ### 1. L1 因子权重 (50/30/20) 的校准 ✅
 
-**已解决**：写入 design-v1 Section 4.8「L1 因子权重校准」。
+**已解决**：写入 total-design Section 4.8「L1 因子权重校准」。
 
 **决定**：
 - 初始值 50/30/20 符合价值投资常识（好生意 > 便宜 > 安全边际），不需要严格回测验证
@@ -33,7 +33,7 @@
 
 ### 2. 冯柳 agent 的决策框架 ✅
 
-**已解决**：写入 design-v1 Section 6.2 冯柳 Agent Prompt 示例 + Section 6.3 Agent 特有字段。
+**已解决**：写入 total-design Section 6.2 冯柳 Agent Prompt 示例 + Section 6.3 Agent 特有字段。
 
 **决定**：
 - 蒸馏来源：[investment-masters-handbook/feng_liu.md](https://github.com/sou350121/investment-masters-handbook/blob/main/investors/feng_liu.md)（弱者体系完整框架，直接复用）
@@ -45,9 +45,9 @@
 
 ### 3. 辩论中 agent 之间的信息不对称 ✅
 
-**已解决**：写入 design-v1 Section 6.4.1「Agent 间通信格式与 Token 预算」。
+**已解决**：写入 total-design Section 6.4.1「Agent 间通信格式与 Token 预算」。
 
-**已覆盖**：design-v1 6.5 节的 `debate.py` 骨架已定义信息可见性控制：
+**已覆盖**：total-design 6.5 节的 `debate.py` 骨架已定义信息可见性控制：
 - Round 1：agent 彼此隔离（防从众）
 - Round 2：每个 agent 看到其他 4 人的论点（促质疑）
 - Round 3：Devil's Advocate 看到全部讨论（找盲区）
@@ -64,7 +64,7 @@
 
 ### 4. L4 催化事件检测的具体设计 ✅
 
-**已解决**：写入 design-v1 Section 7.1「催化事件检测设计」。
+**已解决**：写入 total-design Section 7.1「催化事件检测设计」。
 
 **决定**：
 - 催化事件 = 财报超预期 / 分红提升 / 行业政策 / 管理层变动 / 风险事件
@@ -79,7 +79,7 @@
 
 ### 5. 回测与验证体系 ✅
 
-**已解决**：写入 design-v1 Section 10.3「回测与验证策略」。
+**已解决**：写入 total-design Section 10.3「回测与验证策略」。
 
 **决定**：
 - MVP 不做系统性回测
@@ -94,7 +94,7 @@
 
 ### 6. 系统交互形态 ✅
 
-**已解决**：Docker + Streamlit，写入 design-v1「九、技术决策」。
+**已解决**：Docker + Streamlit，写入 total-design「九、技术决策」。
 
 **决定**：MVP 用 Streamlit（纯 Python 数据看板），后续如需复杂交互可迁移到 FastAPI + React。
 
@@ -102,7 +102,7 @@
 
 ### 7. L2 输出的质量保证 ✅
 
-**已解决**：写入 design-v1 Section 5.6「输出质量保证」。
+**已解决**：写入 total-design Section 5.6「输出质量保证」。
 
 **决定**：
 - `temperature=0` 基础配置，消除模型随机性
@@ -116,7 +116,7 @@
 
 ### 8. 数据采集的工程细节 ✅
 
-**已解决**：写入 design-v1 Section 4.7「数据采集工程方案」。
+**已解决**：写入 total-design Section 4.7「数据采集工程方案」。
 
 **决定**：
 - 三层漏斗式采集（全市场快照 → ~800 只财报+估值+K线 → ~200 只治理+反陷阱）
@@ -132,10 +132,10 @@
 
 | 优先级 | 话题 | 理由 |
 |--------|------|------|
-| ✅ P0 | 8. 数据采集工程细节 | 已写入 design-v1 Section 4.7 |
-| ✅ P0 | 2. 冯柳 agent 决策框架 | 已写入 design-v1 Section 6.2 + 6.3 |
-| ✅ P1 | 3. 辩论上下文窗口 | 已写入 design-v1 §6.4.1 |
-| ✅ P1 | 7. L2 输出质量保证 | 已写入 design-v1 §5.6 |
-| ✅ P2 | 1. L1 因子权重校准 | 已写入 design-v1 §4.8 |
-| ✅ P2 | 4. L4 催化事件检测 | 已写入 design-v1 §7.1 |
-| ✅ P2 | 5. 系统性回测 | 已写入 design-v1 §10.3 |
+| ✅ P0 | 8. 数据采集工程细节 | 已写入 total-design Section 4.7 |
+| ✅ P0 | 2. 冯柳 agent 决策框架 | 已写入 total-design Section 6.2 + 6.3 |
+| ✅ P1 | 3. 辩论上下文窗口 | 已写入 total-design §6.4.1 |
+| ✅ P1 | 7. L2 输出质量保证 | 已写入 total-design §5.6 |
+| ✅ P2 | 1. L1 因子权重校准 | 已写入 total-design §4.8 |
+| ✅ P2 | 4. L4 催化事件检测 | 已写入 total-design §7.1 |
+| ✅ P2 | 5. 系统性回测 | 已写入 total-design §10.3 |

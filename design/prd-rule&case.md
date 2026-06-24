@@ -1,6 +1,6 @@
 # PRD: RULE.md 分层体系 + 历史案例库
 
-> 基于 2026-06-23 设计讨论，对 design-v1 的补充设计
+> 基于 2026-06-23 设计讨论，对 total-design 的补充设计
 > 两个独立模块，但都与「系统如何持续进化」相关
 
 ---
@@ -172,7 +172,7 @@ value-screener/
 │   └── ...
 │
 └── tests/
-    └── test_calibration.py           # 校准测试 = design-v1 6.6 节的校准用例
+    └── test_calibration.py           # 校准测试 = total-design 6.6 节的校准用例
 ```
 
 ### 2.4 案例的正确用法——以光模块暴涨为例
@@ -279,9 +279,9 @@ def generate_calibration_report(case_name: str):
 
 ---
 
-## 三、与 design-v1 的关系
+## 三、与 total-design 的关系
 
-| 模块 | 在 design-v1 中的位置 | 本 PRD 补充 |
+| 模块 | 在 total-design 中的位置 | 本 PRD 补充 |
 |------|----------------------|-------------|
 | RULE.md 分层 | 未覆盖（agent prompt 写在 6.1-6.2 节） | 新增规则继承体系，作为 agent prompt 的组装层 |
 | 案例库 | 6.6 节有校准用例，但局限于单一 agent 立场一致性 | 扩展为完整的案例库 + 回溯框架 + 复盘机制 |
@@ -336,4 +336,4 @@ council/
 ## 附：参考
 
 - Claude Code CLAUDE.md 分层机制：全局 `~/.claude/CLAUDE.md` + 项目 `<repo>/CLAUDE.md`
-- design-v1 6.6 节：Prompt 校准方法
+- total-design 6.6 节：Prompt 校准方法
