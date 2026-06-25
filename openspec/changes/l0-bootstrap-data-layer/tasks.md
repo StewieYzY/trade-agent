@@ -82,7 +82,10 @@
 
 **做什么**：
 - 采集日 K 线（收盘价、成交量），用于热度/动量计算
-- akshare 接口：`ak.stock_zh_a_hist()`
+- 主选：`ak.stock_zh_a_hist()`（东财，前复权）
+- 兜底 1：`ak.stock_zh_a_daily()`（新浪，列名需归一化为东财格式）
+- 兜底 2：baostock `query_history_k_data_plus()`（官方接口，免登录限流）
+- 兜底 3-5（MVP 不实现，留接口）：东财 push2his 直连 / 新浪 quotes 直连 / 腾讯 ifzq 直连
 - 默认采集近 250 交易日（1 年）
 - 继承 `BaseFetcher`
 
@@ -98,7 +101,10 @@
 **做什么**：
 - PE/PB 历史分位（近 5 年 / 10 年）
 - 格雷厄姆数：`sqrt(22.5 * EPS * BVPS)`
-- akshare 接口：`ak.stock_zh_valuation_baidu()`（纯 HTTP API，§4.7.3 确认无 mini_racer）
+- 主选：`ak.stock_zh_valuation_baidu()`（PE/PB 近 5 年历史序列，算分位）
+- 兜底 1：`ak.stock_industry_pe_ratio_cninfo()`（行业 PE 均值，A 股，cninfo 绕开东财 push2）
+- 港股兜底：`ak.hk_valuation_comparison_em()`（同行 PE 均值，MVP 不实现）
+- 格雷厄姆数：EPS/BVPS 从 financials 派生，无需额外接口
 - 继承 `BaseFetcher`
 
 **验证**：`python cli.py fetch 600519 --dim valuation` 返回 `{"pe_percentile_5y": ..., "pb_percentile_5y": ..., "graham_number": ...}`
