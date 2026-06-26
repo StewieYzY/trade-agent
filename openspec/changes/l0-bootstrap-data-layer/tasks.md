@@ -1,205 +1,139 @@
 # Tasks: bootstrap-data-layer
 
 > 按目录结构拆分，每个 task 可独立验证。
+> checkbox 供 openspec CLI 进度跟踪；每个 Task 下的「文件 / 做什么 / 验证」为实施依据。
 
 ---
 
-## Task 0: 项目骨架 + Dockerfile + requirements.txt
+## 1. 项目骨架 + Dockerfile + requirements.txt（Task 0）
 
-**文件**：
-- `value-screener/Dockerfile`
-- `value-screener/requirements.txt`
-- `value-screener/.gitignore`
-
-**做什么**：
-- `python:3.11-slim` base 镜像，`pip install` akshare/httpx/pydantic/typer
-- `requirements.txt` 锁定版本
-- `.gitignore`：`__pycache__/`、`.venv/`、`data/cache/`、`*.pyc`
-
-**验证**（分层）：
-- 主验证：`pip install -r requirements.txt && python -c "import akshare, httpx, pydantic, typer"` 无报错（不依赖 Docker，CI/本地均可运行）
-- 条件验证：若环境有 Docker，`docker build -t value-screener .` 退出码为 0（验证 Dockerfile 语法，不要求 docker run）
+- [ ] 1.1 创建 `value-screener/Dockerfile`：`python:3.11-slim` base 镜像，`pip install` akshare/httpx/pydantic/typer
+- [ ] 1.2 创建 `value-screener/requirements.txt`：锁定版本（akshare>=1.18.0 / httpx>=0.27.0 / pydantic>=2.0 / typer>=0.12.0）
+- [ ] 1.3 创建 `value-screener/.gitignore`：`__pycache__/`、`.venv/`、`data/cache/`、`*.pyc`
+- [ ] 1.4 主验证：`pip install -r requirements.txt && python -c "import akshare, httpx, pydantic, typer"` 无报错（不依赖 Docker，CI/本地均可运行）
+- [ ] 1.5 条件验证：若环境有 Docker，`docker build -t value-screener .` 退出码为 0（验证 Dockerfile 语法，不要求 docker run）
 
 ---
 
-## Task 1: cli.py 骨架
+## 2. cli.py 骨架（Task 1）
 
-**文件**：
-- `value-screener/cli.py`
-
-**做什么**：
-- typer 入口，三个子命令占位：`fetch`、`batch`、`cache-clear`
-- 函数体 `raise NotImplementedError`（占位，后续 task 填充）
-- 无模块级 `os.chdir` / `sys.path.insert`
-
-**验证**：`python cli.py --help` 显示三个子命令；`python cli.py fetch 000001` 抛 `NotImplementedError`
+- [ ] 2.1 创建 `value-screener/cli.py`：typer 入口，三个子命令占位：`fetch`、`batch`、`cache-clear`
+- [ ] 2.2 函数体 `raise NotImplementedError`（占位，后续 task 填充）
+- [ ] 2.3 无模块级 `os.chdir` / `sys.path.insert`
+- [ ] 2.4 验证：`python cli.py --help` 显示三个子命令；`python cli.py fetch 000001` 抛 `NotImplementedError`
 
 ---
 
-## Task 2: data/fetchers/basic.py — 基础信息 + 容错链
+## 3. data/fetchers/basic.py — 基础信息 + 容错链（Task 2）
 
-**文件**：
-- `value-screener/data/fetchers/__init__.py`
-- `value-screener/data/fetchers/base.py`（`BaseFetcher` ABC）
-- `value-screener/data/fetchers/basic.py`
-
-**做什么**：
-- `BaseFetcher`：定义 `fetch(ticker) -> dict` 抽象接口 + `fetch_with_fallback()` 容错链编排
-- `basic.py`：
-  - 主选：`ak.stock_zh_a_spot_em()`（全市场快照，§4.7.2）
-  - 兜底 1：`ak.stock_info_a_code_name()` + tencent qt 逐只
-  - 指数退避重试（backoff=2, max_retries=3）+ 随机延迟 0.5-2s
-  - 异常收窄：不 `except Exception`，只捕获 `httpx.TimeoutException` / `KeyError` / akshare 具体异常
-
-**验证**：`python cli.py fetch 000001 --dim basic` 返回 `{"code": "000001", "name": "平安银行", "pe": ..., "pb": ..., "market_cap": ...}`
+- [ ] 3.1 创建 `value-screener/data/fetchers/__init__.py`
+- [ ] 3.2 创建 `value-screener/data/fetchers/base.py`：`BaseFetcher` ABC，定义 `fetch(ticker) -> dict` 抽象接口 + `fetch_with_fallback()` 容错链编排
+- [ ] 3.3 创建 `value-screener/data/fetchers/basic.py`，主选 `ak.stock_zh_a_spot_em()`（全市场快照，§4.7.2）
+- [ ] 3.4 basic.py 兜底 1：`ak.stock_info_a_code_name()` + tencent qt 逐只
+- [ ] 3.5 basic.py 指数退避重试（backoff=2, max_retries=3）+ 随机延迟 0.5-2s
+- [ ] 3.6 basic.py 异常收窄：不 `except Exception`，只捕获 `httpx.TimeoutException` / `KeyError` / akshare 具体异常
+- [ ] 3.7 验证：`python cli.py fetch 000001 --dim basic` 返回 `{"code": "000001", "name": "平安银行", "pe": ..., "pb": ..., "market_cap": ...}`
 
 ---
 
-## Task 3: data/fetchers/financials.py — 财报数据
+## 4. data/fetchers/financials.py — 财报数据（Task 3）
 
-**文件**：
-- `value-screener/data/fetchers/financials.py`
-
-**做什么**：
-- 主选（利润表）：东财 `stock_financial_abstract`（一次返回全部年报列，多期）
-  - 采集行：营业总收入、归母净利润、营业成本、经营现金流量净额、商誉（按「指标」列关键词匹配）
-- 主选（资产负债表）：东财 `stock_balance_sheet_by_report_em`（分页接口）
-  - 采集列：`TOTAL_ASSETS`、`TOTAL_CURRENT_ASSETS`、`TOTAL_CURRENT_LIAB`、`TOTAL_NONCURRENT_LIAB`、`SHARE_CAPITAL`、`GOODWILL`
-- 主选（现金流表）：东财 `stock_cash_flow_sheet_by_report_em`（分页接口）
-  - 采集列：`NETCASH_OPERATE`（经营现金流）、`CONSTRUCT_LONG_ASSET`（资本开支）
-- 兜底 1：新浪财报接口（UZI 验证过稳定性好但字段可能不全）
-- 默认采集近 3 年年报（多期，F-Score 同比项 + DCF 增长率所需）
-- 同样继承 `BaseFetcher`，同样容错模式
-
-**验证**：`python cli.py fetch 600519 --dim financials` 返回财报 dict（茅台，数据应完整）
+- [ ] 4.1 创建 `value-screener/data/fetchers/financials.py`
+- [ ] 4.2 主选（利润表）：东财 `stock_financial_abstract`（一次返回全部年报列，多期）；采集行：营业总收入、归母净利润、营业成本、经营现金流量净额、商誉（按「指标」列关键词匹配）
+- [ ] 4.3 主选（资产负债表）：东财 `stock_balance_sheet_by_report_em`（分页接口）；采集列：`TOTAL_ASSETS`、`TOTAL_CURRENT_ASSETS`、`TOTAL_CURRENT_LIAB`、`TOTAL_NONCURRENT_LIAB`、`SHARE_CAPITAL`、`GOODWILL`
+- [ ] 4.4 主选（现金流表）：东财 `stock_cash_flow_sheet_by_report_em`（分页接口）；采集列：`NETCASH_OPERATE`（经营现金流）、`CONSTRUCT_LONG_ASSET`（资本开支）
+- [ ] 4.5 兜底 1：新浪财报接口（UZI 验证过稳定性好但字段可能不全）
+- [ ] 4.6 默认采集近 3 年年报（多期，F-Score 同比项 + DCF 增长率所需）
+- [ ] 4.7 继承 `BaseFetcher`，同样容错模式
+- [ ] 4.8 验证：`python cli.py fetch 600519 --dim financials` 返回财报 dict（茅台，数据应完整）
 
 ---
 
-## Task 4: data/fetchers/kline.py — K 线数据
+## 5. data/fetchers/kline.py — K 线数据（Task 4）
 
-**文件**：
-- `value-screener/data/fetchers/kline.py`
-
-**做什么**：
-- 采集日 K 线（收盘价、成交量），用于热度/动量计算
-- 主选：`ak.stock_zh_a_hist()`（东财，前复权）
-- 兜底 1：`ak.stock_zh_a_daily()`（新浪，列名需归一化为东财格式）
-- 兜底 2：baostock `query_history_k_data_plus()`（官方接口，免登录限流）
-- 兜底 3-5（MVP 不实现，留接口）：东财 push2his 直连 / 新浪 quotes 直连 / 腾讯 ifzq 直连
-- 默认采集近 250 交易日（1 年）
-- 继承 `BaseFetcher`
-
-**验证**：`python cli.py fetch 000001 --dim kline` 返回 `{"close": [...], "volume": [...], "dates": [...]}`
+- [ ] 5.1 创建 `value-screener/data/fetchers/kline.py`，采集日 K 线（收盘价、成交量），用于热度/动量计算
+- [ ] 5.2 主选：`ak.stock_zh_a_hist()`（东财，前复权）
+- [ ] 5.3 兜底 1：`ak.stock_zh_a_daily()`（新浪，列名需归一化为东财格式）
+- [ ] 5.4 兜底 2：baostock `query_history_k_data_plus()`（官方接口，免登录限流）
+- [ ] 5.5 兜底 3-5（MVP 不实现，留接口）：东财 push2his 直连 / 新浪 quotes 直连 / 腾讯 ifzq 直连
+- [ ] 5.6 默认采集近 250 交易日（1 年）
+- [ ] 5.7 继承 `BaseFetcher`
+- [ ] 5.8 验证：`python cli.py fetch 000001 --dim kline` 返回 `{"close": [...], "volume": [...], "dates": [...]}`
 
 ---
 
-## Task 5: data/fetchers/valuation.py — 估值分位
+## 6. data/fetchers/valuation.py — 估值分位（Task 5）
 
-**文件**：
-- `value-screener/data/fetchers/valuation.py`
-
-**做什么**：
-- PE/PB 历史分位（近 5 年 / 10 年）
-- 格雷厄姆数：`sqrt(22.5 * EPS * BVPS)`
-- 主选：`ak.stock_zh_valuation_baidu()`（PE/PB 近 5 年历史序列，算分位）
-- 兜底 1：`ak.stock_industry_pe_ratio_cninfo()`（行业 PE 均值，A 股，cninfo 绕开东财 push2）
-- 港股兜底：`ak.hk_valuation_comparison_em()`（同行 PE 均值，MVP 不实现）
-- 格雷厄姆数：EPS/BVPS 从 financials 派生，无需额外接口
-- 继承 `BaseFetcher`
-
-**验证**：`python cli.py fetch 600519 --dim valuation` 返回 `{"pe_percentile_5y": ..., "pb_percentile_5y": ..., "graham_number": ...}`
+- [ ] 6.1 创建 `value-screener/data/fetchers/valuation.py`，PE/PB 历史分位（近 5 年 / 10 年）
+- [ ] 6.2 格雷厄姆数：`sqrt(22.5 * EPS * BVPS)`
+- [ ] 6.3 主选：`ak.stock_zh_valuation_baidu()`（PE/PB 近 5 年历史序列，算分位）
+- [ ] 6.4 兜底 1：`ak.stock_industry_pe_ratio_cninfo()`（行业 PE 均值，A 股，cninfo 绕开东财 push2）
+- [ ] 6.5 港股兜底：`ak.hk_valuation_comparison_em()`（同行 PE 均值，MVP 不实现）
+- [ ] 6.6 格雷厄姆数：EPS/BVPS 从 financials 派生，无需额外接口
+- [ ] 6.7 继承 `BaseFetcher`
+- [ ] 6.8 验证：`python cli.py fetch 600519 --dim valuation` 返回 `{"pe_percentile_5y": ..., "pb_percentile_5y": ..., "graham_number": ...}`
 
 ---
 
-## Task 6: data/fetchers/risk.py — 风险/治理数据
+## 7. data/fetchers/risk.py — 风险/治理数据（Task 6）
 
-**文件**：
-- `value-screener/data/fetchers/risk.py`
-
-**做什么**：
-- 质押率：`ak.stock_gpzy_pledge_ratio()`
-- 商誉：从财报数据派生（Task 3 的 financials 已含）
-- 审计意见：`ak.stock_audit_report_em()`（可选降级字段：接口缺失或无数据时返回 `null`，不阻塞；下游不得假设该字段必为非空）
-- 继承 `BaseFetcher`
-
-**验证**：`python cli.py fetch 000001 --dim risk` 返回 `{"pledge_ratio": <float>, "goodwill": <float>, "audit_opinion": <str|null>}`（audit_opinion 允许为 null）
+- [ ] 7.1 创建 `value-screener/data/fetchers/risk.py`，质押率：`ak.stock_gpzy_pledge_ratio()`
+- [ ] 7.2 商誉：从财报数据派生（Task 3 的 financials 已含）
+- [ ] 7.3 审计意见：`ak.stock_audit_report_em()`（可选降级字段：接口缺失或无数据时返回 `null`，不阻塞；下游不得假设该字段必为非空）
+- [ ] 7.4 继承 `BaseFetcher`
+- [ ] 7.5 验证：`python cli.py fetch 000001 --dim risk` 返回 `{"pledge_ratio": <float>, "goodwill": <float>, "audit_opinion": <str|null>}`（audit_opinion 允许为 null）
 
 ---
 
-## Task 7: data/lib/ — 特征工程 + 工具模块
+## 8. data/lib/ — 特征工程 + 工具模块（Task 7）
 
-**文件**：
-- `value-screener/data/lib/__init__.py`
-- `value-screener/data/lib/stock_features.py`
-- `value-screener/data/lib/market_router.py`
-- `value-screener/data/lib/fin_models.py`
-- `value-screener/data/lib/data_sources.py`
-
-**做什么**：
-- `stock_features.py`：从 UZI 591 行版本借鉴，新增 F-Score 九项组装（F1-F9，Piotroski 1980）
-- `market_router.py`：从 UZI 借鉴板块/行业映射
-- `fin_models.py`：change 0 只做简化 DCF（`compute_simple_dcf`），完整版 DCF/LBO/Comps 留 L3 change
+- [ ] 8.1 创建 `value-screener/data/lib/__init__.py`
+- [ ] 8.2 创建 `value-screener/data/lib/stock_features.py`：从 UZI 591 行版本借鉴，新增 F-Score 九项组装（F1-F9，Piotroski 1980）
+- [ ] 8.3 创建 `value-screener/data/lib/market_router.py`：从 UZI 借鉴板块/行业映射
+- [ ] 8.4 创建 `value-screener/data/lib/fin_models.py`：change 0 只做简化 DCF（`compute_simple_dcf`），完整版 DCF/LBO/Comps 留 L3 change
   - `compute_simple_dcf(fcf_series, revenue_series, current_price, assumptions) -> {"intrinsic_value": float, "safety_margin_pct": float}`
   - 输入：FCF 序列（`NETCASH_OPERATE - CONSTRUCT_LONG_ASSET`）、营收序列（算增长率）、当前股价（调用方传）、假设参数
   - 纯计算，不继承 `BaseFetcher`，不触发采集，跨维度输入由调用方组装
   - 算法：2-Stage FCF + Gordon Terminal（total-design §4.7.1）
-- `data_sources.py`：从 UZI 1463 行版本借鉴三级容错 + provider chain，修 `except Exception` 收窄
-
-**验证**：`from data.lib.stock_features import compute_f_score; compute_f_score({...})` 返回 0-9 整数
-**验证**：`from data.lib.fin_models import compute_simple_dcf; compute_simple_dcf([3.2,3.5,3.8], [50,55,60], 1800.0, {"discount_rate":0.08, "terminal_growth":0.03})` 返回含 `intrinsic_value`、`safety_margin_pct` 两个 float 字段的 dict
-
----
-
-## Task 8: data/cache/ — 缓存管理
-
-**文件**：
-- `value-screener/data/cache/__init__.py`
-- `value-screener/data/cache/manager.py`
-
-**做什么**：
-- 六档 TTL 常量（DAILY=2h, QUARTERLY=24h, STATIC=7d 等，见 design.md §3.2）
-- `CacheManager`：`get(ticker, dim)` / `set(ticker, dim, data)` / `is_expired(ticker, dim)`
-- 原子写：`json.dump` 到 `.tmp` → `os.replace` 到目标路径
-- 缓存目录：`data/cache/{ticker}/{dim}.json`
-
-**验证**：写入缓存 → 读出一致 → sleep 超过 TTL → `is_expired` 返回 True
+- [ ] 8.5 创建 `value-screener/data/lib/data_sources.py`：从 UZI 1463 行版本借鉴三级容错 + provider chain，修 `except Exception` 收窄
+- [ ] 8.6 验证：`from data.lib.stock_features import compute_f_score; compute_f_score({...})` 返回 0-9 整数
+- [ ] 8.7 验证：`from data.lib.fin_models import compute_simple_dcf; compute_simple_dcf([3.2,3.5,3.8], [50,55,60], 1800.0, {"discount_rate":0.08, "terminal_growth":0.03})` 返回含 `intrinsic_value`、`safety_margin_pct` 两个 float 字段的 dict
 
 ---
 
-## Task 9: data/lib/batch_fetcher.py — 批量采集 wrapper
+## 9. data/cache/ — 缓存管理（Task 8）
 
-**文件**：
-- `value-screener/data/lib/batch_fetcher.py`
-
-**做什么**：
-- `BatchFetcher(max_workers=10)` 封装 `ThreadPoolExecutor`
-- `fetch_all(tickers, dimensions, dim_max_workers)` → 对每只股票并行采集所有维度，financials 维度单独限流（`max_workers=4`，见 design.md §4.1）
-- 集成 `CacheManager`：先查缓存，未过期跳过；采集成功后写缓存
-- Resume 机制：某维度失败不影响其他维度，下次只重试失败的
-- 反爬：同 provider 请求间随机延迟 0.5-2s
-
-**验证**：
-1. `batch_fetcher.fetch_all(["000001", "600519"])` 返回两只股票全维度数据
-2. 第二次调用（缓存未过期）不调用 akshare 接口（可 mock 验证）
-3. 模拟某维度失败 → 重试只调失败维度
+- [ ] 9.1 创建 `value-screener/data/cache/__init__.py`
+- [ ] 9.2 创建 `value-screener/data/cache/manager.py`，六档 TTL 常量（DAILY=2h, QUARTERLY=24h, STATIC=7d 等，见 design.md §3.2）
+- [ ] 9.3 `CacheManager`：`get(ticker, dim)` / `set(ticker, dim, data)` / `is_expired(ticker, dim)`
+- [ ] 9.4 原子写：`json.dump` 到 `.tmp` → `os.replace` 到目标路径
+- [ ] 9.5 缓存目录：`data/cache/{ticker}/{dim}.json`
+- [ ] 9.6 验证：写入缓存 → 读出一致 → sleep 超过 TTL → `is_expired` 返回 True
 
 ---
 
-## Task 10: cli.py 填充 + 集成验证
+## 10. data/lib/batch_fetcher.py — 批量采集 wrapper（Task 9）
 
-**文件**：
-- `value-screener/cli.py`（更新 Task 1 的占位）
+- [ ] 10.1 创建 `value-screener/data/lib/batch_fetcher.py`，`BatchFetcher(max_workers=10)` 封装 `ThreadPoolExecutor`
+- [ ] 10.2 `fetch_all(tickers, dimensions, dim_max_workers)` → 对每只股票并行采集所有维度，financials 维度单独限流（`max_workers=4`，见 design.md §4.1）
+- [ ] 10.3 集成 `CacheManager`：先查缓存，未过期跳过；采集成功后写缓存
+- [ ] 10.4 Resume 机制：某维度失败不影响其他维度，下次只重试失败的
+- [ ] 10.5 反爬：同 provider 请求间随机延迟 0.5-2s
+- [ ] 10.6 验证 1：`batch_fetcher.fetch_all(["000001", "600519"])` 返回两只股票全维度数据
+- [ ] 10.7 验证 2：第二次调用（缓存未过期）不调用 akshare 接口（可 mock 验证）
+- [ ] 10.8 验证 3：模拟某维度失败 → 重试只调失败维度
 
-**做什么**：
-- `fetch` 命令：调用单个 fetcher，输出 JSON
-- `batch` 命令：从文件读 ticker 列表，调用 `BatchFetcher`
-- `cache-clear` 命令：按 ticker/dim 清理缓存文件
+---
 
-**验证**：
-1. `python cli.py fetch 600519 --dim basic` → JSON 输出
-2. `python cli.py batch --tickers tickers.txt` → 批量采集完成
-3. `python cli.py cache-clear --ticker 600519` → 缓存文件删除
-4. 条件验证：若环境有 Docker，`docker build && docker run value-screener python cli.py --help` 退出码为 0（确认 ENTRYPOINT 端到端可运行）
+## 11. cli.py 填充 + 集成验证（Task 10）
+
+- [ ] 11.1 `value-screener/cli.py`（更新 Task 1 的占位），`fetch` 命令：调用单个 fetcher，输出 JSON
+- [ ] 11.2 `batch` 命令：从文件读 ticker 列表，调用 `BatchFetcher`
+- [ ] 11.3 `cache-clear` 命令：按 ticker/dim 清理缓存文件
+- [ ] 11.4 验证 1：`python cli.py fetch 600519 --dim basic` → JSON 输出
+- [ ] 11.5 验证 2：`python cli.py batch --tickers tickers.txt` → 批量采集完成
+- [ ] 11.6 验证 3：`python cli.py cache-clear --ticker 600519` → 缓存文件删除
+- [ ] 11.7 条件验证：若环境有 Docker，`docker build && docker run value-screener python cli.py --help` 退出码为 0（确认 ENTRYPOINT 端到端可运行）
 
 ---
 
