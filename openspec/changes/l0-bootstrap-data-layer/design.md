@@ -39,11 +39,9 @@
   - 兜底 2/3：雪球/baostock（MVP 不实现，留接口）
 
 - **financials.py 容错链**（§4.7.2.1）：
-  - 主选（利润表）：东财 `stock_financial_abstract`（一次返回全部年报列，多期）
-  - 主选（资产负债表）：东财 `stock_balance_sheet_by_report_em`（分页接口，单只 20+ 次请求）
-  - 主选（现金流表）：东财 `stock_cash_flow_sheet_by_report_em`（分页接口，单只 20+ 次请求）
+  - 主选：同花顺三表 `stock_financial_{benefit|debt|cash}_ths`（indicator="按年度"，一次返回全部年报，多期）。**实测确认（S4 风险已解决）**：东财 `stock_balance_sheet_by_report_em` / `stock_cash_flow_sheet_by_report_em` / `_by_yearly_em` 因东财页面 `hidctype` 反爬改动整体不可用（抛 TypeError），已切换到同花顺源。商誉（GOODWILL）从东财 `stock_financial_abstract` 商誉行补（ths 三表无商誉列，失败置 None，不影响 F-Score）
   - 兜底 1：新浪财报接口（UZI 验证过稳定性好但字段可能不全）
-  - 注：balance_sheet/cash_flow 为分页接口，全市场批量时反爬压力远大于 abstract，financials 维度的并发需更保守（max_workers 建议 < 10）
+  - 注：同花顺三表为按年汇总接口（非分页），反爬压力低于原分页接口；financials 维度并发仍按保守处理（max_workers=4，见 §4.1）
 
 - **kline.py 容错链**（UZI `data_sources._kline_a_share_chain` 验证过 6 级 fallback）：
   - 主选：`ak.stock_zh_a_hist()`（东财，前复权）
@@ -228,7 +226,7 @@ class BatchFetcher:
 
 - **Layer 2 并发**：`max_workers=10`（basic/kline/valuation/risk 维度），每只股票的 4-5 维并行（§4.7.3）
 - **financials 维度单独限流**：balance_sheet/cash_flow 为分页接口（单只 20+ 次请求，见 §1.2），financials 维度 `max_workers=4`，其余维度 `max_workers=10`。`dim_max_workers` 参数默认 `{"financials": 4}`，覆盖全局 `max_workers`
-- **mini_racer 安全**：basic/valuation/risk 为纯 HTTP API（§4.7.3）；financials 三表接口的 `_by_report_em` 系列是否纯 HTTP 待实施时验证（S4 风险），验证前 financials 维度按保守并发处理
+- **mini_racer 安全**：basic/valuation/risk 为纯 HTTP API（§4.7.3）；financials 已实测切换到同花顺三表 `stock_financial_{benefit|debt|cash}_ths`（纯 HTTP，无 mini_racer 依赖）。原东财 `_by_report_em` 系因 hidctype 反爬不可用（S4 风险已确认并解决）。financials 维度仍按保守并发 max_workers=4
 - **反爬应对**：同 provider 请求间随机延迟 0.5-2s（§4.7.3）
 
 ---
