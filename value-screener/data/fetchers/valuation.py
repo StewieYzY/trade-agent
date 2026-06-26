@@ -15,17 +15,9 @@ from __future__ import annotations
 import math
 
 from .base import BaseFetcher
+from ..lib.utils import to_float as _to_float
 
 _YEARS = 5
-
-
-def _to_float(v) -> float | None:
-    try:
-        if v in (None, "", "-", "--"):
-            return None
-        return float(str(v).replace(",", "").replace("%", ""))
-    except (TypeError, ValueError):
-        return None
 
 
 def _percentile(value: float | None, series: list[float | None]) -> float | None:

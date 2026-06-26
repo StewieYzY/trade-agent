@@ -35,11 +35,16 @@ _BJ_PREFIXES_2 = ("43", "83", "87", "88", "92")
 
 
 def _a_share_suffix(code6: str) -> str:
-    """6 位 A 股代码 → 交易所后缀 SH/SZ/BJ."""
-    if code6.startswith("6") or code6.startswith("9"):
-        return "SH"
-    if code6.startswith("8") or code6.startswith("4") or code6.startswith("92"):
+    """6 位 A 股代码 → 交易所后缀 SH/SZ/BJ.
+
+    BJ 前缀 92/43/83/87/88 须先于 SH 的 9 判定，否则 92xxxx 被误归 SH。
+    SH 的 9 仅指 900xxx（B 股）。
+    """
+    # BJ 优先（92/43/83/87/88），避免被 SH 的 "9" 吞掉 92xxxx
+    if code6.startswith(("43", "83", "87", "88", "92")):
         return "BJ"
+    if code6.startswith("6") or code6.startswith("900"):
+        return "SH"
     return "SZ"
 
 

@@ -12,24 +12,22 @@ from __future__ import annotations
 
 from .base import BaseFetcher
 from ..lib.data_sources import fetch_price_tencent_qt, get_a_share_name_map
-
-
-def _to_float(v) -> float | None:
-    try:
-        if v in (None, "", "-", "--"):
-            return None
-        return float(v)
-    except (TypeError, ValueError):
-        return None
+from ..lib.snapshot import _LazyTable
+from ..lib.utils import to_float as _to_float
 
 
 class BasicFetcher(BaseFetcher):
     dim = "basic"
 
+    _lazy_spot = _LazyTable(lambda: __import__("akshare").stock_zh_a_spot_em())
+
     def fetch(self, ticker: str) -> dict:
-        """主选：ak.stock_zh_a_spot_em() 全市场快照，过滤本只."""
-        import akshare as ak  # type: ignore
-        df = ak.stock_zh_a_spot_em()
+        """主选：ak.stock_zh_a_spot_em() 全市场快照，过滤本只.
+
+        spot_em 为全市场表（~5000 行），intra-batch 经 _LazyTable 只取一次、
+        全部 ticker 复用（review #3：避免 per-ticker 重复拉全市场快照）。
+        """
+        df = self._lazy_spot.get()
         if df is None or len(df) == 0:
             raise KeyError("stock_zh_a_spot_em empty")
         code_col = next((c for c in df.columns if "代码" in str(c)), df.columns[0])

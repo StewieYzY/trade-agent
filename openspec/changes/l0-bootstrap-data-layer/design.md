@@ -37,6 +37,8 @@
   - 主选：`ak.stock_zh_a_spot_em()`（一次 ~5000 只）
   - 兜底 1：`ak.stock_info_a_code_name()` + tencent qt 逐只（UZI 验证过不需要 key）
   - 兜底 2/3：雪球/baostock（MVP 不实现，留接口）
+  - **industry 字段缺口**：`stock_zh_a_spot_em()` 为实时行情快照，**列定义无"行业"**（实测确认），故主选成功路径 `industry` 恒 None；仅主选失败走兜底 `stock_individual_info_em` 才补。change 0 暂留此缺口，industry 数据源（板块映射 / `stock_individual_info_em`）待后续 change 单独定
+  - **snapshot 分发**：spot_em 为全市场表（~5000 行），经 `_LazyTable`（`lib/snapshot.py`）intra-batch 只取一次、全部 ticker 复用，避免 per-ticker 重复拉全市场快照（见 §4.1）
 
 - **financials.py 容错链**（§4.7.2.1）：
   - 主选：同花顺三表 `stock_financial_{benefit|debt|cash}_ths`（indicator="按年度"，一次返回全部年报，多期）。**实测确认（S4 风险已解决）**：东财 `stock_balance_sheet_by_report_em` / `stock_cash_flow_sheet_by_report_em` / `_by_yearly_em` 因东财页面 `hidctype` 反爬改动整体不可用（抛 TypeError），已切换到同花顺源。商誉（GOODWILL）从东财 `stock_financial_abstract` 商誉行补（ths 三表无商誉列，失败置 None，不影响 F-Score）
@@ -58,6 +60,8 @@
 - **risk.py 容错链**：
   - 主选：`ak.stock_gpzy_pledge_ratio_em()`（质押率，全市场一次返回）
   - 兜底：无独立兜底（质押率为东财单一渠道）；商誉从 financials 的 balance_sheet `GOODWILL` 派生，审计意见见 §1.1 可选标注
+  - **商誉走缓存**：batch 下 financials 已先采并缓存，risk 经注入的 `CacheManager` 读 `cache.get(ticker,"financials")` 取 GOODWILL，不重采三表；缓存未命中（standalone `--dim risk`）才退回直采
+  - **snapshot 分发**：`stock_gpzy_pledge_ratio_em` / `stock_audit_report_em` 均为全市场表，经 `_LazyTable` intra-batch 只取一次复用（同 basic spot_em）
 
 - **通用模式**：指数退避重试（backoff=2, max_retries=3）+ 随机延迟（0.5-2s，§4.7.3）
 
@@ -77,7 +81,9 @@ class BaseFetcher(ABC):
 - `fetch()` 返回多期结构（非 flat dict）。financials 维度返回 `{"years": [...], "income": {...}, "balance_sheet": {...}, "cash_flow": {...}}`，其余维度按各自契约定义
 - akshare 为同步库，`fetch()` / `fetch_with_fallback()` 为同步接口；并发由 `BatchFetcher` 的 `ThreadPoolExecutor` 承担（§4.1），不使用 async/await
 - 字段名与 `stock_features.py`（§2.2）/ `fin_models.py`（§2.3）的输入契约对齐
-- 异常收窄：不允许 `except Exception`，只捕获 `akshare` 具体异常 + `httpx.TimeoutException` + `KeyError`
+- 异常收窄（分两层）：
+  - **leaf 层 `fetch()` / 兜底 provider**：不允许 `except Exception`，只捕获 `akshare` 具体异常 + `httpx.TimeoutException` + `KeyError`（工程债修复目标，已落地）
+  - **orchestration 层 `_retry` / `fetch_with_fallback`**：作为重试/兜底调度器需 broad catch 以穷尽 provider，但不得静默吞掉——失败须转为带 `__error__` 标记的错误结构（见 §3.3/§4.1），且须 `# noqa` 注明。即工程债"不静默吞异常"的精神由 leaf 收窄 + orchestration 转标记结构共同满足
 
 ---
 
@@ -199,6 +205,7 @@ data/cache/
 - 跑 batch 时先检查缓存，未过期直接复用（跳过采集）
 - 某维度 `fetch_with_fallback` 穷尽 provider 仍失败 → 标记该维度失败，下次 batch 只重试该维度（不影响其他已成功维度）
 - 缓存文件写入时 `json.dump` + `os.replace`（原子写，防中途崩溃写坏文件）
+- 失败维度识别靠 `__error__` 标记键（见 §1.3/§4.1），非 `len<=3` 脆弱判断
 
 ---
 
@@ -228,6 +235,9 @@ class BatchFetcher:
 - **financials 维度单独限流**：balance_sheet/cash_flow 为分页接口（单只 20+ 次请求，见 §1.2），financials 维度 `max_workers=4`，其余维度 `max_workers=10`。`dim_max_workers` 参数默认 `{"financials": 4}`，覆盖全局 `max_workers`
 - **mini_racer 安全**：basic/valuation/risk 为纯 HTTP API（§4.7.3）；financials 已实测切换到同花顺三表 `stock_financial_{benefit|debt|cash}_ths`（纯 HTTP，无 mini_racer 依赖）。原东财 `_by_report_em` 系因 hidctype 反爬不可用（S4 风险已确认并解决）。financials 维度仍按保守并发 max_workers=4
 - **反爬应对**：同 provider 请求间随机延迟 0.5-2s（§4.7.3）
+- **全市场表 intra-batch 复用**（review 修复）：`spot_em` / `stock_gpzy_pledge_ratio_em` / `stock_audit_report_em` 为全市场表（~5000 行），原塞进 per-ticker `fetch(ticker)` 会每股各拉一次。改由 `lib/snapshot.py` 的 `_LazyTable` 持有：首调用取回并缓存，同 batch 全部 ticker 复用（线程安全，双检锁）。成功永久缓存；**失败进入冷却期（300s）直接返 None 不重试**，避免对坏 endpoint 反复重试放大请求（否则 `_retry` 3 次 × N 股 → 3N 次冗余命中）。生命周期 = fetcher 实例（BatchFetcher 每 dim 建一个实例）
+- **跨维度缓存注入**：`BatchFetcher` 把 `self.cache` 注入每个 fetcher 实例（`fetcher.cache`），risk 维度据此读已缓存的 financials，避免重采（见 §1.2 risk）
+- **失败标记**：`fetch_with_fallback` 全失败返 `{"ticker","dim","error","__error__":True}`；`BatchFetcher._fetch_one` 据 `__error__` 标记键识别失败、不写缓存（resume 重试），不依赖 `len<=3` 脆弱判断
 
 ---
 

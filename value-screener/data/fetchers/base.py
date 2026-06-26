@@ -41,6 +41,7 @@ class BaseFetcher(ABC):
 
     dim: str = ""                       # 子类必填：维度名（basic/financials/kline/valuation/risk）
     fallback_providers: list[Callable[[str], dict]] = []  # 子类可填：兜底 provider 列表
+    cache: "object | None" = None      # 可选：BatchFetcher 注入 CacheManager，供跨维度读缓存（如 risk 读 financials）
 
     @abstractmethod
     def fetch(self, ticker: str) -> dict:
@@ -75,9 +76,10 @@ class BaseFetcher(ABC):
             except Exception:  # noqa: BLE001
                 continue
 
-        # 全部失败：返回错误结构，不抛
+        # 全部失败：返回错误结构（带 __error__ 标记键），不抛
         return {
             "ticker": ticker,
             "dim": self.dim,
             "error": f"all_providers_failed:{self.dim}",
+            "__error__": True,
         }

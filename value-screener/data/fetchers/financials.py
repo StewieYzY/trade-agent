@@ -16,7 +16,10 @@
 """
 from __future__ import annotations
 
+import re
+
 from .base import BaseFetcher
+from ..lib.utils import to_float as _to_float
 
 _YEARS = 3  # 近 3 年年报
 
@@ -40,27 +43,6 @@ _CASH_COLS = {
     "CONSTRUCT_LONG_ASSET": "购建固定资产、无形资产和其他长期资产支付的现金",
 }
 
-
-def _to_float(v) -> float | None:
-    """解析 ths 带单位值（如 '137.89亿'、'2989.45亿'、'False'）→ float（元）."""
-    if v is None:
-        return None
-    s = str(v).strip()
-    if s in ("", "-", "--", "False", "false", "nan", "None"):
-        return None
-    import re
-    m = re.match(r"^-?[\d,]+\.?\d*", s)
-    if not m:
-        return None
-    try:
-        num = float(m.group().replace(",", ""))
-    except ValueError:
-        return None
-    if "亿" in s:
-        num *= 1e8
-    elif "万" in s:
-        num *= 1e4
-    return num
 
 
 def _annual_years(df, year_col: str = "报告期") -> list[str]:

@@ -64,6 +64,7 @@ class BatchFetcher:
             if fetcher_cls is None:
                 continue
             fetcher = fetcher_cls()
+            fetcher.cache = self.cache  # 注入缓存，供跨维度读取（risk goodwill 读 financials）
             workers = min(self.max_workers, dim_workers.get(dim, self.max_workers))
             # financials 维度单独限流（分页接口，反爬压力大）
             with ThreadPoolExecutor(max_workers=workers) as pool:
@@ -85,8 +86,8 @@ class BatchFetcher:
         time.sleep(random.uniform(0.5, 2.0))
 
         data = fetcher.fetch_with_fallback(ticker)
-        # fetch_with_fallback 全失败时返 {"error":...} → 不写缓存，下次 resume 重试
-        if isinstance(data, dict) and "error" in data and len(data) <= 3:
+        # fetch_with_fallback 全失败时返带 __error__ 标记的结构 → 不写缓存，下次 resume 重试
+        if isinstance(data, dict) and data.get("__error__") is True:
             return data
         # 成功 → 写缓存
         self.cache.set(ticker, dim, data)
