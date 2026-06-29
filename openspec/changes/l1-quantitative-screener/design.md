@@ -108,11 +108,23 @@ def compute_anti_trap(ticker_data: dict) -> dict:
     # A1: ROE 3 年趋势下降
     roe_trend = compute_roe_trend(ticker_data["financials"])
     if roe_trend < 0:
-        score -= 2 * abs(roe_trend)  # 每降 1 年扣 2 分
+        deduction = min(abs(roe_trend) * 2, 10)  # 每降 1 年扣 2 分，封顶 10 分
+        score -= deduction
         flags.append(f"ROE declining ({roe_trend:.1f} years)")
     
     return {"score": max(0, score), "flags": flags}
 ```
+
+**排序公式**: 
+```
+adjusted_composite = factor_scores.composite × (anti_trap.score / 100)
+```
+乘法而非减法——高质量股受同等扣分惩罚的绝对影响更大，符合投资逻辑。`adjusted_composite` 是实际排序键，输出到 S5 schema 保证透明度。
+
+**H7 vs A6 分层设计**:
+- **H7（hard gate）**: 白名单排除最严重的 3 类非标意见（保留意见/无法表示意见/否定意见）——死刑级，直接淘汰
+- **A6（anti-trap）**: 黑名单扣任何非「标准无保留意见」——更宽泛，扣分但不排除
+- 两者不是重复，而是不同严格度的分层：一份「带强调事项段的无保留意见」不应直接排除（H7），但值得扣分（A6）
 
 ### D5: Heat Filter 在 Factor Scores 之后执行
 
@@ -159,19 +171,22 @@ def compute_anti_trap(ticker_data: dict) -> dict:
 ```python
 def compute_quality_score(ticker_data: dict) -> float:
     scores = []
+    financials = ticker_data.get("financials", {})
     
-    # F-Score（40%）
-    f_score = compute_f_score(ticker_data.get("financials"))
-    if f_score is not None:
+    # F-Score（40%）— 先检查 financials 是否有有效数据
+    if financials and (financials.get("income", {}).get("net_profit")
+                       or financials.get("balance_sheet", {}).get("TOTAL_ASSETS")
+                       or financials.get("cash_flow", {}).get("NETCASH_OPERATE")):
+        f_score = compute_f_score(financials)
         scores.append(("f_score", f_score / 9 * 100, 0.40))
     
     # ROE 5 年平均（30%）
-    roe_avg = compute_roe_5y_avg(ticker_data.get("financials"))
+    roe_avg = compute_roe_5y_avg(financials)
     if roe_avg is not None:
         scores.append(("roe_avg", min(100, roe_avg / 15 * 100), 0.30))
     
     # 经营现金流连续 3 年正（30%）
-    ccf_positive = compute_cash_flow_positive_years(ticker_data.get("financials"))
+    ccf_positive = compute_cash_flow_positive_years(financials)
     if ccf_positive is not None:
         scores.append(("cash_flow", ccf_positive / 3 * 100, 0.30))
     

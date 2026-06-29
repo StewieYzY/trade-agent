@@ -112,12 +112,13 @@ composite = quality × 0.50 + value × 0.30 + safety_margin × 0.20
 
 | # | 条件 | 数据来源 | 阈值 | 理由 |
 |---|---|---|---|---|
-| HF1 | 换手率分位 < 30% | kline.turnover_rate 近 60 日分位 | < 30% 排除 | 排除被炒的 |
-| HF2 | 近 60 日涨幅 < 20% | kline.close 计算 60 日涨幅 | > 20% 排除 | 排除刚炒完的（避免接盘） |
+| HF1 | 换手率分位 > 70% | kline.turnover_rate 近 60 日分位 | > 70% 排除 | 剔除正在被炒的（异常活跃） |
+| HF2 | 近 60 日涨幅 > 20% | kline.close 计算 60 日涨幅 | > 20% 排除 | 剔除刚炒完的（避免接盘） |
 
 **注意**: 
 - 低热度是**排除维度，不是反转因子**（AD-02 约束）
-- 换手率分位 = 当前换手率在过去 60 日的分位数（0-100）
+- HF1 和 HF2 互补：HF1 抓「正在炒」（当下流速），HF2 抓「刚炒完」（价格位移）
+- 换手率分位 = 当前换手率在过去 60 日的分位数（0-100），> 70% 表示当前换手率处于历史高位
 - 近 60 日涨幅 = (close[-1] - close[-60]) / close[-60] × 100
 
 ---
@@ -145,6 +146,7 @@ composite = quality × 0.50 + value × 0.30 + safety_margin × 0.20
         "score": 95,
         "flags": []
       },
+      "adjusted_composite": 70.8,
       "f_score": 7,
       "graham_number": 1950.0,
       "pe_ttm": 28.5,
@@ -165,6 +167,11 @@ composite = quality × 0.50 + value × 0.30 + safety_margin × 0.20
   }
 }
 ```
+
+**关键说明**:
+- `adjusted_composite` = `factor_scores.composite × (anti_trap.score / 100)`，是**实际排序依据**（乘法，不是减法）
+- `factor_scores.composite` 是未扣减反陷阱的基础分
+- 输出中同时包含两者，保证排序透明度
 
 ---
 
