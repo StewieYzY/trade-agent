@@ -286,16 +286,22 @@ L3 为什么拆成两个 change（foundation + full council），而不是合并
 3. 边加 agent 边看辩论质量有没有信息增量
 4. 如果 6 个 agent 说的话和 1 个没区别，就别加到 5 个
 
-**gate 条件**：`l3-council-foundation` 完成后，必须同时满足机制门和质量门，才进入 `l3-full-analyst-council`：
+**gate 条件**：`l3-council-foundation` 完成后，必须同时满足机制门、校准门和信息增量门，才进入 `l3-full-analyst-council`：
 
 **机制门（必要前提）**：
-- debate.py 编排能正常运行完整流程（单 agent 场景下 Round 1 可独立运行，Round 2-4 的框架代码可执行）
+- debate.py 编排能正常运行完整流程（单 agent 场景下 Round 1 可独立运行）
+- R2 注入一份 mock AgentOutput JSON，验证 agent 能消费他人结构化输出并产出修订立场（A2A 消费链路被真实执行）
+- Round 2-4 框架代码可执行不报错
 
-**质量门（至少一项为真）**：
-- 单 agent 深研报告比 L2 Scout 有显著信息增量
+**校准门（基础卫生条件）**：
 - 校准测试（§6.6）立场一致性过关
 
-如果机制门不通过，说明编排实现有 bug；如果机制门通过但质量门不通过，说明 prompt 或校准有问题——两种情况都应暂停扩 agent，先修复再评估。
+**信息增量门（核心价值判断）**：
+- 单 agent 深研报告比 L2 Scout 有显著信息增量（AgentOutput 的 core_thesis/risks/what_would_change_my_mind 比 L2 的 one_liner 更深）
+
+三层关系：机制门 AND 校准门 AND 信息增量门，全部通过才放行 3b。校准是基础卫生条件（prompt 不对就没必要验价值），信息增量是核心价值判断（全天团成本合理性的锚点）。
+
+如果机制门不通过，说明编排实现有 bug；如果机制门通过但校准门不通过，说明 prompt 有问题；如果前两层通过但信息增量门不通过，说明单 agent 深研没有超出 L2 的增量价值——三种情况都应暂停扩 agent，先修复再评估。
 
 ### 对各 change 的约束
 
