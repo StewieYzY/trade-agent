@@ -28,31 +28,26 @@ def _compute_roe_trend(financials: dict) -> tuple[float, int]:
 
     net_profits = income.get("net_profit", [])
     total_assets = balance_sheet.get("TOTAL_ASSETS", [])
-    total_liabilities = balance_sheet.get("TOTAL_LIABILITIES", [])
+    total_current_liab = balance_sheet.get("TOTAL_CURRENT_LIAB", [])
+    total_noncurrent_liab = balance_sheet.get("TOTAL_NONCURRENT_LIAB", [])
 
-    # 需要 4 年数据来计算 3 年间的下降趋势
-    if len(net_profits) < 4 or len(total_assets) < 4 or len(total_liabilities) < 4:
+    # 检查数据完整性：所有序列长度应一致
+    if not (net_profits and total_assets and total_current_liab and total_noncurrent_liab):
+        return 0.0, 0
+    if not (len(net_profits) == len(total_assets) == len(total_current_liab) == len(total_noncurrent_liab)):
+        return 0.0, 0
+    if len(net_profits) < 3:
         return 0.0, 0
 
-    # 取最近 4 年数据
-    net_profits = net_profits[-4:]
-    total_assets = total_assets[-4:]
-    total_liabilities = total_liabilities[-4:]
-
-    # 计算 ROE 序列
+    # 计算每年的 ROE = net_profit / (TOTAL_ASSETS - TOTAL_CURRENT_LIAB - TOTAL_NONCURRENT_LIAB)
     roe_list = []
-    for i in range(len(net_profits)):
-        ta = total_assets[i]
-        tl = total_liabilities[i]
-        if ta is None or tl is None or ta == 0:
+    for np_val, ta, tcl, tncl in zip(net_profits, total_assets, total_current_liab, total_noncurrent_liab):
+        if np_val is None or ta is None or tcl is None or tncl is None:
             continue
-        net_assets = ta - tl
-        if net_assets <= 0:
+        equity = ta - tcl - tncl
+        if equity <= 0:
             continue
-        np = net_profits[i]
-        if np is None:
-            continue
-        roe_list.append(np / net_assets)
+        roe_list.append(np_val / equity)
 
     if len(roe_list) < 3:
         return 0.0, 0
@@ -70,9 +65,9 @@ def _compute_roe_trend(financials: dict) -> tuple[float, int]:
 
     slope = numerator / denominator
 
-    # 计算近 3 年间的下降年数（4 年数据有 3 个变化点）
+    # 计算近 3 年间的下降年数
     decline_years = 0
-    for i in range(1, min(4, len(roe_list))):  # 最多检查 3 个变化点
+    for i in range(1, len(roe_list)):
         if roe_list[i] < roe_list[i - 1]:
             decline_years += 1
 
@@ -125,21 +120,37 @@ def compute_anti_trap(ticker_data: dict) -> dict:
 
     # A4: 商誉/净资产 > 30% → 扣 8 分
     balance_sheet = financials.get("balance_sheet", {})
-    goodwill = balance_sheet.get("GOODWILL")
+    goodwill_list = balance_sheet.get("GOODWILL", [])
     total_assets = balance_sheet.get("TOTAL_ASSETS", [])
-    total_liabilities = balance_sheet.get("TOTAL_LIABILITIES", [])
+    total_current_liab = balance_sheet.get("TOTAL_CURRENT_LIAB", [])
+    total_noncurrent_liab = balance_sheet.get("TOTAL_NONCURRENT_LIAB", [])
 
-    if goodwill and total_assets and total_liabilities:
-        latest_ta = total_assets[-1] if total_assets else None
-        latest_tl = total_liabilities[-1] if total_liabilities else None
+    # GOODWILL 是多期 list（不是单个值），需逐期找最新有效的
+    if goodwill_list and total_assets and total_current_liab and total_noncurrent_liab:
+        latest_goodwill = None
+        latest_net_assets = None
 
-        if latest_ta and latest_tl and latest_ta > latest_tl:
-            net_assets = latest_ta - latest_tl
-            if net_assets > 0:
-                goodwill_ratio = goodwill / net_assets
-                if goodwill_ratio > 0.3:
-                    score -= 8
-                    flags.append(f"A4_high_goodwill:{goodwill_ratio:.1%}")
+        # 从最新一期往回找，取第一个所有字段都有效的
+        for i in range(len(goodwill_list) - 1, -1, -1):
+            if i >= len(total_assets) or i >= len(total_current_liab) or i >= len(total_noncurrent_liab):
+                continue
+            gw = goodwill_list[i]
+            ta = total_assets[i]
+            tcl = total_current_liab[i]
+            tncl = total_noncurrent_liab[i]
+
+            if gw is not None and ta is not None and tcl is not None and tncl is not None:
+                equity = ta - tcl - tncl
+                if equity > 0:
+                    latest_goodwill = gw
+                    latest_net_assets = equity
+                    break
+
+        if latest_goodwill is not None and latest_net_assets is not None:
+            goodwill_ratio = latest_goodwill / latest_net_assets
+            if goodwill_ratio > 0.3:
+                score -= 8
+                flags.append(f"A4_high_goodwill:{goodwill_ratio:.1%}")
 
     # A5: 大股东质押 > 60% → 扣 5 分
     pledge_ratio = risk.get("pledge_ratio")

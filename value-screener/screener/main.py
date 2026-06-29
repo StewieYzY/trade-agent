@@ -114,6 +114,7 @@ def screen_a_shares(tickers: list[str], exclude_cyclicals: bool = False) -> dict
             "industry": basic.get("industry", ""),
             "factor_scores": candidate["factor_scores"],
             "anti_trap": candidate["anti_trap"],
+            "adjusted_composite": candidate["adjusted_composite"],  # 实际排序依据
             "f_score": candidate["factor_scores"]["f_score"],
             "graham_number": valuation.get("graham_number"),
             "pe_ttm": valuation.get("pe_ttm"),

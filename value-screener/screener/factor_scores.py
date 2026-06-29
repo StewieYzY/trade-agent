@@ -72,23 +72,36 @@ def _compute_quality_score(ticker_data: dict) -> float:
     scores = []
 
     # 子项 1: F-Score (40%)
-    f_score = compute_f_score(financials)
-    if f_score is not None:
+    # 检查 financials 是否有有效数据，空数据不应参与加权
+    if financials and (financials.get("income", {}).get("net_profit")
+                       or financials.get("balance_sheet", {}).get("TOTAL_ASSETS")
+                       or financials.get("cash_flow", {}).get("NETCASH_OPERATE")):
+        f_score = compute_f_score(financials)
         f_score_norm = f_score / 9.0 * 100.0
         scores.append(("f_score", f_score_norm, 0.40))
 
     # 子项 2: ROE 5 年平均 (30%)
+    # ROE = net_profit / equity = net_profit / (TOTAL_ASSETS - TOTAL_CURRENT_LIAB - TOTAL_NONCURRENT_LIAB)
     income = financials.get("income", {})
     balance_sheet = financials.get("balance_sheet", {})
 
     net_profits = income.get("net_profit", [])
-    total_assets = balance_sheet.get("total_assets", [])
+    total_assets = balance_sheet.get("TOTAL_ASSETS", [])
+    total_current_liab = balance_sheet.get("TOTAL_CURRENT_LIAB", [])
+    total_noncurrent_liab = balance_sheet.get("TOTAL_NONCURRENT_LIAB", [])
 
-    if net_profits and total_assets and len(net_profits) == len(total_assets):
+    if (net_profits and total_assets
+            and len(net_profits) == len(total_assets)
+            and len(total_assets) == len(total_current_liab)
+            and len(total_assets) == len(total_noncurrent_liab)):
         roe_list = []
-        for np, ta in zip(net_profits, total_assets):
-            if np is not None and ta is not None and ta != 0:
-                roe_list.append(np / ta)
+        for np_val, ta, tcl, tncl in zip(net_profits, total_assets, total_current_liab, total_noncurrent_liab):
+            if np_val is None or ta is None or tcl is None or tncl is None:
+                continue
+            equity = ta - tcl - tncl
+            if equity <= 0:
+                continue
+            roe_list.append(np_val / equity)
 
         if roe_list:
             # 取最近 5 年或所有可用年份
@@ -178,10 +191,22 @@ def _compute_safety_margin_score(ticker_data: dict) -> float:
     scores = []
 
     # 子项 1: DCF 安全边际 (60%)
+    # FCF = 经营现金流 - 资本开支 = NETCASH_OPERATE - CONSTRUCT_LONG_ASSET
     cash_flow = financials.get("cash_flow", {})
     income = financials.get("income", {})
 
-    fcf_series = cash_flow.get("NETCASH_OPERATE", [])
+    netcash_operate = cash_flow.get("NETCASH_OPERATE", [])
+    construct_long_asset = cash_flow.get("CONSTRUCT_LONG_ASSET", [])
+
+    # 计算 FCF 序列：逐期相减
+    fcf_series = []
+    if netcash_operate and construct_long_asset and len(netcash_operate) == len(construct_long_asset):
+        for nco, cla in zip(netcash_operate, construct_long_asset):
+            if nco is not None and cla is not None:
+                fcf_series.append(nco - cla)
+            else:
+                fcf_series.append(None)
+
     revenue_series = income.get("revenue", [])
     current_price = basic.get("price")
 
