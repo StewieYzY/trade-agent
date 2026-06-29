@@ -73,8 +73,9 @@ def compute_f_score(financials: dict) -> int:
     if roa_cur is not None and roa_prev is not None and roa_cur > roa_prev:
         score += 1
 
-    # F4: CFO > ROA（应计项，CFO 比会计利润更高质量）
-    if ocf_cur > 0 and roa_cur is not None and ocf_cur > roa_cur:
+    # F4: CFO/TA > ROA（应计项，现金流 ROA 比会计 ROA 更高质量）
+    cfo_roa = _ratio(ocf_cur, ta_cur)
+    if cfo_roa is not None and roa_cur is not None and cfo_roa > roa_cur:
         score += 1
 
     # F5: 长期负债率 ↓（TOTAL_NONCURRENT_LIAB / TOTAL_ASSETS，两期）
