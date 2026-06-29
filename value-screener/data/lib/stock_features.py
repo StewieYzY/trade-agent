@@ -40,7 +40,7 @@ def _ratio(num: float, denom: float) -> float | None:
 def compute_f_score(financials: dict) -> int:
     """Piotroski F-Score 九项 → 0-9 整数.
 
-    F1 ROA>0 | F2 CFO>0 | F3 ROA↑ | F4 CFO>ROA | F5 长期负债率↓
+    F1 ROA>0 | F2 CFO>0 | F3 ROA↑ | F4 CFO/TA>ROA | F5 长期负债率↓
     F6 流动比率↑ | F7 毛利率↑ | F8 资产周转率↑ | F9 无稀释（股本↓或持平）
     """
     income = financials.get("income", {})

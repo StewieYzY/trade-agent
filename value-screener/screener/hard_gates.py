@@ -4,6 +4,7 @@ S1 规格：~5000 → ~800
 
 硬门槛条件：
 - H1: ST/*ST/退市风险
+- H2: 上市 < 3 年（用 financials.years 近似）
 - H3: 市值 < 50 亿
 - H4: 金融/券商
 - H5: 周期股（可选，默认关闭）
@@ -32,6 +33,7 @@ def check_hard_gates(ticker_data: dict, exclude_cyclicals: bool = False) -> dict
     """
     basic = ticker_data.get("basic", {})
     risk = ticker_data.get("risk", {})
+    financials = ticker_data.get("financials", {})
     failed_gates = []
 
     # H1: ST/*ST/退市风险
@@ -39,6 +41,11 @@ def check_hard_gates(ticker_data: dict, exclude_cyclicals: bool = False) -> dict
     if name is not None:
         if "ST" in name.upper():
             failed_gates.append("H1")
+
+    # H2: 上市 < 3 年（用 financials.years 近似：期数不足即财务历史不够）
+    years = financials.get("years", [])
+    if len(years) < 3:
+        failed_gates.append("H2")
 
     # H3: 市值 < 50 亿 (50e8 = 50亿)
     market_cap = basic.get("market_cap")

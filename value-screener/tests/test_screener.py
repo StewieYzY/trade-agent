@@ -8,9 +8,11 @@
 - FCF 有效性验证
 - adjusted_composite 乘法公式
 - PE 行业折价双轨策略（R2）
+- H2 硬门槛（financials.years 近似）
 """
 
 import pytest
+from screener.hard_gates import check_hard_gates
 from screener.factor_scores import compute_factor_scores
 from screener.anti_trap import compute_anti_trap
 from screener.heat_filter import check_heat_filter
@@ -188,6 +190,56 @@ def test_adjusted_composite_multiplication():
     assert anti_trap_score == pytest.approx(95.0)
     assert adjusted < composite
     assert abs(adjusted - composite * 95.0 / 100.0) < 0.01
+
+
+# ==================== H2: 上市年限硬门槛测试 ====================
+
+
+def test_h2_pass_3_years():
+    """H2 通过：financials.years >= 3 年应通过"""
+    ticker_data = {
+        "basic": {"name": "正常公司", "market_cap": 100e8, "industry": "科技", "pe": 20},
+        "financials": {"years": ["2020", "2021", "2022"]},
+        "risk": {"pledge_ratio": 30, "audit_opinion": "标准无保留意见"},
+    }
+    result = check_hard_gates(ticker_data)
+    assert result["pass"] is True
+    assert "H2" not in result["failed_gates"]
+
+
+def test_h2_fail_less_than_3_years():
+    """H2 失败：financials.years < 3 年应排除"""
+    ticker_data = {
+        "basic": {"name": "新股", "market_cap": 100e8, "industry": "科技", "pe": 20},
+        "financials": {"years": ["2022", "2023"]},
+        "risk": {"pledge_ratio": 30, "audit_opinion": "标准无保留意见"},
+    }
+    result = check_hard_gates(ticker_data)
+    assert result["pass"] is False
+    assert "H2" in result["failed_gates"]
+
+
+def test_h2_empty_years():
+    """H2 失败：financials.years 为空应排除"""
+    ticker_data = {
+        "basic": {"name": "空数据股", "market_cap": 100e8, "industry": "科技", "pe": 20},
+        "financials": {"years": []},
+        "risk": {"pledge_ratio": 30, "audit_opinion": "标准无保留意见"},
+    }
+    result = check_hard_gates(ticker_data)
+    assert result["pass"] is False
+    assert "H2" in result["failed_gates"]
+
+
+def test_h2_no_financials_key():
+    """H2 失败：ticker_data 无 financials 键时应排除（容错默认 []）"""
+    ticker_data = {
+        "basic": {"name": "无财报股", "market_cap": 100e8, "industry": "科技", "pe": 20},
+        "risk": {"pledge_ratio": 30, "audit_opinion": "标准无保留意见"},
+    }
+    result = check_hard_gates(ticker_data)
+    assert result["pass"] is False
+    assert "H2" in result["failed_gates"]
 
 
 # ==================== R2: PE 行业折价双轨策略测试 ====================

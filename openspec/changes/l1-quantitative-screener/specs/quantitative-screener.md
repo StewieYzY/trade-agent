@@ -91,13 +91,14 @@ composite = quality × 0.50 + value × 0.30 + safety_margin × 0.20
 | A3 | 应收账款增速 > 营收增速 | (receivables_t - receivables_t-1) / receivables_t-1 > (revenue_t - revenue_t-1) / revenue_t-1 | 扣 5 分 | financials（需新增 receivables 字段） |
 | A4 | 商誉 / 净资产 > 30% | goodwill / total_equity > 0.3 | 扣 8 分 | financials.balance_sheet.GOODWILL |
 | A5 | 大股东质押 > 60% | pledge_ratio > 60 | 扣 5 分 | risk.pledge_ratio |
-| A6 | 非标审计意见 | audit_opinion ∈ 非标 | 扣 15 分 | risk.audit_opinion |
+| A6 | 非标审计意见 | audit_opinion ≠ "标准无保留意见" | 扣 15 分 | risk.audit_opinion |
 | A7 | 3 年内换过 CFO | 暂无数据源，MVP 不实现 | 0 | - |
 
-**注意**: 
+**注意**:
 - A3 需要 L0 financials 新增应收账款字段（`receivables`），当前未实现，MVP 先跳过
 - A7 需要高管变动数据，L0 未实现，MVP 先跳过
 - 反陷阱是**扣分不是排除**，保留可解释性（每只股票附带 anti_trap_flags 清单）
+- A6 比 H7 覆盖更广：H7 用黑名单排除最严重的 3 类（保留意见/无法表示意见/否定意见），A6 用白名单取补扣任何非"标准无保留意见"（含"带强调事项段的无保留意见"）。两者分层：H7 是死刑级淘汰，A6 是宽泛扣分
 
 ---
 
@@ -107,6 +108,8 @@ composite = quality × 0.50 + value × 0.30 + safety_margin × 0.20
 **输入**: ~300 只股票（经过 Factor Scores + Anti-Trap 排序后的 top 300）  
 **输出**: `{ticker: bool}` — True 表示通过，False 表示排除  
 **目标**: ~300 → ~200
+
+**注意**: heat_filter 在 top-300 上执行，被剔除的股票**不会**从 rank 301+ 回填。最终输出数量可能少于 ~200（spec 用 `~` 表示约数），取决于市场热度。
 
 ### 低热度条件（防御性排除）
 
@@ -216,7 +219,7 @@ L1 消费 L0 的以下模块，不新增数据采集逻辑：
 
 **L0 缺失字段（MVP 跳过）**:
 - `financials.receivables`（应收账款）— 反陷阱 A3 需要，MVP 跳过
-- `basic.list_date`（上市日期）— Hard Gate H2 需要，MVP 跳过或用 industry_mapper 补充
+- `basic.list_date`（上市日期）— Hard Gate H2 已用 `financials.years` 近似实现（`len(years) < 3` 排除）
 - 高管变动数据 — 反陷阱 A7 需要，MVP 跳过
 
 ---
