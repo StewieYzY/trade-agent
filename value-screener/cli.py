@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
+from typing import Annotated
 
 import typer
 
@@ -117,6 +118,57 @@ def screen(
         typer.echo(f"\nHard Gates 排除统计:")
         for gate, count in stats.get("excluded_by_gates", {}).items():
             typer.echo(f"  {gate}: {count}")
+
+
+@app.command()
+def scout(
+    input_file: Annotated[str, typer.Option("--input", help="L1 输出 JSON 文件路径（S5 schema）")],
+    output: Annotated[str | None, typer.Option("--output", help="L2 短名单 JSON 输出路径，缺省输出到 stdout")] = None,
+    force: Annotated[bool, typer.Option("--force", help="跳过缓存，强制重新调用 LLM")] = False,
+):
+    """L2 Scout Agent: L1 候选池 ~200 只 → ~20 只 deep_dive 短名单.
+
+    环境变量（必填）：
+    - LLM_API_KEY: LLM API 密钥
+    - LLM_API_BASE: LLM API base URL（如 https://api.openai.com）
+    - LLM_MODEL: 模型名称（如 gpt-4o-mini）
+
+    成本估算：~¥0.01/只，200 只 ~¥2/轮（80% 缓存命中后 ~¥0.4/轮）。
+    Top-20 cap 确保 L3 成本在 AD-03 预算内（¥400-1200）。
+    """
+    import asyncio
+    from pathlib import Path
+
+    # 1. 读取 L1 输出
+    p = Path(input_file)
+    if not p.exists():
+        raise typer.BadParameter(f"L1 output file not found: {input_file}")
+
+    try:
+        l1_data = json.loads(p.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError) as e:
+        raise typer.BadParameter(f"Failed to read L1 output: {e}")
+
+    candidates = l1_data.get("candidates", [])
+    if not candidates:
+        raise typer.BadParameter("L1 output has no candidates")
+
+    typer.echo(f"读取 L1 输出：{len(candidates)} 只候选")
+
+    # 2. 调用 scout_batch（异步）
+    from scout.batch import scout_batch
+    shortlist = asyncio.run(scout_batch(candidates, force=force))
+
+    # 3. 输出结果
+    output_json = json.dumps(shortlist, ensure_ascii=False, indent=2)
+
+    if output:
+        Path(output).write_text(output_json, encoding="utf-8")
+        typer.echo(f"结果已写入到 {output}")
+    else:
+        typer.echo(output_json)
+
+    typer.echo(f"L2 筛选完成：{len(shortlist)}/{len(candidates)} 只 deep_dive（top-20 cap）")
 
 
 if __name__ == "__main__":
