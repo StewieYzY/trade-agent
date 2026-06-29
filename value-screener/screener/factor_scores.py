@@ -1,0 +1,264 @@
+"""Factor Scores — 三因子打分（价值/质量/安全边际）.
+
+S2 规格：~800 → ~300
+
+综合分公式：
+  composite = quality × 0.50 + value × 0.30 + safety_margin × 0.20
+
+质量因子（50%）：
+- F-Score (40%)
+- ROE 5 年平均 (30%)
+- 经营现金流连续 3 年正 (30%)
+
+估值因子（30%）：
+- PE 分位 (40%)
+- PB < 2 (30%)
+- PE×PB < 22.5 (30%)
+
+安全边际（20%）：
+- DCF 安全边际 (60%)
+- 质押率反向 (40%)
+"""
+
+from __future__ import annotations
+
+from data.lib.stock_features import compute_f_score
+from data.lib.fin_models import compute_simple_dcf
+
+
+def _score_linear_decay(value: float, low: float, high: float, invert: bool = False) -> float:
+    """线性衰减评分.
+
+    Args:
+        value: 输入值
+        low: 低阈值（得满分或 0 分）
+        high: 高阈值（得 0 分或满分）
+        invert: 是否反转（True: value < low 得 0，value > high 得满分）
+
+    Returns:
+        0-100 分数
+    """
+    if value is None:
+        return 0.0
+
+    if not invert:
+        # 正常：value < low 得满分，value > high 得 0
+        if value <= low:
+            return 100.0
+        elif value >= high:
+            return 0.0
+        else:
+            return (high - value) / (high - low) * 100.0
+    else:
+        # 反转：value < low 得 0，value > high 得满分
+        if value <= low:
+            return 0.0
+        elif value >= high:
+            return 100.0
+        else:
+            return (value - low) / (high - low) * 100.0
+
+
+def _compute_quality_score(ticker_data: dict) -> float:
+    """计算质量因子（50% 权重）.
+
+    子项：
+    - F-Score (40%): 0-9 → 0-100
+    - ROE 5 年平均 (30%): > 15% 得满分
+    - 经营现金流连续 3 年正 (30%): 3 年都正得满分
+    """
+    financials = ticker_data.get("financials", {})
+
+    scores = []
+
+    # 子项 1: F-Score (40%)
+    f_score = compute_f_score(financials)
+    if f_score is not None:
+        f_score_norm = f_score / 9.0 * 100.0
+        scores.append(("f_score", f_score_norm, 0.40))
+
+    # 子项 2: ROE 5 年平均 (30%)
+    income = financials.get("income", {})
+    balance_sheet = financials.get("balance_sheet", {})
+
+    net_profits = income.get("net_profit", [])
+    total_assets = balance_sheet.get("total_assets", [])
+
+    if net_profits and total_assets and len(net_profits) == len(total_assets):
+        roe_list = []
+        for np, ta in zip(net_profits, total_assets):
+            if np is not None and ta is not None and ta != 0:
+                roe_list.append(np / ta)
+
+        if roe_list:
+            # 取最近 5 年或所有可用年份
+            roe_recent = roe_list[-5:] if len(roe_list) >= 5 else roe_list
+            roe_avg = sum(roe_recent) / len(roe_recent)
+
+            # ROE > 15% 得满分，线性插值到 0%
+            roe_score = min(100.0, roe_avg / 0.15 * 100.0)
+            scores.append(("roe_avg", roe_score, 0.30))
+
+    # 子项 3: 经营现金流连续 3 年正 (30%)
+    cash_flow = financials.get("cash_flow", {})
+    ocf_list = cash_flow.get("NETCASH_OPERATE", [])
+
+    if ocf_list and len(ocf_list) >= 3:
+        ocf_recent = ocf_list[-3:]
+        positive_count = sum(1 for ocf in ocf_recent if ocf is not None and ocf > 0)
+
+        # 3 年都正得满分，按比例衰减
+        cash_flow_score = positive_count / 3.0 * 100.0
+        scores.append(("cash_flow", cash_flow_score, 0.30))
+
+    if not scores:
+        return 0.0
+
+    # 加权求和（仅对有数据的子项）
+    total_weight = sum(w for _, _, w in scores)
+    if total_weight == 0:
+        return 0.0
+
+    return sum(s * w / total_weight for _, s, w in scores)
+
+
+def _compute_value_score(ticker_data: dict) -> float:
+    """计算估值因子（30% 权重）.
+
+    子项：
+    - PE 分位 (40%): < 30% 得满分，30-70% 线性衰减，> 70% 得 0
+    - PB < 2 (30%): PB < 2 得满分，2-3 线性衰减，> 3 得 0
+    - PE×PB < 22.5 (30%): PE×PB < 22.5 得满分，22.5-30 线性衰减
+    """
+    valuation = ticker_data.get("valuation", {})
+    basic = ticker_data.get("basic", {})
+
+    scores = []
+
+    # 子项 1: PE 分位 (40%)
+    pe_percentile = valuation.get("pe_percentile_5y")
+    if pe_percentile is not None:
+        pe_score = _score_linear_decay(pe_percentile, 30.0, 70.0, invert=False)
+        scores.append(("pe_percentile", pe_score, 0.40))
+
+    # 子项 2: PB < 2 (30%)
+    pb = valuation.get("pb") or basic.get("pb")
+    if pb is not None:
+        pb_score = _score_linear_decay(pb, 2.0, 3.0, invert=False)
+        scores.append(("pb", pb_score, 0.30))
+
+    # 子项 3: PE×PB < 22.5 (30%)
+    pe = valuation.get("pe_ttm") or basic.get("pe")
+    if pe is not None and pb is not None:
+        pe_pb = pe * pb
+        pe_pb_score = _score_linear_decay(pe_pb, 22.5, 30.0, invert=False)
+        scores.append(("pe_pb", pe_pb_score, 0.30))
+
+    if not scores:
+        return 0.0
+
+    total_weight = sum(w for _, _, w in scores)
+    if total_weight == 0:
+        return 0.0
+
+    return sum(s * w / total_weight for _, s, w in scores)
+
+
+def _compute_safety_margin_score(ticker_data: dict) -> float:
+    """计算安全边际因子（20% 权重）.
+
+    子项：
+    - DCF 安全边际 (60%): > 30% 得满分
+    - 质押率反向 (40%): < 20% 得满分，20-60% 线性衰减，> 60% 得 0
+    """
+    financials = ticker_data.get("financials", {})
+    basic = ticker_data.get("basic", {})
+    risk = ticker_data.get("risk", {})
+
+    scores = []
+
+    # 子项 1: DCF 安全边际 (60%)
+    cash_flow = financials.get("cash_flow", {})
+    income = financials.get("income", {})
+
+    fcf_series = cash_flow.get("NETCASH_OPERATE", [])
+    revenue_series = income.get("revenue", [])
+    current_price = basic.get("price")
+
+    if fcf_series and revenue_series and current_price is not None:
+        try:
+            dcf_result = compute_simple_dcf(
+                fcf_series=fcf_series,
+                revenue_series=revenue_series,
+                current_price=current_price,
+                assumptions={"discount_rate": 0.10, "terminal_growth": 0.03}
+            )
+
+            safety_margin_pct = dcf_result.get("safety_margin_pct", 0.0)
+
+            # > 30% 得满分，0-30% 线性衰减，< 0% 得 0
+            if safety_margin_pct >= 30.0:
+                dcf_score = 100.0
+            elif safety_margin_pct >= 0.0:
+                dcf_score = safety_margin_pct / 30.0 * 100.0
+            else:
+                dcf_score = 0.0
+
+            scores.append(("dcf", dcf_score, 0.60))
+        except Exception:
+            # DCF 计算失败，跳过
+            pass
+
+    # 子项 2: 质押率反向 (40%)
+    pledge_ratio = risk.get("pledge_ratio")
+    if pledge_ratio is not None:
+        # < 20% 得满分，20-60% 线性衰减，> 60% 得 0
+        if pledge_ratio <= 20.0:
+            pledge_score = 100.0
+        elif pledge_ratio >= 60.0:
+            pledge_score = 0.0
+        else:
+            pledge_score = (60.0 - pledge_ratio) / (60.0 - 20.0) * 100.0
+
+        scores.append(("pledge", pledge_score, 0.40))
+
+    if not scores:
+        return 0.0
+
+    total_weight = sum(w for _, _, w in scores)
+    if total_weight == 0:
+        return 0.0
+
+    return sum(s * w / total_weight for _, s, w in scores)
+
+
+def compute_factor_scores(ticker_data: dict) -> dict:
+    """计算三因子综合分.
+
+    Args:
+        ticker_data: {
+            "basic": {"pe", "pb", "price", ...},
+            "financials": {...},
+            "valuation": {"pe_percentile_5y", "pb", ...},
+            "risk": {"pledge_ratio", ...}
+        }
+
+    Returns:
+        {"quality": float, "value": float, "safety_margin": float, "composite": float, "f_score": int}
+    """
+    financials = ticker_data.get("financials", {})
+    f_score = compute_f_score(financials) if financials else 0
+
+    quality = _compute_quality_score(ticker_data)
+    value = _compute_value_score(ticker_data)
+    safety_margin = _compute_safety_margin_score(ticker_data)
+
+    composite = quality * 0.50 + value * 0.30 + safety_margin * 0.20
+
+    return {
+        "quality": round(quality, 2),
+        "value": round(value, 2),
+        "safety_margin": round(safety_margin, 2),
+        "composite": round(composite, 2),
+        "f_score": f_score
+    }
