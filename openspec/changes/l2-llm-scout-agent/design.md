@@ -103,7 +103,7 @@ async def call_llm(prompt: str, system: str) -> str:
 1. 这是一家什么生意？（一句话）
 2. 便宜吗？（PE/PB 分位 + 同行对比）
 3. 生意好吗？（ROE 趋势 + 现金流质量）
-4. 有什么明显的红旗？（负债/质押/商誉/大股东减持）
+4. 有什么明显的红旗？（负债/质押/商誉/大股东减持/非标审计意见）
 5. 一句话结论：值得深研 / 观望 / 排除
 
 输出 JSON:
@@ -132,8 +132,9 @@ ROE(近3年): {roe_3y}  ← {roe_trend}
 营收增速: {revenue_growth}%
 商誉/净资产: {goodwill_ratio}%
 大股东质押: {pledge_ratio}%
+审计意见: {audit_opinion}
 近60日涨幅: {price_change_60d}%
-换手率分位: {turnover_percentile}%
+换手率分位: {turnover_avg_percentile_60d}%
 F-Score: {f_score}/9
 ```
 

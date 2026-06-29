@@ -29,6 +29,29 @@ def test_parse_scout_output_valid():
     assert result["anti_trap_flags"] == []
 
 
+def test_parse_scout_output_float_confidence():
+    """验证 float confidence 被接受并转 int（LLM JSON 模式常返回 75.0）."""
+    raw = json.dumps({
+        "verdict": "deep_dive",
+        "confidence": 75.0,
+        "one_liner": "test",
+    })
+    result = parse_scout_output(raw)
+    assert result["confidence"] == 75
+    assert result["verdict"] == "deep_dive"
+
+
+def test_parse_scout_output_bool_confidence_rejected():
+    """验证 bool confidence 被拒绝（isinstance(True, int) 为 True 的陷阱）."""
+    raw = json.dumps({
+        "verdict": "deep_dive",
+        "confidence": True,
+        "one_liner": "test",
+    })
+    result = parse_scout_output(raw)
+    assert result["confidence"] == 0
+
+
 def test_parse_scout_output_malformed_json():
     """验证 parse_scout_output 处理格式错误 JSON."""
     raw = '{"verdict": "deep_dive", "confidence": 85'  # 缺少闭合

@@ -109,3 +109,50 @@ class ScoutCache:
             if tmp.exists():
                 tmp.unlink(missing_ok=True)
             raise
+
+    def clear(self, ticker: str | None = None, date_str: str | None = None) -> int:
+        """清理缓存文件.
+
+        Args:
+            ticker: 指定 ticker；None 清全部
+            date_str: 指定日期；None 清该 ticker 下全部日期
+
+        Returns:
+            删除的文件数
+        """
+        deleted = 0
+        if ticker is None:
+            # 清全部
+            for p in self.base.rglob("l2_scout.json"):
+                try:
+                    p.unlink()
+                    deleted += 1
+                except OSError:
+                    pass
+            # 清理空目录
+            for d in sorted(self.base.rglob("*"), reverse=True):
+                if d.is_dir() and not any(d.iterdir()):
+                    try:
+                        d.rmdir()
+                    except OSError:
+                        pass
+        else:
+            ticker_dir = self.base / ticker
+            if not ticker_dir.exists():
+                return 0
+            if date_str:
+                p = ticker_dir / date_str / "l2_scout.json"
+                if p.exists():
+                    try:
+                        p.unlink()
+                        deleted += 1
+                    except OSError:
+                        pass
+            else:
+                for p in ticker_dir.rglob("l2_scout.json"):
+                    try:
+                        p.unlink()
+                        deleted += 1
+                    except OSError:
+                        pass
+        return deleted

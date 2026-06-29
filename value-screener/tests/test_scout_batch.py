@@ -53,7 +53,7 @@ def test_scout_batch_top20_cap():
                 "revenue_growth": 10.0,
                 "pledge_ratio": 10.0,
                 "price_change_60d": 5.0,
-                "turnover_percentile": 50.0,
+                "turnover_avg_percentile_60d": 50.0,
                 "f_score": 7,
             }
 
@@ -111,7 +111,7 @@ def test_scout_batch_error_handling():
             "revenue_growth": 10.0,
             "pledge_ratio": 10.0,
             "price_change_60d": 5.0,
-            "turnover_percentile": 50.0,
+            "turnover_avg_percentile_60d": 50.0,
             "f_score": 7,
         }
 
@@ -161,7 +161,7 @@ def test_scout_batch_insufficient_data():
             "revenue_growth": 10.0,
             "pledge_ratio": 10.0,
             "price_change_60d": 5.0,
-            "turnover_percentile": 50.0,
+            "turnover_avg_percentile_60d": 50.0,
             "f_score": 7,
         }
 
@@ -247,7 +247,7 @@ def test_scout_batch_cache_hit():
                     "revenue_growth": 10.0,
                     "pledge_ratio": 10.0,
                     "price_change_60d": 5.0,
-                    "turnover_percentile": 50.0,
+                    "turnover_avg_percentile_60d": 50.0,
                     "f_score": 7,
                 }
 
@@ -273,6 +273,59 @@ def test_call_llm_snapshot_env_validation():
             assert False, "Should raise ValueError"
         except ValueError as e:
             assert "missing required env var" in str(e)
+
+
+def test_scout_batch_cache_write_failure():
+    """验证 cache.set OSError 不丢结果（LLM 已调用，结果应返回）."""
+    candidates = [{"ticker": "600001"}]
+
+    async def mock_call(snapshot, system):
+        return json.dumps({
+            "verdict": "deep_dive",
+            "confidence": 90,
+            "one_liner": "Test",
+            "red_flags": [],
+            "green_flags": [],
+            "anti_trap_flags": [],
+        })
+
+    with patch("scout.batch.call_llm_snapshot", new=mock_call):
+        with patch("scout.batch.assemble_snapshot") as mock_assemble:
+            mock_assemble.return_value = {
+                "ticker": "600001",
+                "name": "测试股票",
+                "industry": "测试行业",
+                "market_cap": 1000,
+                "pe_ttm": 20.0,
+                "pb": 2.0,
+                "pe_percentile_5y": 50.0,
+                "roe_3y": [15.0, 16.0, 17.0],
+                "roe_trend": "趋势上升",
+                "net_margin": 10.0,
+                "debt_ratio": 50.0,
+                "goodwill_ratio": 5.0,
+                "operating_cashflow": 100.0,
+                "net_profit": 80.0,
+                "cashflow_match": "匹配",
+                "revenue_growth": 10.0,
+                "pledge_ratio": 10.0,
+                "price_change_60d": 5.0,
+                "turnover_avg_percentile_60d": 50.0,
+                "f_score": 7,
+            }
+
+            with patch("scout.batch.ScoutCache") as mock_cache_cls:
+                mock_cache = mock_cache_cls.return_value
+                mock_cache.get.return_value = None
+                mock_cache.set.side_effect = OSError("Disk full")
+
+                result = asyncio.run(scout_batch(candidates, force=True))
+
+                # 即使缓存写入失败，结果仍然返回
+                assert len(result) == 1
+                assert result[0]["ticker"] == "600001"
+                assert result[0]["verdict"] == "deep_dive"
+                assert result[0]["confidence"] == 90
 
 
 if __name__ == "__main__":

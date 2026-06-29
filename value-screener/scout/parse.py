@@ -55,9 +55,13 @@ def parse_scout_output(raw_json: str) -> dict:
     if verdict not in ("deep_dive", "watch", "skip"):
         verdict = "watch"
 
-    # 验证 confidence
-    if not isinstance(confidence, int) or confidence < 0 or confidence > 100:
+    # 验证 confidence（接受 int/float，排除 bool）
+    if isinstance(confidence, bool) or not isinstance(confidence, (int, float)):
         confidence = 0
+    else:
+        confidence = int(confidence)
+        if confidence < 0 or confidence > 100:
+            confidence = 0
 
     # 验证 flags 类型
     if not isinstance(red_flags, list) or not all(isinstance(f, str) for f in red_flags):

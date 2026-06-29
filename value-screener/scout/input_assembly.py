@@ -15,6 +15,7 @@ Insufficient data guard（spec Requirement: Insufficient data guard）：
 from __future__ import annotations
 
 from data.cache.manager import CacheManager
+from data.lib.stock_features import compute_f_score
 
 
 def _compute_roe_3y(financials: dict) -> tuple[list[float] | None, str]:
@@ -152,14 +153,19 @@ def _annotate_cashflow_match(operating_cashflow: float | None, net_profit: float
     if operating_cashflow is None or net_profit is None:
         return "数据缺失"
 
+    # 双负：亏损 + 现金消耗 → 典型困境
+    if net_profit < 0 and operating_cashflow < 0:
+        return "不匹配（亏损+现金消耗）"
+    # 亏损但现金流为正 → 部分匹配（可能是回款周期）
+    if net_profit < 0 and operating_cashflow >= 0:
+        return "部分匹配（亏损但现金流为正）"
     # 净利润正但经营现金流负 → 不匹配（anti_trap A2）
     if net_profit > 0 and operating_cashflow < 0:
         return "不匹配（利润正但现金流负）"
 
-    # 经营现金流 > 净利润 → 匹配（现金流质量高）
-    if operating_cashflow > net_profit * 0.8:  # 容差 20%
+    # 双正：常规比较（容差 20%）
+    if operating_cashflow > net_profit * 0.8:
         return "匹配"
-
     return "部分匹配"
 
 
@@ -179,8 +185,11 @@ def _compute_price_change_60d(kline: dict) -> float | None:
     return (latest / past - 1) * 100
 
 
-def _compute_turnover_percentile(kline: dict) -> float | None:
-    """换手率分位：近 60 日换手率在 250 日历史中的分位.
+def _compute_turnover_avg_percentile_60d(kline: dict) -> float | None:
+    """换手率 60 日均值分位：近 60 日均值在 250 日历史中的分位.
+
+    注意：与 L1 HF1 的 turnover_percentile（当日值在 60 日中的分位）语义不同。
+    L2 关注中期交易活跃度水平，L1 关注单日异常放量。
 
     Returns:
         0-100 分位值
@@ -243,7 +252,7 @@ def assemble_snapshot(ticker: str, cache_manager: CacheManager | None = None) ->
     - basic: name, industry, market_cap
     - valuation: pe_ttm, pb, pe_percentile_5y
     - financials: roe_3y, net_margin, debt_ratio, goodwill_ratio, operating_cashflow, net_profit, revenue_growth
-    - kline: price_change_60d, turnover_percentile
+    - kline: price_change_60d, turnover_avg_percentile_60d
     - risk: pledge_ratio, audit_opinion
     - F-Score: 从 data.lib.stock_features.compute_f_score 计算
     """
@@ -292,12 +301,11 @@ def assemble_snapshot(ticker: str, cache_manager: CacheManager | None = None) ->
     audit_opinion = risk.get("audit_opinion")
 
     price_change_60d = _compute_price_change_60d(kline)
-    turnover_percentile = _compute_turnover_percentile(kline)
+    turnover_avg_percentile_60d = _compute_turnover_avg_percentile_60d(kline)
 
     # F-Score
     f_score = None
     if financials:
-        from data.lib.stock_features import compute_f_score
         try:
             f_score = compute_f_score(financials)
         except (KeyError, ValueError, AttributeError):
@@ -323,7 +331,7 @@ def assemble_snapshot(ticker: str, cache_manager: CacheManager | None = None) ->
         "pledge_ratio": pledge_ratio,
         "audit_opinion": audit_opinion,
         "price_change_60d": price_change_60d,
-        "turnover_percentile": turnover_percentile,
+        "turnover_avg_percentile_60d": turnover_avg_percentile_60d,
         "f_score": f_score,
     }
 
@@ -336,7 +344,7 @@ def assemble_snapshot(ticker: str, cache_manager: CacheManager | None = None) ->
         "name", "industry", "market_cap", "pe_ttm", "pb", "pe_percentile_5y",
         "roe_3y", "net_margin", "debt_ratio", "goodwill_ratio",
         "operating_cashflow", "net_profit", "revenue_growth",
-        "pledge_ratio", "price_change_60d", "turnover_percentile", "f_score",
+        "pledge_ratio", "price_change_60d", "turnover_avg_percentile_60d", "f_score",
     ]
     missing_fields = [f for f in data_fields if features.get(f) is None]
     missing_ratio = len(missing_fields) / len(data_fields) if data_fields else 0

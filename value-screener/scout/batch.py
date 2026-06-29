@@ -129,77 +129,85 @@ async def scout_batch(candidates: list[dict], force: bool = False) -> list[dict]
         if not ticker:
             return None
 
-        # 1. 检查缓存（除非 force=True）
-        if not force:
-            cached = cache.get(ticker, today)
-            if cached is not None:
-                return {
-                    "ticker": ticker,
-                    "verdict": cached.get("verdict"),
-                    "confidence": cached.get("confidence", 0),
-                    "one_liner": cached.get("one_liner", ""),
-                    "red_flags": cached.get("red_flags", []),
-                    "green_flags": cached.get("green_flags", []),
-                    "anti_trap_flags": cached.get("anti_trap_flags", []),
-                    "from_cache": True,
-                }
+        try:
+            # 1. 检查缓存（除非 force=True）
+            if not force:
+                cached = cache.get(ticker, today)
+                if cached is not None:
+                    return {
+                        "ticker": ticker,
+                        "verdict": cached.get("verdict"),
+                        "confidence": cached.get("confidence", 0),
+                        "one_liner": cached.get("one_liner", ""),
+                        "red_flags": cached.get("red_flags", []),
+                        "green_flags": cached.get("green_flags", []),
+                        "anti_trap_flags": cached.get("anti_trap_flags", []),
+                        "low_confidence_anomaly": cached.get("low_confidence_anomaly", False),
+                        "from_cache": True,
+                    }
 
-        # 2. 组装特征快照
-        features = assemble_snapshot(ticker)
+            # 2. 组装特征快照
+            features = assemble_snapshot(ticker)
 
-        # Insufficient data guard
-        if "error" in features:
-            return {
-                "ticker": ticker,
-                "verdict": "error",
-                "error": features.get("error"),
-                "missing_fields": features.get("missing_fields", []),
-            }
-
-        snapshot_text = format_snapshot(features)
-
-        # 3. 并发调用 LLM
-        async with semaphore:
-            try:
-                raw_json = await call_llm_snapshot(snapshot_text, SCOUT_SYSTEM_PROMPT)
-            except (httpx.HTTPStatusError, httpx.TimeoutException, ValueError) as e:
+            # Insufficient data guard
+            if "error" in features:
                 return {
                     "ticker": ticker,
                     "verdict": "error",
-                    "error": str(e),
+                    "error": features.get("error"),
+                    "missing_fields": features.get("missing_fields", []),
                 }
 
-        # 4. 解析输出 + 应用缓冲带
-        parsed = parse_scout_output(raw_json)
-        final_verdict, is_anomaly = apply_buffer_zone(parsed["verdict"], parsed["confidence"])
+            snapshot_text = format_snapshot(features)
 
-        result = {
-            "ticker": ticker,
-            "verdict": final_verdict,
-            "confidence": parsed["confidence"],
-            "one_liner": parsed["one_liner"],
-            "red_flags": parsed["red_flags"],
-            "green_flags": parsed["green_flags"],
-            "anti_trap_flags": parsed["anti_trap_flags"],
-            "low_confidence_anomaly": is_anomaly,
-        }
+            # 3. 并发调用 LLM
+            async with semaphore:
+                try:
+                    raw_json = await call_llm_snapshot(snapshot_text, SCOUT_SYSTEM_PROMPT)
+                except (httpx.HTTPStatusError, httpx.TimeoutException, ValueError) as e:
+                    return {
+                        "ticker": ticker,
+                        "verdict": "error",
+                        "error": str(e),
+                    }
 
-        # 5. 写入缓存
-        cache.set(ticker, today, result, features)
+            # 4. 解析输出 + 应用缓冲带
+            parsed = parse_scout_output(raw_json)
+            final_verdict, is_anomaly = apply_buffer_zone(parsed["verdict"], parsed["confidence"])
 
-        return result
+            result = {
+                "ticker": ticker,
+                "verdict": final_verdict,
+                "confidence": parsed["confidence"],
+                "one_liner": parsed["one_liner"],
+                "red_flags": parsed["red_flags"],
+                "green_flags": parsed["green_flags"],
+                "anti_trap_flags": parsed["anti_trap_flags"],
+                "low_confidence_anomaly": is_anomaly,
+            }
+
+            # 5. 写入缓存（失败不丢结果）
+            try:
+                cache.set(ticker, today, result, features)
+            except OSError:
+                pass  # 缓存写入失败不影响结果返回
+
+            return result
+
+        except Exception as e:
+            # 兜底：非预期异常（脏数据/类型错位等）不静默丢弃
+            return {
+                "ticker": ticker,
+                "verdict": "error",
+                "error": f"unexpected: {e}",
+            }
 
     # 并发处理所有候选
     tasks = [process_one(c) for c in candidates]
-    raw_results = await asyncio.gather(*tasks, return_exceptions=True)
+    raw_results = await asyncio.gather(*tasks)
 
-    # 过滤异常（asyncio.gather return_exceptions=True 会返回 Exception 对象）
-    for r in raw_results:
-        if isinstance(r, Exception):
-            # 不应到达（process_one 内部已捕获异常）
-            continue
-        if r is not None:
-            results.append(r)
+    # 过滤 None（ticker 缺失或 insufficient data 等）
+    results = [r for r in raw_results if r is not None]
 
     # 6. 过滤 deep_dive + top-20 cap
     deep_dive = [r for r in results if r.get("verdict") == "deep_dive"]

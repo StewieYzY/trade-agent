@@ -6,7 +6,7 @@ import json
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from scout.input_assembly import assemble_snapshot
+from scout.input_assembly import assemble_snapshot, _annotate_cashflow_match
 from data.cache.manager import CacheManager
 
 
@@ -88,7 +88,7 @@ def test_assemble_snapshot_basic():
         assert features["cashflow_match"] in ["匹配", "不匹配", "部分匹配", "数据缺失"]
         assert features["revenue_growth"] is not None
         assert features["price_change_60d"] is not None
-        assert features["turnover_percentile"] is not None
+        assert features["turnover_avg_percentile_60d"] is not None
 
 
 def test_assemble_snapshot_contract_pe_ttm_source():
@@ -196,6 +196,27 @@ def test_assemble_snapshot_insufficient_data_too_many_missing():
         assert "missing_fields" in result
         # 应该有很多缺失字段
         assert len(result["missing_fields"]) > 8  # 总共有 17 个数据字段，>50% 即 >8.5
+
+
+def test_cashflow_match_both_negative():
+    """验证 NP<0 且 OCF<0 → '不匹配（亏损+现金消耗）'."""
+    assert _annotate_cashflow_match(-50, -100) == "不匹配（亏损+现金消耗）"
+
+
+def test_cashflow_match_negative_np_positive_ocf():
+    """验证 NP<0 但 OCF>=0 → '部分匹配（亏损但现金流为正）'."""
+    assert _annotate_cashflow_match(50, -100) == "部分匹配（亏损但现金流为正）"
+
+
+def test_cashflow_match_positive_np_negative_ocf():
+    """验证 NP>0 但 OCF<0 → '不匹配（利润正但现金流负）'."""
+    assert _annotate_cashflow_match(-50, 100) == "不匹配（利润正但现金流负）"
+
+
+def test_cashflow_match_normal():
+    """验证正常匹配场景."""
+    assert _annotate_cashflow_match(100, 80) == "匹配"
+    assert _annotate_cashflow_match(50, 100) == "部分匹配"
 
 
 if __name__ == "__main__":

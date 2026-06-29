@@ -43,7 +43,8 @@ def test_format_snapshot_basic():
         "revenue_growth": 15.2,
         "pledge_ratio": 5.0,
         "price_change_60d": 12.5,
-        "turnover_percentile": 65.0,
+        "turnover_avg_percentile_60d": 65.0,
+        "audit_opinion": "标准无保留意见",
         "f_score": 8,
     }
 
@@ -57,6 +58,9 @@ def test_format_snapshot_basic():
     assert "8.2" in output
     # pe_percentile_5y=45.0 -> pct() 去掉 .0 -> "45%"
     assert "45%" in output
+    assert "28.5%" in output  # roe_3y[0] 渲染为百分比
+    assert "25.3%" in output  # roe_3y[1]
+    assert "22.1%" in output  # roe_3y[2]
     assert "趋势下降" in output
     assert "52.3" in output
     assert "18.5" in output
@@ -64,7 +68,7 @@ def test_format_snapshot_basic():
     assert "15.2" in output
     assert "5%" in output  # pledge_ratio=5.0 -> "5%"
     assert "12.5" in output
-    assert "65%" in output  # turnover_percentile=65.0 -> "65%"
+    assert "65%" in output  # turnover_avg_percentile_60d=65.0 -> "65%"
     assert "8/9" in output
 
 
@@ -89,7 +93,7 @@ def test_format_snapshot_missing_data():
         "revenue_growth": None,
         "pledge_ratio": None,
         "price_change_60d": None,
-        "turnover_percentile": None,
+        "turnover_avg_percentile_60d": None,
         "f_score": None,
     }
 

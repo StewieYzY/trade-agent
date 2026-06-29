@@ -14,7 +14,7 @@ Scout SHALL use a fixed system prompt that instructs the LLM to act as an A-shar
 ---
 
 ### Requirement: Feature Snapshot Input
-Scout SHALL receive a ~200-token text snapshot of stock features as the user message. The snapshot SHALL include: stock name, ticker, industry, market cap, PE(TTM) from valuation dimension, PE 5-year percentile, PB, ROE 3-year trend, net margin, debt ratio, operating cash flow, net profit, revenue growth, goodwill ratio, pledge ratio, 60-day price change, turnover percentile, and F-Score. Derived metrics (ROE, net margin, debt ratio, goodwill ratio) SHALL be computed using `data/lib/fin_models.py` to maintain consistency with L1.
+Scout SHALL receive a ~200-token text snapshot of stock features as the user message. The snapshot SHALL include: stock name, ticker, industry, market cap, PE(TTM) from valuation dimension, PE 5-year percentile, PB, ROE 3-year trend, net margin, debt ratio, operating cash flow, net profit, revenue growth, goodwill ratio, pledge ratio, audit opinion, 60-day price change, turnover percentile, and F-Score. Derived metrics (ROE, net margin, debt ratio, goodwill ratio) SHALL be computed using `data/lib/fin_models.py` to maintain consistency with L1.
 
 #### Scenario: Snapshot assembly
 - **WHEN** `input_assembly.assemble(ticker)` is called
