@@ -1,12 +1,13 @@
 """K 线 fetcher · kline 维度.
 
 契约（design.md §1.2, tasks 5.x）：
-  fetch(ticker) -> {"dates":[...], "close":[...], "volume":[...]}  # 近 250 交易日
+  fetch(ticker) -> {"dates":[...], "close":[...], "volume":[...], "turnover_rate":[...]}  # 近 250 交易日
+  turnover_rate: 换手率（%），L1 Heat Filter 低热度排除用；baostock 兜底无此字段返回 None 序列。
 
 容错链（UZI _kline_a_share_chain 验证过 6 级）：
-  主选 stock_zh_a_hist()（东财，前复权）
+  主选 stock_zh_a_hist()（东财，前复权，含换手率列）
   → 兜底 1 stock_zh_a_daily()（新浪，列名归一化为东财格式）
-  → 兜底 2 baostock query_history_k_data_plus（官方免登录）
+  → 兜底 2 baostock query_history_k_data_plus（官方免登录，无换手率）
   → 兜底 3-5 MVP 不实现，留接口（东财 push2his / 新浪 quotes / 腾讯 ifzq）
 """
 from __future__ import annotations
@@ -25,16 +26,18 @@ def _hist_range() -> tuple[str, str]:
 
 
 def _normalize_em(df) -> dict:
-    """东财 stock_zh_a_hist 列名 → {dates, close, volume}."""
+    """东财 stock_zh_a_hist 列名 → {dates, close, volume, turnover_rate}."""
     date_col = next((c for c in df.columns if "日期" in str(c)), df.columns[0])
     close_col = next((c for c in df.columns if "收盘" in str(c)), None)
     vol_col = next((c for c in df.columns if "成交量" in str(c)), None)
+    turnover_col = next((c for c in df.columns if "换手率" in str(c)), None)
     if close_col is None:
         raise KeyError("no close column")
     return {
         "dates": [str(d) for d in df[date_col].tolist()],
         "close": [float(v) for v in df[close_col].tolist()],
         "volume": [float(v) for v in df[vol_col].tolist()] if vol_col else [None] * len(df),
+        "turnover_rate": [float(v) for v in df[turnover_col].tolist()] if turnover_col else [None] * len(df),
     }
 
 
@@ -43,12 +46,14 @@ def _normalize_daily(df) -> dict:
     date_col = next((c for c in df.columns if "date" in str(c).lower()), df.columns[0])
     close_col = next((c for c in df.columns if "close" in str(c).lower()), None)
     vol_col = next((c for c in df.columns if "volume" in str(c).lower() or "成交量" in str(c)), None)
+    turnover_col = next((c for c in df.columns if "turnover" in str(c).lower() or "换手率" in str(c)), None)
     if close_col is None:
         raise KeyError("no close column (daily)")
     return {
         "dates": [str(d) for d in df[date_col].tolist()],
         "close": [float(v) for v in df[close_col].tolist()],
         "volume": [float(v) for v in df[vol_col].tolist()] if vol_col else [None] * len(df),
+        "turnover_rate": [float(v) for v in df[turnover_col].tolist()] if turnover_col else [None] * len(df),
     }
 
 
@@ -109,6 +114,7 @@ class KlineFetcher(BaseFetcher):
                 "dates": [r[0] for r in rows],
                 "close": [float(r[1]) if r[1] else None for r in rows],
                 "volume": [float(r[2]) if r[2] else None for r in rows],
+                "turnover_rate": [None] * len(rows),  # baostock 无换手率列
             }
         finally:
             bs.logout()

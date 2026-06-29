@@ -12,8 +12,13 @@ from __future__ import annotations
 
 from .base import BaseFetcher
 from ..lib.data_sources import fetch_price_tencent_qt, get_a_share_name_map
+from ..lib.industry_mapper import build_industry_map
 from ..lib.snapshot import _LazyTable
 from ..lib.utils import to_float as _to_float
+
+
+# 行业映射 intra-batch 只构建一次（~70 行业 × 2s ≈ 2-3 分钟，之后 STATIC 缓存复用 7d）
+_lazy_industry = _LazyTable(build_industry_map)
 
 
 class BasicFetcher(BaseFetcher):
@@ -43,6 +48,10 @@ class BasicFetcher(BaseFetcher):
                     return r[c]
             return None
 
+        # 从行业映射表补 industry（spot_em 无行业列）
+        industry_map = _lazy_industry.get()
+        industry = industry_map.get(ticker) if industry_map else None
+
         return {
             "code": ticker,
             "name": str(r.get(col("名称"), "") or "") or None,
@@ -50,17 +59,18 @@ class BasicFetcher(BaseFetcher):
             "pe": _to_float(col("市盈率", "动态", "pe")),
             "pb": _to_float(col("市净率", "pb")),
             "market_cap": _to_float(col("总市值")),
-            "industry": None,  # spot_em 无行业列，由兜底或后续补
+            "industry": industry,
         }
 
     # ── 兜底 provider ──────────────────────────────────────────
     @staticmethod
     def _fallback_tencent_qt(ticker: str) -> dict:
-        """兜底 1：tencent qt 逐只 + 名称映射补行业占位."""
+        """兜底 1：tencent qt 逐只 + 名称映射补行业."""
         qt = fetch_price_tencent_qt(ticker, market="A")
         if not qt:
             raise KeyError(f"tencent qt empty for {ticker}")
         name_map = get_a_share_name_map()
+        industry_map = _lazy_industry.get()
         return {
             "code": ticker,
             "name": qt.get("name") or name_map.get(ticker),
@@ -68,7 +78,7 @@ class BasicFetcher(BaseFetcher):
             "pe": qt.get("pe"),
             "pb": qt.get("pb"),
             "market_cap": qt.get("market_cap"),
-            "industry": None,
+            "industry": industry_map.get(ticker) if industry_map else None,
         }
 
     @staticmethod
