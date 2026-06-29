@@ -66,13 +66,13 @@ class RiskFetcher(BaseFetcher):
         if self.cache is not None:
             try:
                 fin = self.cache.get(code, "financials")
-            except Exception:
+            except (KeyError, ValueError, AttributeError):
                 fin = None
         if fin is None:  # 缓存未命中（standalone 或 financials 未采）→ 直采一次
             from .financials import FinancialsFetcher
             try:
                 fin = FinancialsFetcher().fetch_with_fallback(code)
-            except Exception:
+            except (KeyError, ValueError, AttributeError):
                 return None
         if not isinstance(fin, dict) or fin.get("__error__") is True or "error" in fin:
             return None

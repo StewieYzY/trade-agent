@@ -17,9 +17,9 @@
 
 | 维度 | 文件 | 采集内容 | 来源章节 |
 |------|------|----------|----------|
-| basic | `fetchers/basic.py` | PE/PB/市值/行业/代码+名称 | §4.7.2 `stock_zh_a_spot_em()` |
+| basic | `fetchers/basic.py` | PE/PB/市值/行业/换手率/代码+名称 | §4.7.2 `stock_zh_a_spot_em()` + industry_mapper |
 | financials | `fetchers/financials.py` | 三表原始项（利润表/资产负债表/现金流表），近 3 年多期 | §4.7.2.1 财报调度（akshare 实测确认） |
-| kline | `fetchers/kline.py` | 日 K 线（算热度/动量） | §4.7.4 K 线 TTL |
+| kline | `fetchers/kline.py` | 日 K 线（close/volume/turnover_rate，算热度/动量） | §4.7.4 K 线 TTL |
 | valuation | `fetchers/valuation.py` | PE/PB 历史分位、格雷厄姆数 | §4.7.4 估值分位 |
 | risk | `fetchers/risk.py` | 质押率/商誉（必采）、审计意见（可选，接口缺失时返回 null 不阻塞） | §八 Phase 0 🆕 标记 |
 
@@ -37,7 +37,7 @@
   - 主选：`ak.stock_zh_a_spot_em()`（一次 ~5000 只）
   - 兜底 1：`ak.stock_info_a_code_name()` + tencent qt 逐只（UZI 验证过不需要 key）
   - 兜底 2/3：雪球/baostock（MVP 不实现，留接口）
-  - **industry 字段缺口**：`stock_zh_a_spot_em()` 为实时行情快照，**列定义无"行业"**（实测确认），故主选成功路径 `industry` 恒 None；仅主选失败走兜底 `stock_individual_info_em` 才补。change 0 暂留此缺口，industry 数据源（板块映射 / `stock_individual_info_em`）待后续 change 单独定
+  - **industry 字段缺口（已修复）**：`stock_zh_a_spot_em()` 为实时行情快照，列定义无"行业"（实测确认）。已通过 `lib/industry_mapper.py` 解决：东财行业板块成分股构建全市场 ticker→industry 映射（~70 行业，首次构建约 2-3 分钟），STATIC 缓存 7d，intra-batch 经 `_LazyTable` 只构建一次。同花顺兜底不可用（`stock_board_industry_cons_ths` 接口不存在）
   - **snapshot 分发**：spot_em 为全市场表（~5000 行），经 `_LazyTable`（`lib/snapshot.py`）intra-batch 只取一次、全部 ticker 复用，避免 per-ticker 重复拉全市场快照（见 §4.1）
 
 - **financials.py 容错链**（§4.7.2.1）：
@@ -95,7 +95,7 @@ class BaseFetcher(ABC):
 
 | 文件 | 复用方式 | 说明 |
 |------|----------|------|
-| `lib/stock_features.py` | 直接复用 | UZI ~108 标准化特征（591 行），新增 F-Score 九项组装 |
+| `lib/stock_features.py` | L0 新建 | F-Score 九项组装（Piotroski 1980）；~108 标准化特征留 L1（依赖组装后的 raw_data schema） |
 | `lib/market_router.py` | 直接复用 | 板块/行业映射 |
 | `lib/fin_models.py` | 🆕 新建 | change 0 简化 DCF；完整版 DCF/LBO/Comps 留 L3 change |
 | `lib/data_sources.py` | 借鉴模式 | 三级容错 + provider chain failover（1463 行），修 except Exception |
@@ -103,12 +103,12 @@ class BaseFetcher(ABC):
 
 ### 2.2 stock_features.py 新增
 
-在 UZI 现有 ~108 特征基础上，新增 **F-Score 九项组装**（Piotroski 1980 学术公式，§一 L1 核心因子）：
+L0 只做 **F-Score 九项组装**（Piotroski 1980 学术公式，§一 L1 核心因子），~108 标准化特征留 L1 按需实现：
 
 ```
-F1: ROA > 0          F4: CFO > ROA        F7: 毛利率↑
+F1: ROA > 0          F4: CFO/TA > ROA      F7: 毛利率↑
 F2: CFO > 0          F5: 长期负债率↓       F8: 资产周转率↑
-F3: ROA↑             F6: 流动比率↑         F9: 无稀释
+F3: ROA↑             F6: 流动比率↑         F9: 无稀释（股本不增）
 ```
 
 输入来自 fetcher 已采集的财报数据，无需额外接口。
@@ -120,12 +120,12 @@ F3: ROA↑             F6: 流动比率↑         F9: 无稀释
 | F1 | ROA > 0 | 净利润、总资产 | abstract「归母净利润」+ balance_sheet `TOTAL_ASSETS` |
 | F2 | CFO > 0 | 经营现金流 | cash_flow `NETCASH_OPERATE` |
 | F3 | ROA↑ | ROA 同比（两期） | F1 两期相减 |
-| F4 | CFO > ROA | 经营现金流、ROA | F1+F2 |
+| F4 | CFO/TA > ROA | 现金流ROA、会计ROA | cash_flow `NETCASH_OPERATE` / balance_sheet `TOTAL_ASSETS` vs F1 |
 | F5 | 长期负债率↓ | 长期负债率同比 | balance_sheet `TOTAL_NONCURRENT_LIAB` / `TOTAL_ASSETS`，两期 |
 | F6 | 流动比率↑ | 流动比率同比 | balance_sheet `TOTAL_CURRENT_ASSETS` / `TOTAL_CURRENT_LIAB`，两期 |
 | F7 | 毛利率↑ | 毛利率同比 | abstract（营收−营业成本）/营收，两期 |
 | F8 | 资产周转率↑ | 资产周转率同比 | abstract 营收 / balance_sheet `TOTAL_ASSETS`，两期 |
-| F9 | 无稀释 | 股本同比 | balance_sheet `SHARE_CAPITAL`，两期 |
+| F9 | 无稀释（股本不增） | 股本同比 | balance_sheet `SHARE_CAPITAL`，两期 |
 
 **输出契约**：`compute_f_score(financials: dict) -> int`，返回 0-9 整数（每项满足得 1 分）。`financials` 参数为 financials fetcher 的多期结构，函数内部取近两期算同比。
 
@@ -155,7 +155,7 @@ def compute_simple_dcf(
 
 **输出**：`{"intrinsic_value": float, "safety_margin_pct": float}`，`safety_margin_pct = (intrinsic_value - current_price) / current_price * 100`
 
-**消费方**：L1 hard_gates（安全边际 > 30%，total-design §4.7.1）、L1 因子打分（安全边际 20% 权重，total-design §4.7.4）、L3 机构建模（完整版，后续 change）
+**消费方**：L1 因子打分（安全边际 20% 权重，total-design §4.2）、L3 机构建模（完整版，后续 change）
 
 **约束**：纯计算函数，不持有 fetcher 引用，不触发采集，不继承 `BaseFetcher`。跨维度输入（financials + 股价）由调用方（batch_fetcher / L1）组装。
 
@@ -232,7 +232,7 @@ class BatchFetcher:
 ```
 
 - **Layer 2 并发**：`max_workers=10`（basic/kline/valuation/risk 维度），每只股票的 4-5 维并行（§4.7.3）
-- **financials 维度单独限流**：balance_sheet/cash_flow 为分页接口（单只 20+ 次请求，见 §1.2），financials 维度 `max_workers=4`，其余维度 `max_workers=10`。`dim_max_workers` 参数默认 `{"financials": 4}`，覆盖全局 `max_workers`
+- **financials 维度单独限流**：同花顺三表虽为按年汇总接口（非分页），但仍按保守反爬策略限流，financials 维度 `max_workers=4`，其余维度 `max_workers=10`。`dim_max_workers` 参数默认 `{"financials": 4}`，覆盖全局 `max_workers`
 - **mini_racer 安全**：basic/valuation/risk 为纯 HTTP API（§4.7.3）；financials 已实测切换到同花顺三表 `stock_financial_{benefit|debt|cash}_ths`（纯 HTTP，无 mini_racer 依赖）。原东财 `_by_report_em` 系因 hidctype 反爬不可用（S4 风险已确认并解决）。financials 维度仍按保守并发 max_workers=4
 - **反爬应对**：同 provider 请求间随机延迟 0.5-2s（§4.7.3）
 - **全市场表 intra-batch 复用**（review 修复）：`spot_em` / `stock_gpzy_pledge_ratio_em` / `stock_audit_report_em` 为全市场表（~5000 行），原塞进 per-ticker `fetch(ticker)` 会每股各拉一次。改由 `lib/snapshot.py` 的 `_LazyTable` 持有：首调用取回并缓存，同 batch 全部 ticker 复用（线程安全，双检锁）。成功永久缓存；**失败进入冷却期（300s）直接返 None 不重试**，避免对坏 endpoint 反复重试放大请求（否则 `_retry` 3 次 × N 股 → 3N 次冗余命中）。生命周期 = fetcher 实例（BatchFetcher 每 dim 建一个实例）
@@ -272,7 +272,7 @@ ENTRYPOINT ["python", "cli.py"]
 ```
 
 - Base 镜像：`python:3.11-slim`
-- 依赖：akshare（锁定版本）+ httpx + pydantic
+- 依赖：akshare + httpx + pydantic（`~=` 兼容版本锁定，允许 patch 级更新）
 - **不含** Ollama/Redis（留给后续 docker-compose）
 
 ### 6.2 cli.py 骨架
@@ -305,10 +305,10 @@ if __name__ == "__main__":
 ### 6.3 requirements.txt
 
 ```
-akshare>=1.18.0
-httpx>=0.27.0
-pydantic>=2.0
-typer>=0.12.0
+akshare~=1.18.0
+httpx~=0.27.0
+pydantic~=2.0
+typer~=0.12.0
 ```
 
 ### 6.4 验证策略（分层）
