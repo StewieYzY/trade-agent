@@ -14,6 +14,7 @@ from datetime import date
 from typing import Any
 
 from data.lib.batch_fetcher import BatchFetcher
+from data.lib.industry_mapper import compute_industry_median_pe
 from .hard_gates import check_hard_gates
 from .factor_scores import compute_factor_scores
 from .anti_trap import compute_anti_trap
@@ -45,6 +46,9 @@ def screen_a_shares(tickers: list[str], exclude_cyclicals: bool = False) -> dict
     fetcher = BatchFetcher()
     all_data = fetcher.fetch_all(tickers)
 
+    # R2: 计算行业 PE 中位数（用于 PE 行业折价估值锚）
+    industry_pe_map = compute_industry_median_pe(all_data)
+
     total = len(tickers)
 
     # 第一道漏斗: Hard Gates
@@ -68,7 +72,7 @@ def screen_a_shares(tickers: list[str], exclude_cyclicals: bool = False) -> dict
     for ticker in after_hard_gates:
         ticker_data = all_data.get(ticker, {})
 
-        factor_scores = compute_factor_scores(ticker_data)
+        factor_scores = compute_factor_scores(ticker_data, industry_pe_map)
         anti_trap = compute_anti_trap(ticker_data)
 
         # 应用 anti-trap 扣分到 composite

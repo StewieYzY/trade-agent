@@ -135,11 +135,14 @@ def _compute_quality_score(ticker_data: dict) -> float:
     return sum(s * w / total_weight for _, s, w in scores)
 
 
-def _compute_value_score(ticker_data: dict) -> float:
+def _compute_value_score(ticker_data: dict, industry_pe_map: dict | None = None) -> float:
     """计算估值因子（30% 权重）.
 
     子项：
-    - PE 分位 (40%): < 30% 得满分，30-70% 线性衰减，> 70% 得 0
+    - PE 行业折价 (40%): ratio = pe_ttm / industry_median_pe
+        * ratio < 0.7 得满分
+        * 0.7 <= ratio < 1.0 线性衰减
+        * ratio >= 1.0 得 0 分
     - PB < 2 (30%): PB < 2 得满分，2-3 线性衰减，> 3 得 0
     - PE×PB < 22.5 (30%): PE×PB < 22.5 得满分，22.5-30 线性衰减
     """
@@ -148,11 +151,30 @@ def _compute_value_score(ticker_data: dict) -> float:
 
     scores = []
 
-    # 子项 1: PE 分位 (40%)
-    pe_percentile = valuation.get("pe_percentile_5y")
-    if pe_percentile is not None:
-        pe_score = _score_linear_decay(pe_percentile, 30.0, 70.0, invert=False)
-        scores.append(("pe_percentile", pe_score, 0.40))
+    # 子项 1: PE 行业折价 (40%)
+    pe_ttm = valuation.get("pe_ttm") or basic.get("pe")
+    industry = basic.get("industry")
+
+    # 尝试行业折价（主信号）
+    industry_ratio_used = False
+    if (industry_pe_map is not None
+            and industry is not None
+            and industry in industry_pe_map
+            and pe_ttm is not None
+            and pe_ttm > 0):
+        industry_median_pe = industry_pe_map[industry]
+        if industry_median_pe > 0:
+            ratio = pe_ttm / industry_median_pe
+            pe_score = _score_linear_decay(ratio, 0.7, 1.0, invert=False)
+            scores.append(("pe_industry_ratio", pe_score, 0.40))
+            industry_ratio_used = True
+
+    # 降级到历史分位（兜底信号）
+    if not industry_ratio_used:
+        pe_percentile = valuation.get("pe_percentile_5y")
+        if pe_percentile is not None:
+            pe_score = _score_linear_decay(pe_percentile, 30.0, 70.0, invert=False)
+            scores.append(("pe_percentile", pe_score, 0.40))
 
     # 子项 2: PB < 2 (30%)
     pb = valuation.get("pb") or basic.get("pb")
@@ -210,10 +232,14 @@ def _compute_safety_margin_score(ticker_data: dict) -> float:
     revenue_series = income.get("revenue", [])
     current_price = basic.get("price")
 
-    if fcf_series and revenue_series and current_price is not None:
+    # 过滤掉 None 值，只保留有效的 FCF
+    valid_fcf = [fcf for fcf in fcf_series if fcf is not None]
+
+    # 至少需要 2 期有效 FCF 才能计算 DCF
+    if len(valid_fcf) >= 2 and revenue_series and current_price is not None:
         try:
             dcf_result = compute_simple_dcf(
-                fcf_series=fcf_series,
+                fcf_series=valid_fcf,
                 revenue_series=revenue_series,
                 current_price=current_price,
                 assumptions={"discount_rate": 0.10, "terminal_growth": 0.03}
@@ -257,7 +283,7 @@ def _compute_safety_margin_score(ticker_data: dict) -> float:
     return sum(s * w / total_weight for _, s, w in scores)
 
 
-def compute_factor_scores(ticker_data: dict) -> dict:
+def compute_factor_scores(ticker_data: dict, industry_pe_map: dict | None = None) -> dict:
     """计算三因子综合分.
 
     Args:
@@ -267,6 +293,7 @@ def compute_factor_scores(ticker_data: dict) -> dict:
             "valuation": {"pe_percentile_5y", "pb", ...},
             "risk": {"pledge_ratio", ...}
         }
+        industry_pe_map: {industry: median_pe} 行业 PE 中位数映射（可选，R2 增强）
 
     Returns:
         {"quality": float, "value": float, "safety_margin": float, "composite": float, "f_score": int}
@@ -275,7 +302,7 @@ def compute_factor_scores(ticker_data: dict) -> dict:
     f_score = compute_f_score(financials) if financials else 0
 
     quality = _compute_quality_score(ticker_data)
-    value = _compute_value_score(ticker_data)
+    value = _compute_value_score(ticker_data, industry_pe_map)
     safety_margin = _compute_safety_margin_score(ticker_data)
 
     composite = quality * 0.50 + value * 0.30 + safety_margin * 0.20

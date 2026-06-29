@@ -116,6 +116,26 @@
 
 ---
 
+## 8. tests/ — 单元测试（Task 7 · 回归保护）
+
+- [x] 8.1 创建 `value-screener/tests/test_screener.py` + `conftest.py`（确保 pytest 可发现 screener/data 包）
+- [x] 8.2 ROE 字段测试：验证用 L0 真实字段（TOTAL_ASSETS/TOTAL_CURRENT_LIAB/TOTAL_NONCURRENT_LIAB）派生权益，且 ROE 子项确实执行（差分断言，非恒真）
+- [x] 8.3 GOODWILL 测试：验证 GOODWILL 为 list（多期）且 A4 商誉扣分真触发（不崩 TypeError，断言 score=92 + A4 flag）
+- [x] 8.4 HF1 方向测试：验证换手率分位 > 70% 时被排除（剔除被炒的）
+- [x] 8.5 空数据降级测试：验证 financials={} 时 quality=0
+- [x] 8.6 FCF 有效性测试：验证 CONSTRUCT_LONG_ASSET 全 None 时跳过 DCF 子项（safety_margin == 质押率单项分 75）
+- [x] 8.7 adjusted_composite 测试：验证乘法公式 `composite * (anti_trap / 100)`
+- [x] 8.8 运行测试：`pytest tests/test_screener.py` 全部通过
+
+## 9. R2 增强 — 行业中位 PE 估值锚
+
+- [x] 9.1 `data/lib/industry_mapper.py` 新增 `compute_industry_median_pe(all_data)`（滤亏损/error/样本<5）
+- [x] 9.2 `screener/factor_scores.py` PE 子项改双轨：行业 ratio（0.7/1.0）为主，pe_percentile_5y 兜底
+- [x] 9.3 `screener/main.py` 调用链传递 industry_pe_map（全市场算一次）
+- [x] 9.4 spec S2 估值行 + ROE 派生公式同步为真实实现
+
+---
+
 ## 依赖关系
 
 ```
@@ -126,9 +146,10 @@ Task 0 (骨架)
   └─ Task 4 (Heat Filter)
        └─ Task 5 (main.py 入口编排)
             └─ Task 6 (CLI 集成)
+            └─ Task 7 (测试)
 ```
 
-Task 1-4 之间互不依赖，可并行。Task 5 依赖 Task 1-4 全部完成。Task 6 依赖 Task 5。
+Task 1-4 之间互不依赖，可并行。Task 5 依赖 Task 1-4 全部完成。Task 6 和 Task 7 依赖 Task 5。
 
 ---
 

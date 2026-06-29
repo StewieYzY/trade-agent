@@ -9,6 +9,8 @@
 basic.py 通过 _LazyTable 复用此映射，intra-batch 只构建一次。
 
 异常收窄：单行业采集失败不阻塞其他行业，跳过并记录；全部失败返回空 dict。
+
+R2 增强：计算行业中位 PE，支持 L1 估值因子的行业折价策略。
 """
 from __future__ import annotations
 
@@ -16,8 +18,13 @@ import json
 import random
 import time
 from pathlib import Path
+from statistics import median
 
 from ..cache.manager import STATIC
+
+
+# R2: 行业中位 PE 计算的最小样本数
+MIN_INDUSTRY_SAMPLES = 5
 
 
 _CACHE_FILE = Path("data/cache/_industry_map.json")
@@ -105,3 +112,48 @@ def get_industry(ticker: str, mapping: dict | None = None) -> str | None:
     if mapping is None:
         mapping = build_industry_map()
     return mapping.get(ticker)
+
+
+def compute_industry_median_pe(all_data: dict[str, dict]) -> dict[str, float]:
+    """计算各行业 PE 中位数.
+
+    Args:
+        all_data: {ticker: {"basic": {...}, ...}} 全市场采集数据
+
+    Returns:
+        {industry: median_pe} 行业 PE 中位数映射，仅包含样本数 >= MIN_INDUSTRY_SAMPLES 的行业
+
+    过滤逻辑：
+    - 跳过 fetch 失败（basic 含 __error__）
+    - 跳过 industry=None
+    - 跳过 pe <= 0（亏损股）
+    - 样本数 < MIN_INDUSTRY_SAMPLES 的行业被丢弃
+    """
+    industry_pe_map = {}
+
+    for ticker, ticker_data in all_data.items():
+        basic = ticker_data.get("basic", {})
+
+        # 跳过 fetch 失败
+        if "__error__" in basic:
+            continue
+
+        industry = basic.get("industry")
+        pe = basic.get("pe")
+
+        # 跳过无行业或 PE 无效
+        if industry is None or pe is None or pe <= 0:
+            continue
+
+        # 收集 PE 数据
+        if industry not in industry_pe_map:
+            industry_pe_map[industry] = []
+        industry_pe_map[industry].append(pe)
+
+    # 计算中位数，过滤样本数不足的行业
+    result = {}
+    for industry, pe_list in industry_pe_map.items():
+        if len(pe_list) >= MIN_INDUSTRY_SAMPLES:
+            result[industry] = median(pe_list)
+
+    return result

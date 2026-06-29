@@ -53,14 +53,14 @@ composite = quality × 0.50 + value × 0.30 + safety_margin × 0.20
 | 子项 | 权重 | 计算 | 数据源 |
 |---|---|---|---|
 | F-Score | 40% | `stock_features.compute_f_score(financials)` → 0-9 → 归一化到 0-100 | financials |
-| ROE 5 年平均 | 30% | 近 5 年 ROE 均值 > 15% 得满分，线性插值 | financials（需派生 ROE = net_profit / total_equity） |
+| ROE 5 年平均 | 30% | 近 5 年 ROE 均值 > 15% 得满分，线性插值到 0% | financials（ROE = net_profit / (TOTAL_ASSETS - TOTAL_CURRENT_LIAB - TOTAL_NONCURRENT_LIAB)） |
 | 经营现金流连续 3 年正 | 30% | 3 年都为正得满分，2 年得 66%，1 年得 33%，0 年得 0% | financials.cash_flow.NETCASH_OPERATE |
 
 ### 估值因子（30% 权重）
 
 | 子项 | 权重 | 计算 | 数据源 |
 |---|---|---|---|
-| PE 分位 < 行业中位 × 0.7 | 40% | PE_TTM < industry_median_PE × 0.7 得满分 | valuation.pe_percentile_5y + industry |
+| PE 行业折价（主）+ 历史分位（兜底） | 40% | 主：ratio = pe_ttm / industry_median_pe，< 0.7 得满分、0.7-1.0 线性衰减、>= 1.0 得 0；兜底（无行业 / 行业样本不足 / 无 pe_ttm）：pe_percentile_5y < 30 得满分、30-70 衰减、> 70 得 0 | valuation.pe_ttm + basic.industry + industry_pe_map；兜底 valuation.pe_percentile_5y |
 | PB < 2 | 30% | PB < 2 得满分，2-3 线性衰减，> 3 得 0 | valuation.pb |
 | PE×PB < 22.5（格雷厄姆数） | 30% | PE×PB < 22.5 得满分，22.5-30 线性衰减 | valuation.pe_ttm × valuation.pb |
 
