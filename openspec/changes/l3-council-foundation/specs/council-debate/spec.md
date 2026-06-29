@@ -79,7 +79,7 @@ debate.py SHALL 实现 4 轮串行辩论编排：
 
 #### Scenario: 单 agent 下 R2 注入 mock AgentOutput（机制门验证）
 - **WHEN** 单 agent 模式下启用 mock 注入验证机制门
-- **THEN** debate.py SHALL 支持注入一份硬编码的 mock AgentOutput JSON（如"假想芒格"的 bullish 立场），验证巴菲特 agent 能消费他人结构化输出并产出与 R1 不同的修订立场
+- **THEN** debate.py SHALL 支持注入一份硬编码的 mock AgentOutput JSON（如"假想芒格"的 bullish 立场），验证巴菲特 agent 能消费他人结构化输出并产出修订立场（验证"能消费"，不要求输出必与 R1 不同）
 
 #### Scenario: 单 agent 下 R3/R4 跳过
 - **WHEN** 只有 1 个 agent 且无 DA/synthesizer 注册

@@ -34,13 +34,13 @@
 
 - [ ] 6.1 `cli.py` 新增 `council` 子命令：`--ticker <TICKER>`（6 位数字，自动补 .SH/.SZ 后缀）/ `--calibrate` / `--force`
 - [ ] 6.2 端到端测试：`council --ticker 600519` 跑完整流程（assemble_snapshot → run_debate → 输出 AgentOutput JSON + 写入 debate/600519/{date}.md），验证输出格式正确
-- [ ] 7.3 验证 AD-09 gate（三层 AND）：
+- [ ] 6.3 验证 AD-09 gate（三层 AND）：
   - **机制门**：debate.py 能跑完整流程，R1 独立跑通；R2 注入 mock AgentOutput JSON 验证 A2A 消费链路（agent 消费他人结构化输出并产出修订立场）；R3/R4 框架代码可执行不报错
   - **校准门**：校准测试（茅台看多 / 长江电力看空）立场一致性全部通过
-  - **信息增量门**：单 agent 深研报告（core_thesis/risks/what_would_change_my_mind）比 L2 Scout 的 one_liner 有显著信息增量
+  - **信息增量门**：单 agent 深研报告比 L2 Scout 有可判定增量——L3 产出的 `risks` 和 `what_would_change_my_mind` 两个字段均为非空，且 `core_thesis` 信息量明显多于 L2 的 `one_liner`
   - **moderate 推理等级声明**：`LLM_MODEL_MODERATE` 映射分支在 3a 已实现但 R4 跳过未被真实调用覆盖，留待 3b 验证
 
 ## 7. 文档与收尾
 
-- [ ] 7.1 写 `council/README.md`：用法（`council --ticker` / `council --calibrate`）/ 配置（LLM_MODEL_HEAVY / LLM_MODEL_MODERATE 环境变量）/ gate 结果（机制门 + 质量门通过情况）
+- [ ] 7.1 写 `council/README.md`：用法（`council --ticker` / `council --calibrate`）/ 配置（LLM_MODEL_HEAVY / LLM_MODEL_MODERATE 环境变量）/ gate 结果（机制门 + 校准门 + 信息增量门通过情况）
 - [ ] 7.2 代码审查：检查 council/ 下所有文件是否符合 design.md 6 个决策（输入数据交接 / LLM client 选型 / 编排骨架 / 记录持久化 / 校准 / 成本约束），无遗漏后准备归档
