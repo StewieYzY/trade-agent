@@ -10,7 +10,7 @@
 
 #### Scenario: L1 单独聚合
 - **WHEN** 只有 L1 candidates（无 L2/L3 结果）
-- **THEN** 产出 `watchlist/{date}.json`，`candidates[]` 每项含 `ticker/name/stage=l1/l1_score/f_score/pe_ttm/pe_percentile_5y/pb/pledge_ratio`，`l2_verdict`/`l2_confidence`/`l3_verdict`/`l3_conviction`/`key_variables` 为 null
+- **THEN** 产出 `watchlist/{date}.json`，`candidates[]` 每项含 `ticker/name/stage=l1/l1_score/f_score/pe_ttm/pb/pledge_ratio`，`pe_percentile_5y=null`（stage=l1 不 fetch），`l2_verdict`/`l2_confidence`/`l3_verdict`/`l3_conviction`/`key_variables` 为 null
 
 #### Scenario: L1+L2 聚合
 - **WHEN** L1 candidates 存在且 ScoutCache 有对应 ticker 的 deep_dive 结果

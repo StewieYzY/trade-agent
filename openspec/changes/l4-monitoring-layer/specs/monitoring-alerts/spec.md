@@ -53,7 +53,7 @@
 ### Requirement: 提醒不自动触发 L3
 系统 SHALL 在估值提醒和风险扫描时不自动触发 L3 深研。
 
-#### Scenario: 估值提醒不触发 L3
+#### Scenario: 估值提醒不触发 L3（完整态，待启用）
 - **WHEN** 触发估值区间提醒
 - **THEN** 只产出提醒文本，不调用 `council` 跑 L3 深研
 
