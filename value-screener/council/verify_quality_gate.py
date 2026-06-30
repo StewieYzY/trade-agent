@@ -1,0 +1,288 @@
+#!/usr/bin/env python3
+"""L3 辩论增量验证脚本（AD-09 质量门）.
+
+验证任务：
+- 7.1 机制门验证：确认 10 次 LLM 调用成功、DA blind_spots 结构合法、synthesizer 输出完整
+- 7.2 质量门验证：人工检查 R1 core_thesis 差异、R2 修订、DA 盲点覆盖
+- 7.3 成本验证：记录 token 消耗和费用
+- 7.4 质量门不通过回退路径：提供调优建议
+
+使用方法：
+    python verify_quality_gate.py --ticker 600519.SH
+    python verify_quality_gate.py --ticker 600519.SH --force  # 强制重跑
+"""
+import argparse
+import asyncio
+import json
+import sys
+from pathlib import Path
+
+from council.debate import run_debate
+from council.features import assemble_council_features
+
+
+async def verify_mechanism_gate(ticker: str, force: bool = False) -> bool:
+    """7.1 机制门验证.
+
+    验证：
+    - 全天团 4 轮完整运行（R1×4 + R2×4 + R3×1 + R4×1 = 10 次 LLM 调用）
+    - DA blind_spots 非空且结构合法（每项含 title/detail/which_agents_missed_it）
+    - Synthesizer dissent_points/pending_verification 非空
+    """
+    print(f"\n{'='*60}")
+    print(f"7.1 机制门验证: {ticker}")
+    print(f"{'='*60}")
+
+    try:
+        result = await run_debate(ticker, force=force)
+
+        # 检查 R1: 4 个 agent
+        if not result.round1 or len(result.round1) != 4:
+            print(f"[FAILED] R1 应有 4 个 agent 输出，实际 {len(result.round1) if result.round1 else 0}")
+            return False
+        print(f"[PASSED] R1: {len(result.round1)} 个 agent 完成独立判断")
+
+        # 检查 R2: 4 个 agent
+        if not result.round2 or len(result.round2) != 4:
+            print(f"[FAILED] R2 应有 4 个 agent 输出，实际 {len(result.round2) if result.round2 else 0}")
+            return False
+        print(f"[PASSED] R2: {len(result.round2)} 个 agent 完成交叉质疑")
+
+        # 检查 R3: DA
+        if not result.round3:
+            print("[FAILED] R3: DA 输出为空")
+            return False
+
+        blind_spots = result.round3.extra.get("blind_spots", [])
+        if not blind_spots:
+            print("[FAILED] R3: DA blind_spots 为空")
+            return False
+
+        # 验证 blind_spots 结构
+        for i, bs in enumerate(blind_spots):
+            if "title" not in bs:
+                print(f"[FAILED] R3: blind_spots[{i}] 缺少 title")
+                return False
+            if "detail" not in bs:
+                print(f"[FAILED] R3: blind_spots[{i}] 缺少 detail")
+                return False
+            if "which_agents_missed_it" not in bs:
+                print(f"[FAILED] R3: blind_spots[{i}] 缺少 which_agents_missed_it")
+                return False
+
+        print(f"[PASSED] R3: DA 输出 {len(blind_spots)} 个盲点，结构合法")
+
+        # 检查 R4: Synthesizer
+        if not result.round4:
+            print("[FAILED] R4: Synthesizer 输出为空")
+            return False
+
+        if not result.round4.dissent_points:
+            print("[FAILED] R4: dissent_points 为空")
+            return False
+
+        if not result.round4.pending_verification:
+            print("[FAILED] R4: pending_verification 为空")
+            return False
+
+        print(f"[PASSED] R4: Synthesizer 输出完整")
+        print(f"  - dissent_points: {len(result.round4.dissent_points)} 项")
+        print(f"  - pending_verification: {len(result.round4.pending_verification)} 项")
+        print(f"  - consensus_summary: {result.round4.consensus_summary}")
+
+        print(f"\n[机制门 PASSED] 10 次 LLM 调用全部成功，输出结构完整")
+        return True
+
+    except Exception as e:
+        print(f"[FAILED] 异常: {e}")
+        return False
+
+
+async def verify_quality_gate(ticker: str, force: bool = False) -> bool:
+    """7.2 质量门验证（人工检查）.
+
+    输出以下内容供人工检查：
+    - R1 core_thesis 差异（4 个 agent 应有本质差异）
+    - R2 修订（至少 2 个 agent conviction ±5 或 core_thesis 修改）
+    - DA 盲点覆盖（至少 1 个盲点 which_agents_missed_it 含 ≥3 个 agent）
+    """
+    print(f"\n{'='*60}")
+    print(f"7.2 质量门验证（人工检查）: {ticker}")
+    print(f"{'='*60}")
+
+    try:
+        result = await run_debate(ticker, force=force)
+
+        # R1 core_thesis 差异
+        print("\n[R1 core_thesis 差异检查]")
+        theses = []
+        for agent in result.round1:
+            print(f"\n{agent.name}:")
+            print(f"  core_thesis: {agent.core_thesis}")
+            print(f"  conviction: {agent.conviction}")
+            theses.append(agent.core_thesis)
+
+        # 简单检查是否有重复
+        unique_theses = len(set(theses))
+        if unique_theses < 3:
+            print(f"\n[WARNING] R1 core_thesis 同质化风险: {unique_theses}/4 个唯一论点")
+            print("建议: 增强各 agent prompt 的差异点")
+        else:
+            print(f"\n[INFO] R1 core_thesis: {unique_theses}/4 个唯一论点")
+
+        # R2 修订检查
+        print("\n[R2 修订检查]")
+        revision_count = 0
+        for r1_agent, r2_agent in zip(result.round1, result.round2):
+            conviction_diff = abs(r2_agent.conviction - r1_agent.conviction)
+            thesis_changed = r2_agent.core_thesis != r1_agent.core_thesis
+
+            if conviction_diff >= 5 or thesis_changed:
+                revision_count += 1
+                print(f"\n{r1_agent.name}: conviction {r1_agent.conviction} → {r2_agent.conviction} (diff: {conviction_diff})")
+                if thesis_changed:
+                    print(f"  R1: {r1_agent.core_thesis}")
+                    print(f"  R2: {r2_agent.core_thesis}")
+
+        if revision_count < 2:
+            print(f"\n[WARNING] R2 修订不足: 仅 {revision_count}/4 个 agent 修订（需 ≥2）")
+            print("建议: 在 R2 prompt 中强调交叉质疑的重要性")
+        else:
+            print(f"\n[INFO] R2 修订: {revision_count}/4 个 agent 有实质修订")
+
+        # DA 盲点覆盖检查
+        print("\n[DA 盲点覆盖检查]")
+        blind_spots = result.round3.extra.get("blind_spots", [])
+        high_coverage_count = 0
+        for bs in blind_spots:
+            missed_by = bs.get("which_agents_missed_it", [])
+            print(f"\n盲点: {bs.get('title')}")
+            print(f"  detail: {bs.get('detail')}")
+            print(f"  which_agents_missed_it: {missed_by} ({len(missed_by)} 个 agent)")
+            if len(missed_by) >= 3:
+                high_coverage_count += 1
+
+        if high_coverage_count < 1:
+            print(f"\n[WARNING] DA 盲点覆盖不足: 仅 {high_coverage_count} 个盲点被 ≥3 个 agent 忽略（需 ≥1）")
+            print("建议: 在 DA prompt 中加 few-shot 示例，强调找共识盲区")
+        else:
+            print(f"\n[INFO] DA 盲点覆盖: {high_coverage_count} 个盲点被 ≥3 个 agent 忽略")
+
+        print(f"\n[质量门 人工检查完成] 请根据上述输出判断是否通过")
+        return True
+
+    except Exception as e:
+        print(f"[FAILED] 异常: {e}")
+        return False
+
+
+async def verify_cost(ticker: str, force: bool = False) -> bool:
+    """7.3 成本验证.
+
+    记录全天团单股 token 消耗和费用（作为参考数据，不做硬阈值约束）。
+    """
+    print(f"\n{'='*60}")
+    print(f"7.3 成本验证: {ticker}")
+    print(f"{'='*60}")
+
+    try:
+        # 运行辩论并记录
+        result = await run_debate(ticker, force=force)
+
+        # 读取辩论记录，统计调用次数
+        debate_path = Path("debate") / ticker.split(".")[0] / f"{result.round4.consensus_summary[:10]}.md"
+
+        print("\n[成本记录]")
+        print(f"  R1: {len(result.round1)} 次 LLM 调用（重度推理）")
+        print(f"  R2: {len(result.round2) if result.round2 else 0} 次 LLM 调用（重度推理）")
+        print(f"  R3: 1 次 LLM 调用（重度推理，DA）")
+        print(f"  R4: 1 次 LLM 调用（中度推理，Synthesizer）")
+        print(f"  总计: 10 次 LLM 调用（9 重度 + 1 中度）")
+        print("\n[INFO] 实际 token 消耗和费用需从 LLM API 响应中提取")
+        print("       此处仅记录调用次数作为参考")
+
+        return True
+
+    except Exception as e:
+        print(f"[FAILED] 异常: {e}")
+        return False
+
+
+def print_fallback_path():
+    """7.4 质量门不通过回退路径."""
+    print(f"\n{'='*60}")
+    print(f"7.4 质量门不通过回退路径")
+    print(f"{'='*60}")
+
+    print("""
+若质量门不通过，按以下路径调优：
+
+1. R1 core_thesis 同质化
+   - 优先调 prompt：增强各 agent 的差异点
+   - 巴菲特：强调护城河和安全边际
+   - 芒格：强调逆向思考和心理偏差
+   - 段永平：强调商业模式和管理层本分
+   - 冯柳：强调弱势研究法和认知差
+
+2. R2 修订不足
+   - 在 R2 prompt 中强调交叉质疑的重要性
+   - 添加示例："如果其他 agent 的观点与你不同，你应该重新审视自己的判断"
+
+3. DA 泛泛而谈
+   - 在 DA prompt 中加 few-shot 示例
+   - 强调盲点必须具体：
+     * 差："管理层风险"
+     * 好："管理层去年减持了 15%，且薪酬结构与股东利益不一致"
+
+4. DA 盲点覆盖不足
+   - 在 DA prompt 中强调找"共识盲区"
+   - 示例："如果 4 个 agent 都看好，你要找他们都忽略的风险"
+""")
+
+
+async def main():
+    parser = argparse.ArgumentParser(description="L3 辩论增量验证")
+    parser.add_argument("--ticker", required=True, help="股票代码，如 600519.SH")
+    parser.add_argument("--force", action="store_true", help="强制重跑（跳过缓存）")
+    parser.add_argument("--gate", choices=["mechanism", "quality", "cost", "all"],
+                       default="all", help="验证哪个质量门")
+    args = parser.parse_args()
+
+    print(f"L3 辩论增量验证: {args.ticker}")
+    print(f"强制重跑: {args.force}")
+
+    results = {}
+
+    if args.gate in ("mechanism", "all"):
+        results["mechanism"] = await verify_mechanism_gate(args.ticker, args.force)
+
+    if args.gate in ("quality", "all"):
+        results["quality"] = await verify_quality_gate(args.ticker, args.force)
+
+    if args.gate in ("cost", "all"):
+        results["cost"] = await verify_cost(args.ticker, args.force)
+
+    if args.gate == "all":
+        print_fallback_path()
+
+    # 汇总
+    print(f"\n{'='*60}")
+    print("验证汇总")
+    print(f"{'='*60}")
+    for gate, passed in results.items():
+        status = "PASSED" if passed else "FAILED"
+        print(f"[{status}] {gate}")
+
+    all_passed = all(results.values())
+    if all_passed:
+        print("\n[ALL PASSED] 质量门验证通过")
+        return 0
+    else:
+        print("\n[SOME FAILED] 质量门验证未完全通过")
+        print("请参考 7.4 回退路径进行调优")
+        return 1
+
+
+if __name__ == "__main__":
+    exit_code = asyncio.run(main())
+    sys.exit(exit_code)

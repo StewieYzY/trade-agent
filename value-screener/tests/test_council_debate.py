@@ -22,14 +22,18 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from council.debate import (
+    _append_da_round,
     _append_round,
+    _append_synthesizer_round,
     _build_user_message,
+    _call_da,
+    _call_synthesizer,
     _check_cache,
     _debate_path,
     _parse_debate_markdown,
     run_debate,
 )
-from council.schema import AgentOutput, CouncilResult
+from council.schema import AgentOutput, CouncilResult, SynthesizerOutput
 
 
 # ── fixtures ───────────────────────────────────────────────────
@@ -168,11 +172,11 @@ class TestParseDebateMarkdown:
         assert result is not None
         assert result.ticker == "600519"
         assert result.final_verdict == "bullish"
-        assert len(result.rounds[0]) == 1
-        assert result.rounds[0][0].signal == "bullish"
-        assert result.rounds[1] is None
-        assert result.rounds[2] is None
-        assert result.rounds[3] is None
+        assert len(result.round1) == 1
+        assert result.round1[0].signal == "bullish"
+        assert result.round2 is None
+        assert result.round3 is None
+        assert result.round4 is None
 
     def test_no_round1_returns_none(self):
         md = "## Round 2 · 交叉质疑\n（跳过）\n"
@@ -221,8 +225,8 @@ class TestParseDebateMarkdown:
 """
         result = _parse_debate_markdown(md, "600519")
         assert result is not None
-        assert result.rounds[0] is not None
-        assert result.rounds[1] is not None
+        assert result.round1 is not None
+        assert result.round2 is not None
 
 
 # ── _check_cache ───────────────────────────────────────────────
@@ -292,12 +296,12 @@ class TestRunDebate:
     async def test_single_agent_r1_only(self, debate_dir):
         """单 agent: R1 调 LLM, R2-4 跳过."""
         with patch("council.debate.call_llm", new_callable=AsyncMock, return_value=LLM_RESPONSE):
-            result = await run_debate("600519", features={"name": "test"})
+            result = await run_debate("600519", agents=["buffett"], features={"name": "test"})
         assert result.final_verdict == "bullish"
-        assert len(result.rounds[0]) == 1
-        assert result.rounds[1] is None
-        assert result.rounds[2] is None
-        assert result.rounds[3] is None
+        assert len(result.round1) == 1
+        assert result.round2 is None
+        assert result.round3 is None
+        assert result.round4 is None
 
     @pytest.mark.anyio
     async def test_mock_injection_triggers_r2(self, debate_dir):
@@ -327,17 +331,18 @@ class TestRunDebate:
         with patch("council.debate.call_llm", side_effect=mock_call_llm):
             result = await run_debate(
                 "600519",
+                agents=["buffett"],
                 features={"name": "test"},
                 mock_opinions={"buffett": mock_agent},
             )
 
         assert call_count == 2  # R1 + R2
-        assert result.rounds[1] is not None  # R2 被触发
-        # T2: 验证 R2 输出被正确收集到 rounds[1]
-        assert len(result.rounds[1]) == 1
-        assert result.rounds[1][0].name == "buffett"
-        assert result.rounds[1][0].signal == "bullish"
-        assert result.rounds[1][0].conviction == 80
+        assert result.round2 is not None  # R2 被触发
+        # T2: 验证 R2 输出被正确收集到 round2
+        assert len(result.round2) == 1
+        assert result.round2[0].name == "buffett"
+        assert result.round2[0].signal == "bullish"
+        assert result.round2[0].conviction == 80
 
     @pytest.mark.anyio
     async def test_cache_hit_skips_llm(self, debate_dir):
@@ -372,11 +377,11 @@ class TestRunDebate:
         path.write_text(md, encoding="utf-8")
 
         with patch("council.debate.call_llm", new_callable=AsyncMock) as mock_llm:
-            result = await run_debate("600519", features={"name": "test"})
+            result = await run_debate("600519", agents=["buffett"], features={"name": "test"})
 
         mock_llm.assert_not_called()
         assert result.final_verdict == "bullish"
-        assert result.rounds[0][0].conviction == 90  # 来自缓存
+        assert result.round1[0].conviction == 90  # 来自缓存
 
     @pytest.mark.anyio
     async def test_force_skips_cache(self, debate_dir):
@@ -411,13 +416,184 @@ class TestRunDebate:
         path.write_text(old_md, encoding="utf-8")
 
         with patch("council.debate.call_llm", new_callable=AsyncMock, return_value=LLM_RESPONSE):
-            result = await run_debate("600519", features={"name": "test"}, force=True)
+            result = await run_debate("600519", agents=["buffett"], features={"name": "test"}, force=True)
 
         # 返回值验证：force=True 应该重跑 LLM，conviction 应该是 80 而非 90
-        assert result.rounds[0][0].conviction == 80
+        assert result.round1[0].conviction == 80
 
         # 文件层验证（P0-2 核心）：旧记录应被清除，不应混叠
         new_md = path.read_text(encoding="utf-8")
         assert "缓存命中" not in new_md, "旧记录残留：force=True 未清除旧文件"
         assert new_md.count("## Round 1") == 1, "Round 1 重复：文件追加而非覆盖"
         assert "好公司" in new_md, "新记录未写入"
+# ── DA 和 Synthesizer 测试 ────────────────────────────────────────
+
+DA_LLM_RESPONSE = json.dumps({
+    "signal": "neutral",
+    "conviction": 0,
+    "core_thesis": "最大盲点",
+    "key_metrics": [],
+    "risks": [],
+    "what_would_change_my_mind": "证据不足",
+    "out_of_circle": False,
+    "historical_parallel": None,
+    "blind_spots": [
+        {"title": "管理层风险", "detail": "具体数据", "which_agents_missed_it": ["buffett"]}
+    ],
+}, ensure_ascii=False)
+
+SYNTHESIZER_LLM_RESPONSE = json.dumps({
+    "final_signal": "bullish",
+    "conviction": 75,
+    "consensus_summary": "共识总结",
+    "dissent_points": [{"topic": "估值", "who_disagrees": "munger", "their_reason": "PE过高"}],
+    "pending_verification": ["现金流验证"],
+}, ensure_ascii=False)
+
+
+class TestCallDA:
+    @pytest.mark.anyio
+    async def test_call_da_returns_agentoutput_with_blind_spots(self, debate_dir):
+        """_call_da 返回 AgentOutput 含 extra.blind_spots."""
+        agent = AgentOutput.from_dict("buffett", VALID_AGENT_DATA)
+
+        async def mock_call_llm(system_prompt, user_message, reasoning_level="heavy"):
+            assert reasoning_level == "heavy"
+            assert "Round 1" in user_message
+            return DA_LLM_RESPONSE
+
+        with patch("council.debate.call_llm", side_effect=mock_call_llm):
+            result = await _call_da([agent], None, "600519", {"name": "test"})
+
+        assert isinstance(result, AgentOutput)
+        assert result.name == "da"
+        assert result.signal == "neutral"
+        assert "blind_spots" in result.extra
+        assert len(result.extra["blind_spots"]) == 1
+        assert result.extra["blind_spots"][0]["title"] == "管理层风险"
+
+
+class TestCallSynthesizer:
+    @pytest.mark.anyio
+    async def test_call_synthesizer_returns_synthesizeroutput(self, debate_dir):
+        """_call_synthesizer 返回 SynthesizerOutput."""
+        agent = AgentOutput.from_dict("buffett", VALID_AGENT_DATA)
+        da = AgentOutput.from_dict("da", json.loads(DA_LLM_RESPONSE))
+
+        async def mock_call_llm(system_prompt, user_message, reasoning_level="moderate"):
+            assert reasoning_level == "moderate"
+            assert "Round 1" in user_message
+            assert "Round 3" in user_message
+            return SYNTHESIZER_LLM_RESPONSE
+
+        with patch("council.debate.call_llm", side_effect=mock_call_llm):
+            result = await _call_synthesizer([agent], None, da, "600519", {"name": "test"})
+
+        assert isinstance(result, SynthesizerOutput)
+        assert result.final_signal == "bullish"
+        assert result.conviction == 75
+        assert result.consensus_summary == "共识总结"
+        assert len(result.dissent_points) == 1
+        assert len(result.pending_verification) == 1
+
+
+class TestFullCouncil:
+    @pytest.mark.anyio
+    async def test_full_council_4_rounds(self, debate_dir):
+        """全天团：R1×2 + R2×2 + R3 + R4 完整跑通."""
+        call_count = 0
+
+        async def mock_call_llm(system_prompt, user_message, reasoning_level="heavy"):
+            nonlocal call_count
+            call_count += 1
+            if reasoning_level == "moderate":
+                return SYNTHESIZER_LLM_RESPONSE
+            # DA 或 R1/R2 都是 heavy
+            if "你是质疑者" in system_prompt:
+                return DA_LLM_RESPONSE
+            return LLM_RESPONSE
+
+        with patch("council.debate.call_llm", side_effect=mock_call_llm):
+            result = await run_debate(
+                "600519",
+                agents=["buffett", "munger"],
+                features={"name": "test"},
+            )
+
+        # R1(2) + R2(2) + R3(DA,1) + R4(synthesizer,1) = 6
+        assert call_count == 6
+        assert len(result.round1) == 2
+        assert len(result.round2) == 2
+        assert result.round3 is not None
+        assert result.round3.name == "da"
+        assert result.round4 is not None
+        assert result.round4.final_signal == "bullish"
+        assert result.final_verdict == "bullish"  # 取 round4.final_signal
+        assert result.consensus_summary == "共识总结"
+        assert result.pending_verification == ["现金流验证"]
+
+    @pytest.mark.anyio
+    async def test_full_council_cache_with_r4(self, debate_dir):
+        """全天团缓存含 R4 SynthesizerOutput."""
+        from datetime import date
+        agent_json = json.dumps({
+            "name": "buffett", "signal": "bullish", "conviction": 90,
+            "core_thesis": "缓存命中", "key_metrics": [], "risks": [],
+            "what_would_change_my_mind": "不会变", "out_of_circle": False,
+            "historical_parallel": None,
+        }, ensure_ascii=False, indent=2)
+        da_json = json.dumps({
+            "name": "da", "signal": "neutral", "conviction": 0,
+            "core_thesis": "盲点", "key_metrics": [], "risks": [],
+            "what_would_change_my_mind": "证据", "out_of_circle": False,
+            "historical_parallel": None,
+            "blind_spots": [{"title": "test", "detail": "detail", "which_agents_missed_it": ["buffett"]}],
+        }, ensure_ascii=False, indent=2)
+        syn_json = json.dumps({
+            "final_signal": "bullish", "conviction": 85,
+            "consensus_summary": "缓存共识",
+            "dissent_points": [{"topic": "估值", "who_disagrees": "munger", "their_reason": "PE高"}],
+            "pending_verification": ["缓存验证"],
+        }, ensure_ascii=False, indent=2)
+
+        md = f"""
+## Round 1 · 各自表态
+
+### 巴菲特
+```json
+{agent_json}
+```
+
+## Round 2 · 交叉质疑
+
+### 巴菲特
+```json
+{agent_json}
+```
+
+## Round 3 · Devil's Advocate
+```json
+{da_json}
+```
+
+## Round 4 · 收敛共识
+```json
+{syn_json}
+```
+"""
+        path = debate_dir / "600519" / f"{date.today().isoformat()}.md"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(md, encoding="utf-8")
+
+        result = _check_cache("600519.SH")
+        assert result is not None
+        assert result.round1 is not None
+        assert result.round2 is not None
+        assert result.round3 is not None
+        assert result.round3.name == "da"
+        assert "blind_spots" in result.round3.extra
+        assert result.round4 is not None
+        assert isinstance(result.round4, SynthesizerOutput)
+        assert result.round4.final_signal == "bullish"
+        assert result.round4.consensus_summary == "缓存共识"
+        assert result.final_verdict == "bullish"

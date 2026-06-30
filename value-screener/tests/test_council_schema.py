@@ -8,7 +8,7 @@ from __future__ import annotations
 import json
 import pytest
 
-from council.schema import AgentOutput, CouncilResult, ValidationError
+from council.schema import AgentOutput, CouncilResult, SynthesizerOutput, ValidationError
 
 
 # ── AgentOutput 校验 ──────────────────────────────────────────
@@ -139,11 +139,11 @@ class TestAgentOutputSerialization:
 
 class TestCouncilResult:
     def test_single_agent_fallback(self):
-        """单 agent: final_verdict 取 rounds[0][0].signal."""
+        """单 agent: final_verdict 取 round1[0].signal."""
         agent = AgentOutput.from_dict("buffett", VALID_DATA)
         result = CouncilResult(
             ticker="600519",
-            rounds=[[agent], None, None, None],
+            round1=[agent],
             final_verdict="",
         )
         assert result.final_verdict == "bullish"
@@ -153,7 +153,7 @@ class TestCouncilResult:
         agent = AgentOutput.from_dict("buffett", VALID_DATA)
         result = CouncilResult(
             ticker="600519",
-            rounds=[[agent], None, None, None],
+            round1=[agent],
             final_verdict="neutral",
         )
         assert result.final_verdict == "neutral"
@@ -164,24 +164,237 @@ class TestCouncilResult:
             **VALID_DATA,
             "what_would_change_my_mind": "利率大幅上升",
         })
-        variables = CouncilResult.extract_key_variables([[a1, a2], None, None, None])
+        variables = CouncilResult.extract_key_variables([a1, a2])
         assert len(variables) == 2
         assert "连续两季收入负增长" in variables[0]
 
-    def test_extract_key_variables_skips_none_rounds(self):
+    def test_extract_key_variables_with_round2(self):
         a1 = AgentOutput.from_dict("buffett", VALID_DATA)
-        variables = CouncilResult.extract_key_variables([[a1], None, None, None])
+        a2 = AgentOutput.from_dict("buffett", {
+            **VALID_DATA,
+            "what_would_change_my_mind": "市场情绪转变",
+        })
+        variables = CouncilResult.extract_key_variables([a1], [a2])
+        assert len(variables) == 2
+
+    def test_extract_key_variables_skips_none_round2(self):
+        a1 = AgentOutput.from_dict("buffett", VALID_DATA)
+        variables = CouncilResult.extract_key_variables([a1])
         assert len(variables) == 1
 
     def test_to_json(self):
         agent = AgentOutput.from_dict("buffett", VALID_DATA)
         result = CouncilResult(
             ticker="600519",
-            rounds=[[agent], None, None, None],
+            round1=[agent],
             final_verdict="bullish",
         )
         json_str = result.to_json()
         parsed = json.loads(json_str)
         assert parsed["ticker"] == "600519"
         assert parsed["final_verdict"] == "bullish"
-        assert parsed["rounds"][1] is None
+        assert parsed["round1"] is not None
+        assert parsed["round2"] is None
+
+    def test_full_council_result_to_json(self):
+        """全天团 CouncilResult 序列化."""
+        agent = AgentOutput.from_dict("buffett", VALID_DATA)
+        synthesizer = SynthesizerOutput(
+            final_signal="bullish",
+            conviction=75,
+            consensus_summary="品牌护城河深厚",
+            dissent_points=[{"topic": "估值", "who_disagrees": "munger", "their_reason": "PE 过高"}],
+            pending_verification=["现金流验证"],
+        )
+        result = CouncilResult(
+            ticker="600519",
+            round1=[agent],
+            round2=[agent],
+            round3=agent,
+            round4=synthesizer,
+            final_verdict="bullish",
+            consensus_summary="品牌护城河深厚",
+            dissent_points=[{"topic": "估值"}],
+            pending_verification=["现金流验证"],
+        )
+        json_str = result.to_json()
+        parsed = json.loads(json_str)
+        assert parsed["round1"] is not None
+        assert parsed["round2"] is not None
+        assert parsed["round3"] is not None
+        assert parsed["round4"] is not None
+        assert parsed["consensus_summary"] == "品牌护城河深厚"
+
+
+# ── AgentOutput extra 字段 ─────────────────────────────────────
+
+class TestAgentOutputExtraField:
+    def test_extra_field_passthrough_feng_liu(self):
+        """冯柳特有字段透传."""
+        data = {
+            **VALID_DATA,
+            "market_consensus": "市场认为业绩下滑",
+            "consensus_flaw": "过度反应短期利空",
+            "odds_assessment": "赔率 3:1",
+            "is_reversible": True,
+            "catalyst": "Q3 业绩拐点",
+        }
+        out = AgentOutput.from_dict("feng_liu", data)
+        assert out.extra["market_consensus"] == "市场认为业绩下滑"
+        assert out.extra["consensus_flaw"] == "过度反应短期利空"
+        assert out.extra["odds_assessment"] == "赔率 3:1"
+        assert out.extra["is_reversible"] is True
+        assert out.extra["catalyst"] == "Q3 业绩拐点"
+
+    def test_extra_field_passthrough_da_blind_spots(self):
+        """DA blind_spots 透传."""
+        data = {
+            **VALID_DATA,
+            "blind_spots": [
+                {
+                    "title": "管理层减持",
+                    "detail": "管理层去年减持了 15%",
+                    "which_agents_missed_it": ["buffett", "munger"],
+                }
+            ],
+        }
+        out = AgentOutput.from_dict("da", data)
+        assert "blind_spots" in out.extra
+        assert len(out.extra["blind_spots"]) == 1
+        assert out.extra["blind_spots"][0]["title"] == "管理层减持"
+
+    def test_to_dict_includes_extra(self):
+        """to_dict 包含 extra 字段."""
+        data = {
+            **VALID_DATA,
+            "market_consensus": "市场共识",
+        }
+        out = AgentOutput.from_dict("feng_liu", data)
+        d = out.to_dict()
+        assert "market_consensus" in d
+        assert d["market_consensus"] == "市场共识"
+
+    def test_to_json_includes_extra(self):
+        """to_json 包含 extra 字段."""
+        data = {
+            **VALID_DATA,
+            "odds_assessment": "赔率 2:1",
+        }
+        out = AgentOutput.from_dict("feng_liu", data)
+        json_str = out.to_json()
+        parsed = json.loads(json_str)
+        assert "odds_assessment" in parsed
+        assert parsed["odds_assessment"] == "赔率 2:1"
+
+    def test_base_field_validation_unchanged(self):
+        """基础字段校验逻辑不变（extra 不影响）."""
+        # signal 枚举校验仍然生效
+        data = {**VALID_DATA, "signal": "strong_buy", "extra_field": "value"}
+        with pytest.raises(ValidationError, match="invalid signal"):
+            AgentOutput.from_dict("test", data)
+
+        # conviction 范围校验仍然生效
+        data = {**VALID_DATA, "conviction": 150, "extra_field": "value"}
+        with pytest.raises(ValidationError, match="conviction must be int 0-100"):
+            AgentOutput.from_dict("test", data)
+
+    def test_no_extra_fields_when_clean(self):
+        """无 extra 字段时 extra 为空 dict."""
+        out = AgentOutput.from_dict("buffett", VALID_DATA)
+        assert out.extra == {}
+
+
+# ── SynthesizerOutput ──────────────────────────────────────────
+
+class TestSynthesizerOutput:
+    def test_valid_creation(self):
+        """合法创建."""
+        syn = SynthesizerOutput(
+            final_signal="bullish",
+            conviction=75,
+            consensus_summary="品牌护城河深厚",
+            dissent_points=[{"topic": "估值", "who_disagrees": "munger", "their_reason": "PE 过高"}],
+            pending_verification=["现金流验证"],
+        )
+        assert syn.final_signal == "bullish"
+        assert syn.conviction == 75
+        assert syn.consensus_summary == "品牌护城河深厚"
+        assert len(syn.dissent_points) == 1
+        assert len(syn.pending_verification) == 1
+
+    def test_invalid_final_signal(self):
+        """final_signal 枚举校验."""
+        with pytest.raises(ValidationError, match="invalid final_signal"):
+            SynthesizerOutput(
+                final_signal="strong_buy",
+                conviction=75,
+                consensus_summary="test",
+            )
+
+    def test_invalid_conviction_range(self):
+        """conviction 范围校验."""
+        with pytest.raises(ValidationError, match="conviction must be int 0-100"):
+            SynthesizerOutput(
+                final_signal="bullish",
+                conviction=150,
+                consensus_summary="test",
+            )
+
+    def test_empty_consensus_summary(self):
+        """consensus_summary 非空校验."""
+        with pytest.raises(ValidationError, match="consensus_summary must be non-empty"):
+            SynthesizerOutput(
+                final_signal="bullish",
+                conviction=75,
+                consensus_summary="",
+            )
+
+    def test_from_json(self):
+        """从 JSON 反序列化."""
+        json_str = json.dumps({
+            "final_signal": "neutral",
+            "conviction": 50,
+            "consensus_summary": "分歧较大",
+            "dissent_points": [],
+            "pending_verification": [],
+        })
+        syn = SynthesizerOutput.from_json(json_str)
+        assert syn.final_signal == "neutral"
+        assert syn.conviction == 50
+
+    def test_from_dict(self):
+        """从 dict 反序列化."""
+        data = {
+            "final_signal": "bearish",
+            "conviction": 30,
+            "consensus_summary": "风险过高",
+        }
+        syn = SynthesizerOutput.from_dict(data)
+        assert syn.final_signal == "bearish"
+        assert syn.dissent_points == []
+        assert syn.pending_verification == []
+
+    def test_to_json(self):
+        """序列化为 JSON."""
+        syn = SynthesizerOutput(
+            final_signal="bullish",
+            conviction=80,
+            consensus_summary="test",
+        )
+        json_str = syn.to_json()
+        parsed = json.loads(json_str)
+        assert parsed["final_signal"] == "bullish"
+        assert parsed["conviction"] == 80
+
+    def test_to_dict(self):
+        """转换为 dict."""
+        syn = SynthesizerOutput(
+            final_signal="bullish",
+            conviction=80,
+            consensus_summary="test",
+            dissent_points=[{"topic": "test"}],
+        )
+        d = syn.to_dict()
+        assert d["final_signal"] == "bullish"
+        assert d["consensus_summary"] == "test"
+        assert len(d["dissent_points"]) == 1

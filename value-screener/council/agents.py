@@ -19,11 +19,20 @@ AGENT_REGISTRY: dict[str, dict] = {
         "name": "巴菲特",
         "prompt_builder": "council.prompt.build_buffett_prompt",
     },
-    # 3b 追加：
-    # "munger": {"name": "芒格", "prompt_builder": "council.prompt.build_munger_prompt"},
-    # "duan": {"name": "段永平", "prompt_builder": "council.prompt.build_duan_prompt"},
-    # "feng_liu": {"name": "冯柳", "prompt_builder": "council.prompt.build_feng_liu_prompt"},
-    # "zhang_kun": {"name": "张坤", "prompt_builder": "council.prompt.build_zhang_kun_prompt"},
+    "munger": {
+        "name": "芒格",
+        "prompt_builder": "council.prompt.build_munger_prompt",
+    },
+    "duan": {
+        "name": "段永平",
+        "prompt_builder": "council.prompt.build_duan_prompt",
+    },
+    "feng_liu": {
+        "name": "冯柳",
+        "prompt_builder": "council.prompt.build_feng_liu_prompt",
+    },
+    # DA/synthesizer 不注册（设计决策 3），debate.py 内独立调用
+    # 张坤留给后续迭代（蒸馏素材和校准用例不足）
 }
 
 
