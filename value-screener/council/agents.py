@@ -49,5 +49,8 @@ def get_prompt_builder(agent_id: str):
 
 
 def get_agent_display_name(agent_id: str) -> str:
-    """返回 agent 的显示名称."""
-    return AGENT_REGISTRY[agent_id]["name"]
+    """返回 agent 的显示名称.
+
+    若 agent_id 不在注册表中，返回 agent_id 本身（支持 mock 注入等场景）.
+    """
+    return AGENT_REGISTRY.get(agent_id, {}).get("name", agent_id)

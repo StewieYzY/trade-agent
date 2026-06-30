@@ -183,7 +183,11 @@ class CouncilResult:
 
     @classmethod
     def extract_key_variables(cls, rounds: list[list[AgentOutput] | None]) -> list[str]:
-        """从所有 AgentOutput 的 what_would_change_my_mind 提取关键变量."""
+        """从所有 AgentOutput 的 what_would_change_my_mind 收集关键变量.
+
+        当前实现为原文收集（3a 单 agent），结构化提取留待 3b/L4。
+        全天团阶段可考虑用 synthesizer agent 或 NLP 从原文提取结构化变量。
+        """
         variables = []
         for r in rounds:
             if not r:

@@ -18,18 +18,20 @@ import sys
 from council.debate import run_debate
 
 
-# 校准用例定义
+# 校准用例定义（统一 assert_op + expected_signal 结构）
 CALIBRATION_CASES = [
     {
         "ticker": "600519.SH",
         "name": "贵州茅台",
+        "assert_op": "eq",
         "expected_signal": "bullish",
         "reason": "品牌定价权 + 简单商业模式",
     },
     {
         "ticker": "600900.SH",
         "name": "长江电力",
-        "expected_not_signal": "bullish",
+        "assert_op": "ne",
+        "expected_signal": "bullish",
         "reason": "重资产公用事业，巴菲特不偏好",
     },
 ]
@@ -56,15 +58,18 @@ async def run_calibration() -> bool:
             actual_signal = result.final_verdict
             actual_conviction = result.rounds[0][0].conviction if result.rounds[0] else 0
 
-            # 判断通过/失败
-            if "expected_signal" in case:
-                expected = case["expected_signal"]
+            # 判断通过/失败（统一使用 assert_op + expected_signal）
+            assert_op = case["assert_op"]
+            expected = case["expected_signal"]
+
+            if assert_op == "eq":
                 passed = actual_signal == expected
                 expected_desc = f"signal == {expected!r}"
+            elif assert_op == "ne":
+                passed = actual_signal != expected
+                expected_desc = f"signal != {expected!r}"
             else:
-                not_expected = case["expected_not_signal"]
-                passed = actual_signal != not_expected
-                expected_desc = f"signal != {not_expected!r}"
+                raise ValueError(f"unknown assert_op: {assert_op}")
 
             status = "PASSED" if passed else "FAILED"
             print(f"[{status}] {name} ({ticker}): {expected_desc}")

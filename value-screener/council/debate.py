@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -79,7 +80,7 @@ def _build_user_message(
         f"请分析以下股票：{ticker}",
         "",
         "## 特征数据",
-        json.dumps(features, ensure_ascii=False, indent=2),
+        json.dumps(features, ensure_ascii=False),
     ]
 
     if other_opinions:
@@ -145,16 +146,89 @@ def _append_round(path: Path, round_num: int, agents: list[AgentOutput] | None) 
                 f.write("\n```\n")
 
 
+def _parse_debate_markdown(content: str, ticker: str) -> CouncilResult | None:
+    """解析辩论记录 markdown，还原 CouncilResult.
+
+    从 markdown 中提取 ```json ... ``` 块，按轮次分组，
+    反序列化为 AgentOutput 列表。
+
+    Args:
+        content: markdown 文件内容
+        ticker: 股票代码
+
+    Returns:
+        CouncilResult 或 None（解析失败时降级为重跑）
+    """
+    # 按轮次 header 分割
+    round_pattern = re.compile(r"^## Round (\d+)", re.MULTILINE)
+    sections = round_pattern.split(content)
+    # sections[0] = 文件头（空或标题），sections[1] = "1", sections[2] = R1内容, ...
+
+    rounds: list[list[AgentOutput] | None] = [None, None, None, None]
+
+    for i in range(1, len(sections), 2):
+        if i + 1 >= len(sections):
+            break
+        round_num = int(sections[i])
+        section_content = sections[i + 1]
+
+        if round_num < 1 or round_num > 4:
+            continue
+
+        # 跳过标记
+        if "（单 agent 模式，跳过）" in section_content:
+            rounds[round_num - 1] = None
+            continue
+
+        # 提取 ```json ... ``` 块
+        json_pattern = re.compile(r"```json\n(.*?)\n```", re.DOTALL)
+        json_blocks = json_pattern.findall(section_content)
+
+        if not json_blocks:
+            # 无 JSON 块但有内容 → 可能是损坏的记录
+            rounds[round_num - 1] = None
+            continue
+
+        agents_in_round = []
+        for block in json_blocks:
+            try:
+                data = json.loads(block)
+                agent_id = data.get("name", "unknown")
+                agents_in_round.append(AgentOutput.from_dict(agent_id, data))
+            except (json.JSONDecodeError, ValidationError):
+                # 单个块解析失败不影响其他块
+                continue
+
+        rounds[round_num - 1] = agents_in_round if agents_in_round else None
+
+    # 至少 R1 有数据才算命中
+    if not rounds[0]:
+        return None
+
+    final_verdict = rounds[0][0].signal if rounds[0] else "skip"
+    key_variables = CouncilResult.extract_key_variables(rounds)
+
+    return CouncilResult(
+        ticker=ticker,
+        rounds=rounds,
+        final_verdict=final_verdict,
+        key_variables=key_variables,
+    )
+
+
 def _check_cache(ticker: str) -> CouncilResult | None:
     """检查辩论记录缓存，命中则返回 CouncilResult.
 
-    命中条件：debate/{ticker}/{date}.md 存在且至少含 Round 1 节。
+    命中条件：debate/{ticker}/{date}.md 存在且至少含 Round 1 节，
+    且 Round 1 中至少有一个可解析的 AgentOutput JSON。
+
+    解析失败（格式损坏）→ 返回 None（降级为重跑）。
 
     Args:
         ticker: 股票代码
 
     Returns:
-        CouncilResult 或 None（未命中）
+        CouncilResult 或 None（未命中/解析失败）
     """
     path = _debate_path(ticker)
     if not path.exists():
@@ -164,9 +238,7 @@ def _check_cache(ticker: str) -> CouncilResult | None:
     if "## Round 1" not in content:
         return None
 
-    # TODO: 解析 markdown 还原 CouncilResult
-    # 当前简化处理：命中缓存时直接重跑（完整解析后续优化）
-    return None
+    return _parse_debate_markdown(content, ticker)
 
 
 async def run_debate(
@@ -209,9 +281,9 @@ async def run_debate(
             return cached
 
     # 4. 准备辩论记录文件
+    # force=True 时删除旧文件再覆盖写入；force=False 时由 _check_cache 提前返回
     path = _debate_path(ticker)
-    if path.exists() and not force:
-        # 追加模式：清空旧内容（force=True 时覆盖）
+    if force and path.exists():
         path.unlink()
 
     # 5. Round 1: 各自表态（并行，彼此隔离）
