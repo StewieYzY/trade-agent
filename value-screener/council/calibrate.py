@@ -91,19 +91,21 @@ async def run_agent_calibration(case: dict) -> bool:
 
 
 async def run_da_calibration(ticker: str = "600519.SH") -> bool:
-    """运行 DA 校准：验证 schema 合法 + blind_spots 非空."""
+    """运行 DA 校准：验证 schema 合法 + blind_spots 非空.
+
+    跑全天团拿真实 R1+R2，确保 DA 在真实输入分布下验证。
+    """
     try:
         features = assemble_council_features(ticker)
         if "error" in features:
             print(f"[FAILED] [da] {ticker}: insufficient_data")
             return False
 
-        # 先跑 R1 获取基础数据
-        result = await run_debate(ticker, agents=["buffett"], force=True)
-        round1 = result.round1
+        # 跑全天团获取真实 R1+R2
+        result = await run_debate(ticker, force=True)
 
-        # 调用 DA
-        da_result = await _call_da(round1, None, ticker, features)
+        # 调用 DA（传入真实 R1+R2）
+        da_result = await _call_da(result.round1, result.round2, ticker, features)
 
         # 验证 schema
         assert da_result.signal == "neutral", f"DA signal should be neutral, got {da_result.signal}"
@@ -126,20 +128,23 @@ async def run_da_calibration(ticker: str = "600519.SH") -> bool:
 
 
 async def run_synthesizer_calibration(ticker: str = "600519.SH") -> bool:
-    """运行 Synthesizer 校准：验证 schema 合法 + dissent_points 非空."""
+    """运行 Synthesizer 校准：验证 schema 合法 + dissent_points 非空.
+
+    跑全天团拿真实 R1+R2+DA，确保 Synthesizer 在真实输入分布下验证。
+    """
     try:
         features = assemble_council_features(ticker)
         if "error" in features:
             print(f"[FAILED] [synthesizer] {ticker}: insufficient_data")
             return False
 
-        # 先跑 R1 + DA 获取基础数据
-        result = await run_debate(ticker, agents=["buffett"], force=True)
-        round1 = result.round1
-        da_result = await _call_da(round1, None, ticker, features)
+        # 跑全天团获取真实 R1+R2
+        result = await run_debate(ticker, force=True)
+        # 调用 DA 获取真实 R3
+        da_result = await _call_da(result.round1, result.round2, ticker, features)
 
-        # 调用 Synthesizer
-        syn_result = await _call_synthesizer(round1, None, da_result, ticker, features)
+        # 调用 Synthesizer（传入真实 R1+R2+DA）
+        syn_result = await _call_synthesizer(result.round1, result.round2, da_result, ticker, features)
 
         # 验证 schema（SynthesizerOutput __post_init__ 已校验枚举和范围）
         assert isinstance(syn_result, SynthesizerOutput), "should return SynthesizerOutput"

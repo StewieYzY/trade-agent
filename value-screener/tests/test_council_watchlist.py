@@ -64,7 +64,7 @@ class TestWriteCouncilOutput:
         debate_path = Path("debate/600519/2026-06-30.md")
         _write_council_output(result, debate_path)
 
-        output_path = watchlist_dir / "watchlist" / "2026-06-30_600519.json"
+        output_path = watchlist_dir / "watchlist" / "2026-06-30_600519.SH.json"
         assert output_path.exists()
 
         data = json.loads(output_path.read_text(encoding="utf-8"))
@@ -91,7 +91,7 @@ class TestWriteCouncilOutput:
         debate_path = Path("debate/600519/2026-06-30.md")
         _write_council_output(result, debate_path)
 
-        output_path = watchlist_dir / "watchlist" / "2026-06-30_600519.json"
+        output_path = watchlist_dir / "watchlist" / "2026-06-30_600519.SH.json"
         data = json.loads(output_path.read_text(encoding="utf-8"))
         assert data["final_verdict"] == "bullish"
         assert data["conviction"] is None  # 无 round4
@@ -133,7 +133,7 @@ class TestWriteCouncilOutput:
         assert screener_file.exists()
         assert json.loads(screener_file.read_text())["tickers"] == ["600519"]
         # council 文件独立存在
-        council_file = watchlist_dir / "watchlist" / "2026-06-30_600519.json"
+        council_file = watchlist_dir / "watchlist" / "2026-06-30_600519.SH.json"
         assert council_file.exists()
 
 

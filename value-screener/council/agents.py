@@ -1,8 +1,11 @@
 """Agent 注册表（design.md 决策 3, AD-09）.
 
-debate.py 从此注册表读取 agent 列表，不硬编码 agent 名称。
-3a 仅注册巴菲特；3b 追加芒格/段永平/冯柳/张坤/DA/synthesizer，
-无需改编排逻辑（"填 agent 即激活"）。
+当前注册 4 位投资大师：巴菲特（buffett）、芒格（munger）、段永平（duan）、冯柳（feng_liu）。
+每位大师有独立的 prompt builder，体现其投资哲学和关注点差异。
+
+DA（Devil's Advocate）和 Synthesizer 不注册（设计决策 3）。
+它们通过 council.debate 中的独立函数（_call_da / _call_synthesizer）调用，
+不进入 AGENT_REGISTRY，不参与 R1/R2 的并行辩论。
 
 AGENT_REGISTRY 结构：
 {

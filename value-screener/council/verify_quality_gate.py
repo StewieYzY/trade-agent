@@ -179,27 +179,33 @@ async def verify_quality_gate(ticker: str, force: bool = False) -> bool:
 async def verify_cost(ticker: str, force: bool = False) -> bool:
     """7.3 成本验证.
 
-    记录全天团单股 token 消耗和费用（作为参考数据，不做硬阈值约束）。
+    记录全天团单股 LLM 调用次数（作为参考数据，不做硬阈值约束）。
+
+    注意：token 消耗和费用采集需后续从 API 响应中提取（修改 call_llm 签名
+    或增加 side-channel 记录）。当前 call_llm 只返回 JSON 字符串，
+    token usage 未被采集，此处仅记录调用次数。
     """
     print(f"\n{'='*60}")
     print(f"7.3 成本验证: {ticker}")
     print(f"{'='*60}")
 
     try:
-        # 运行辩论并记录
         result = await run_debate(ticker, force=force)
 
-        # 读取辩论记录，统计调用次数
-        debate_path = Path("debate") / ticker.split(".")[0] / f"{result.round4.consensus_summary[:10]}.md"
+        r1_count = len(result.round1) if result.round1 else 0
+        r2_count = len(result.round2) if result.round2 else 0
+        r3_count = 1 if result.round3 else 0
+        r4_count = 1 if result.round4 else 0
+        total = r1_count + r2_count + r3_count + r4_count
 
         print("\n[成本记录]")
-        print(f"  R1: {len(result.round1)} 次 LLM 调用（重度推理）")
-        print(f"  R2: {len(result.round2) if result.round2 else 0} 次 LLM 调用（重度推理）")
-        print(f"  R3: 1 次 LLM 调用（重度推理，DA）")
-        print(f"  R4: 1 次 LLM 调用（中度推理，Synthesizer）")
-        print(f"  总计: 10 次 LLM 调用（9 重度 + 1 中度）")
+        print(f"  R1: {r1_count} 次 LLM 调用（重度推理）")
+        print(f"  R2: {r2_count} 次 LLM 调用（重度推理）")
+        print(f"  R3: {r3_count} 次 LLM 调用（重度推理，DA）")
+        print(f"  R4: {r4_count} 次 LLM 调用（中度推理，Synthesizer）")
+        print(f"  总计: {total} 次 LLM 调用")
         print("\n[INFO] 实际 token 消耗和费用需从 LLM API 响应中提取")
-        print("       此处仅记录调用次数作为参考")
+        print("       当前 call_llm 未返回 token usage，需后续工程补充")
 
         return True
 

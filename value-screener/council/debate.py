@@ -503,7 +503,6 @@ def _write_council_output(result: CouncilResult, debate_path: Path) -> None:
 
     # 从 debate_path 提取日期（debate/{ticker}/{date}.md）
     date_str = debate_path.stem
-    ticker_clean = debate_path.parent.name
 
     output = {
         "ticker": result.ticker,
@@ -517,6 +516,7 @@ def _write_council_output(result: CouncilResult, debate_path: Path) -> None:
         "debate_path": str(debate_path),
     }
 
-    output_path = watchlist_dir / f"{date_str}_{ticker_clean}.json"
+    # L4 消费方：文件名用完整 ticker（含交易所后缀 600519.SH），与字段一致
+    output_path = watchlist_dir / f"{date_str}_{result.ticker}.json"
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(output, f, ensure_ascii=False, indent=2)

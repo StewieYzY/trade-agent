@@ -168,15 +168,26 @@ class TestDACalibration:
         self, mock_features, mock_agent_output, mock_da_output
     ):
         """DA 校准通过：schema 合法 + blind_spots 非空."""
-        with patch("council.calibrate.assemble_council_features", return_value=mock_features), \
-             patch("council.debate.assemble_council_features", return_value=mock_features), \
-             patch("council.debate.call_llm", new_callable=AsyncMock) as mock_llm:
-            # Mock run_debate 返回 R1，然后 _call_da 返回 DA
-            mock_llm.side_effect = [
-                json.dumps(mock_agent_output.to_dict(), ensure_ascii=False),  # R1
-                json.dumps(mock_da_output.to_dict(), ensure_ascii=False),     # DA
-            ]
+        # Mock run_debate 返回包含 R1+R2 的 CouncilResult
+        from council.schema import CouncilResult
+        mock_council_result = CouncilResult(
+            ticker="600519.SH",
+            round1=[mock_agent_output],
+            round2=[mock_agent_output],
+            round3=None,
+            round4=None,
+            final_verdict="bullish",
+            key_variables=[],
+            consensus_summary=None,
+            dissent_points=None,
+            pending_verification=None,
+            debate_path=None,
+        )
 
+        with patch("council.calibrate.assemble_council_features", return_value=mock_features), \
+             patch("council.calibrate.run_debate", new_callable=AsyncMock, return_value=mock_council_result), \
+             patch("council.debate.call_llm", new_callable=AsyncMock) as mock_llm:
+            mock_llm.return_value = json.dumps(mock_da_output.to_dict(), ensure_ascii=False)
             passed = await run_da_calibration()
 
         assert passed is True
@@ -186,6 +197,21 @@ class TestDACalibration:
         self, mock_features, mock_agent_output
     ):
         """DA 校准失败：signal != 'neutral'."""
+        from council.schema import CouncilResult
+        mock_council_result = CouncilResult(
+            ticker="600519.SH",
+            round1=[mock_agent_output],
+            round2=[mock_agent_output],
+            round3=None,
+            round4=None,
+            final_verdict="bullish",
+            key_variables=[],
+            consensus_summary=None,
+            dissent_points=None,
+            pending_verification=None,
+            debate_path=None,
+        )
+
         invalid_da_output = AgentOutput(
             name="da",
             signal="bullish",  # 错误
@@ -200,13 +226,9 @@ class TestDACalibration:
         )
 
         with patch("council.calibrate.assemble_council_features", return_value=mock_features), \
-             patch("council.debate.assemble_council_features", return_value=mock_features), \
+             patch("council.calibrate.run_debate", new_callable=AsyncMock, return_value=mock_council_result), \
              patch("council.debate.call_llm", new_callable=AsyncMock) as mock_llm:
-            mock_llm.side_effect = [
-                json.dumps(mock_agent_output.to_dict(), ensure_ascii=False),
-                json.dumps(invalid_da_output.to_dict(), ensure_ascii=False),
-            ]
-
+            mock_llm.return_value = json.dumps(invalid_da_output.to_dict(), ensure_ascii=False)
             passed = await run_da_calibration()
 
         assert passed is False
@@ -216,6 +238,21 @@ class TestDACalibration:
         self, mock_features, mock_agent_output
     ):
         """DA 校准失败：blind_spots 为空."""
+        from council.schema import CouncilResult
+        mock_council_result = CouncilResult(
+            ticker="600519.SH",
+            round1=[mock_agent_output],
+            round2=[mock_agent_output],
+            round3=None,
+            round4=None,
+            final_verdict="bullish",
+            key_variables=[],
+            consensus_summary=None,
+            dissent_points=None,
+            pending_verification=None,
+            debate_path=None,
+        )
+
         empty_blind_spots = AgentOutput(
             name="da",
             signal="neutral",
@@ -230,13 +267,9 @@ class TestDACalibration:
         )
 
         with patch("council.calibrate.assemble_council_features", return_value=mock_features), \
-             patch("council.debate.assemble_council_features", return_value=mock_features), \
+             patch("council.calibrate.run_debate", new_callable=AsyncMock, return_value=mock_council_result), \
              patch("council.debate.call_llm", new_callable=AsyncMock) as mock_llm:
-            mock_llm.side_effect = [
-                json.dumps(mock_agent_output.to_dict(), ensure_ascii=False),
-                json.dumps(empty_blind_spots.to_dict(), ensure_ascii=False),
-            ]
-
+            mock_llm.return_value = json.dumps(empty_blind_spots.to_dict(), ensure_ascii=False)
             passed = await run_da_calibration()
 
         assert passed is False
@@ -250,16 +283,25 @@ class TestSynthesizerCalibration:
         self, mock_features, mock_agent_output, mock_da_output, mock_synthesizer_output
     ):
         """Synthesizer 校准通过：schema 合法 + dissent_points 存在."""
-        with patch("council.calibrate.assemble_council_features", return_value=mock_features), \
-             patch("council.debate.assemble_council_features", return_value=mock_features), \
-             patch("council.debate.call_llm", new_callable=AsyncMock) as mock_llm:
-            # Mock LLM 返回序列：R1, DA, Synthesizer
-            mock_llm.side_effect = [
-                json.dumps(mock_agent_output.to_dict(), ensure_ascii=False),
-                json.dumps(mock_da_output.to_dict(), ensure_ascii=False),
-                json.dumps(mock_synthesizer_output.to_dict(), ensure_ascii=False),
-            ]
+        from council.schema import CouncilResult
+        mock_council_result = CouncilResult(
+            ticker="600519.SH",
+            round1=[mock_agent_output],
+            round2=[mock_agent_output],
+            round3=None,
+            round4=None,
+            final_verdict="bullish",
+            key_variables=[],
+            consensus_summary=None,
+            dissent_points=None,
+            pending_verification=None,
+            debate_path=None,
+        )
 
+        with patch("council.calibrate.assemble_council_features", return_value=mock_features), \
+             patch("council.calibrate.run_debate", new_callable=AsyncMock, return_value=mock_council_result), \
+             patch("council.calibrate._call_da", new_callable=AsyncMock, return_value=mock_da_output), \
+             patch("council.calibrate._call_synthesizer", new_callable=AsyncMock, return_value=mock_synthesizer_output):
             passed = await run_synthesizer_calibration()
 
         assert passed is True
@@ -269,6 +311,21 @@ class TestSynthesizerCalibration:
         self, mock_features, mock_agent_output, mock_da_output
     ):
         """Synthesizer 校准通过：dissent_points 可以为空列表."""
+        from council.schema import CouncilResult
+        mock_council_result = CouncilResult(
+            ticker="600519.SH",
+            round1=[mock_agent_output],
+            round2=[mock_agent_output],
+            round3=None,
+            round4=None,
+            final_verdict="bullish",
+            key_variables=[],
+            consensus_summary=None,
+            dissent_points=None,
+            pending_verification=None,
+            debate_path=None,
+        )
+
         syn_no_dissent = SynthesizerOutput(
             final_signal="bullish",
             conviction=80,
@@ -278,14 +335,9 @@ class TestSynthesizerCalibration:
         )
 
         with patch("council.calibrate.assemble_council_features", return_value=mock_features), \
-             patch("council.debate.assemble_council_features", return_value=mock_features), \
-             patch("council.debate.call_llm", new_callable=AsyncMock) as mock_llm:
-            mock_llm.side_effect = [
-                json.dumps(mock_agent_output.to_dict(), ensure_ascii=False),
-                json.dumps(mock_da_output.to_dict(), ensure_ascii=False),
-                json.dumps(syn_no_dissent.to_dict(), ensure_ascii=False),
-            ]
-
+             patch("council.calibrate.run_debate", new_callable=AsyncMock, return_value=mock_council_result), \
+             patch("council.calibrate._call_da", new_callable=AsyncMock, return_value=mock_da_output), \
+             patch("council.calibrate._call_synthesizer", new_callable=AsyncMock, return_value=syn_no_dissent):
             passed = await run_synthesizer_calibration()
 
         assert passed is True
@@ -297,64 +349,19 @@ class TestRunCalibration:
     @pytest.mark.anyio
     async def test_run_calibration_bullish(self, mock_features, mock_agent_output, mock_da_output, mock_synthesizer_output):
         """完整校准流程通过."""
-        with patch("council.calibrate.assemble_council_features", return_value=mock_features), \
-             patch("council.debate.assemble_council_features", return_value=mock_features), \
-             patch("council.debate.call_llm", new_callable=AsyncMock) as mock_llm:
-            # Mock LLM 返回序列：
-            # - 巴菲特看多 (600519): bullish
-            # - 巴菲特看空 (600900): neutral
-            # - 段永平看多 (600519): bullish
-            # - DA: neutral + blind_spots
-            # - Synthesizer: bullish + dissent_points
-            bullish_output = json.dumps(mock_agent_output.to_dict(), ensure_ascii=False)
-            neutral_output = json.dumps({
-                "name": "buffett",
-                "signal": "neutral",
-                "conviction": 50,
-                "core_thesis": "公用事业估值偏高",
-                "key_metrics": ["PE 20x"],
-                "risks": ["政策风险"],
-                "what_would_change_my_mind": "分红率提升",
-                "out_of_circle": False,
-                "historical_parallel": None,
-            }, ensure_ascii=False)
-            da_output = json.dumps(mock_da_output.to_dict(), ensure_ascii=False)
-            syn_output = json.dumps(mock_synthesizer_output.to_dict(), ensure_ascii=False)
-
-            mock_llm.side_effect = [
-                bullish_output,  # 巴菲特 600519
-                neutral_output,  # 巴菲特 600900
-                bullish_output,  # 段永平 600519
-                bullish_output,  # DA R1
-                da_output,       # DA
-                bullish_output,  # Synthesizer R1
-                da_output,       # Synthesizer DA
-                syn_output,      # Synthesizer
-            ]
-
+        # Mock 各子校准函数
+        with patch("council.calibrate.run_agent_calibration", new_callable=AsyncMock, return_value=True), \
+             patch("council.calibrate.run_da_calibration", new_callable=AsyncMock, return_value=True), \
+             patch("council.calibrate.run_synthesizer_calibration", new_callable=AsyncMock, return_value=True):
             result = await run_calibration()
             assert result is True
 
     @pytest.mark.anyio
     async def test_run_calibration_bearish(self, mock_features):
         """看多案例收到 bearish 信号时校准失败."""
-        async def mock_llm(*args, **kwargs):
-            # 两个案例都返回 bearish
-            return json.dumps({
-                "name": "buffett",
-                "signal": "bearish",
-                "conviction": 70,
-                "core_thesis": "风险过高",
-                "key_metrics": ["负债率 80%"],
-                "risks": ["现金流紧张"],
-                "what_would_change_my_mind": "负债率下降",
-                "out_of_circle": False,
-                "historical_parallel": None,
-            }, ensure_ascii=False)
-
-        with patch("council.calibrate.assemble_council_features", return_value=mock_features), \
-             patch("council.debate.assemble_council_features", return_value=mock_features), \
-             patch("council.debate.call_llm", new_callable=AsyncMock, side_effect=mock_llm):
+        # Mock 投资大师校准失败（信号不匹配）
+        with patch("council.calibrate.run_agent_calibration", new_callable=AsyncMock, return_value=False), \
+             patch("council.calibrate.run_da_calibration", new_callable=AsyncMock, return_value=True), \
+             patch("council.calibrate.run_synthesizer_calibration", new_callable=AsyncMock, return_value=True):
             result = await run_calibration()
-            # 茅台期望 bullish 但收到 bearish → FAILED
             assert result is False
