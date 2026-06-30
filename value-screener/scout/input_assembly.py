@@ -336,7 +336,8 @@ def assemble_snapshot(ticker: str, cache_manager: CacheManager | None = None) ->
     }
 
     # Insufficient data guard
-    critical_fields = ["name", "industry", "market_cap"]
+    # industry 从 critical_fields 移除（akshare spot_em 不返回行业，L3 深研主要依赖财务数据）
+    critical_fields = ["name", "market_cap"]
     missing_critical = [f for f in critical_fields if features.get(f) is None]
 
     # 统计整体缺失（排除 ticker 和趋势标注字段）

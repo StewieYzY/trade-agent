@@ -37,9 +37,16 @@ def _get_fetcher(dim: str):
 
 @app.command()
 def fetch(ticker: str, dim: str = "basic"):
-    """采集单只股票指定维度数据，输出 JSON."""
+    """采集单只股票指定维度数据，输出 JSON 并写入缓存."""
+    from data.cache.manager import CacheManager
     fetcher = _get_fetcher(dim)
     data = fetcher.fetch_with_fallback(ticker)
+
+    # 成功时写入缓存（与 batch 行为一致）
+    if isinstance(data, dict) and not data.get("__error__"):
+        cache = CacheManager()
+        cache.set(ticker, dim, data)
+
     typer.echo(json.dumps(data, ensure_ascii=False, default=str, indent=2))
 
 
@@ -169,6 +176,67 @@ def scout(
         typer.echo(output_json)
 
     typer.echo(f"L2 筛选完成：{len(shortlist)}/{len(candidates)} 只 deep_dive（top-20 cap）")
+
+
+def _normalize_ticker(ticker: str) -> str:
+    """规范化 ticker：6 位数字自动补后缀.
+
+    规则（A 股惯例）：
+    - 6/9 开头 → .SH（上交所）
+    - 0/3 开头 → .SZ（深交所）
+    - 已有后缀 → 保持不变
+    """
+    ticker = ticker.strip().upper()
+    if "." in ticker:
+        return ticker
+    if len(ticker) != 6 or not ticker.isdigit():
+        raise typer.BadParameter(
+            f"invalid ticker: {ticker!r}, expected 6-digit code (e.g., 600519)"
+        )
+    if ticker[0] in ("6", "9"):
+        return f"{ticker}.SH"
+    if ticker[0] in ("0", "3"):
+        return f"{ticker}.SZ"
+    raise typer.BadParameter(
+        f"unknown exchange for ticker: {ticker!r}, expected 6/9 → SH or 0/3 → SZ"
+    )
+
+
+@app.command()
+def council(
+    ticker: str = typer.Option(None, "--ticker", help="股票代码（6 位数字，自动补 .SH/.SZ）"),
+    calibrate: bool = typer.Option(False, "--calibrate", help="跑校准测试"),
+    force: bool = typer.Option(False, "--force", help="跳过缓存，强制重跑 LLM"),
+):
+    """L3 天团深研：巴菲特单 agent 对单股做深度研判.
+
+    环境变量（必填）：
+    - LLM_API_KEY: LLM API 密钥
+    - LLM_API_BASE: LLM API base URL
+    - LLM_MODEL_HEAVY: 重度推理模型（R1-3）
+    - LLM_MODEL_MODERATE: 中度推理模型（R4）
+
+    成本估算：单股单 agent ~¥0.675/只（仅 R1 调用）。
+    """
+    import asyncio
+
+    if calibrate:
+        from council.calibrate import run_calibration
+        passed = asyncio.run(run_calibration())
+        raise typer.Exit(code=0 if passed else 1)
+
+    if not ticker:
+        raise typer.BadParameter("must provide --ticker or --calibrate")
+
+    normalized = _normalize_ticker(ticker)
+    typer.echo(f"L3 Council: {normalized}")
+
+    from council.debate import run_debate
+    from datetime import date
+    result = asyncio.run(run_debate(normalized, force=force))
+
+    typer.echo(result.to_json())
+    typer.echo(f"\n辩论记录已写入 debate/{normalized.split('.')[0]}/{date.today().isoformat()}.md")
 
 
 if __name__ == "__main__":
