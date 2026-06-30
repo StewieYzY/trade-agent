@@ -16,6 +16,147 @@ import typer
 
 app = typer.Typer(help="value-screener 数据采集 CLI")
 
+# L4 监控层子命令组（tasks 1.2 占位，后续 task 7.x 实现）
+monitor_app = typer.Typer(name="monitor", help="L4 监控层：weekly 主循环、watchlist 聚合、diff、历史轨迹")
+app.add_typer(monitor_app)
+
+
+@monitor_app.command(name="weekly")
+def monitor_weekly(
+    l1_file: str = typer.Option(None, "--l1-file", help="L1 产出文件路径"),
+    output: str = typer.Option(None, "--output", help="周报 JSON 输出路径"),
+    force_l2: bool = typer.Option(False, "--force-l2", help="强制重跑 L2（忽略 diff 阈值）"),
+    force_l3: bool = typer.Option(False, "--force-l3", help="强制重跑 L3（忽略 diff 阈值）"),
+):
+    """L4 主循环：聚合 → diff → 触发 L2/L3 → 催化检测 → 提醒."""
+    import asyncio
+    from monitor.weekly import run_weekly
+
+    if force_l2:
+        typer.echo("⚠️  强制重跑 L2 模式：将忽略 diff 阈值，成本可能上升")
+    if force_l3:
+        typer.echo("⚠️  强制重跑 L3 模式：将忽略 diff 阈值，成本显著上升")
+        # 估算成本：假设 20 只股票，每只 ¥40
+        estimated_cost = 20 * 40
+        if not typer.confirm(f"预估成本 ¥{estimated_cost}（20 只 × ¥40），是否继续？"):
+            typer.echo("已取消")
+            raise typer.Exit()
+
+    report = asyncio.run(run_weekly(
+        l1_output_file=l1_file,
+        force_l2=force_l2,
+        force_l3=force_l3,
+    ))
+
+    if output:
+        Path(output).write_text(
+            json.dumps(report, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        typer.echo(f"周报已写入：{output}")
+
+
+@monitor_app.command(name="watchlist")
+def monitor_watchlist(
+    date: str = typer.Option(None, "--date", help="指定日期（YYYY-MM-DD），缺省最新"),
+    json_output: bool = typer.Option(False, "--json", help="输出原始 JSON"),
+):
+    """查看最新或指定日期 watchlist."""
+    from monitor.diff import get_latest_watchlist
+
+    watchlist_dir = Path("watchlist")
+
+    if date:
+        file_path = watchlist_dir / f"{date}.json"
+        if not file_path.exists():
+            raise typer.BadParameter(f"watchlist 不存在：{date}")
+        with file_path.open(encoding="utf-8") as f:
+            data = json.load(f)
+    else:
+        result = get_latest_watchlist(watchlist_dir)
+        if not result:
+            raise typer.BadParameter("watchlist 目录为空，请先运行 monitor weekly")
+        date, data = result
+
+    if json_output:
+        typer.echo(json.dumps(data, ensure_ascii=False))
+    else:
+        typer.echo(f"📋 Watchlist {date}")
+        typer.echo(f"  L1 candidates: {data.get('l1_candidates', 0)}")
+        typer.echo(f"  L2 shortlist: {data.get('l2_shortlist', 0)}")
+        typer.echo(f"  生成时间：{data.get('generated_at', 'unknown')}")
+        typer.echo(f"\nCandidates (top 10):")
+        for c in data.get("candidates", [])[:10]:
+            typer.echo(f"  {c['ticker']} [{c.get('stage', 'l1')}] score={c.get('l1_score', 'N/A')}")
+
+
+@monitor_app.command(name="diff")
+def monitor_diff(
+    date: str = typer.Option(None, "--date", help="指定日期（YYYY-MM-DD），缺省最新"),
+):
+    """查看最新或指定日期 diff 报告."""
+    from monitor.diff import get_latest_watchlist, get_previous_watchlist, compute_diff
+
+    watchlist_dir = Path("watchlist")
+
+    if date:
+        file_path = watchlist_dir / f"{date}.json"
+        if not file_path.exists():
+            raise typer.BadParameter(f"watchlist 不存在：{date}")
+        with file_path.open(encoding="utf-8") as f:
+            current = json.load(f)
+        current_date = date
+    else:
+        result = get_latest_watchlist(watchlist_dir)
+        if not result:
+            raise typer.BadParameter("watchlist 目录为空")
+        current_date, current = result
+
+    previous = get_previous_watchlist(current_date, watchlist_dir)
+    diff_report = compute_diff(current, previous)
+
+    typer.echo(f"📊 Diff Report {current_date}")
+    if diff_report.get("first_run"):
+        typer.echo("  首次运行，无历史对比")
+    else:
+        typer.echo(f"  新增：{len(diff_report['added'])}")
+        typer.echo(f"  移除：{len(diff_report['removed'])}")
+        typer.echo(f"  l1_score 变化：{len(diff_report['l1_score_changed'])}")
+        typer.echo(f"  stage 升级：{len(diff_report['stage_upgraded'])}")
+        typer.echo(f"  stage 降级：{len(diff_report['stage_downgraded'])}")
+        typer.echo(f"  verdict 变化：{len(diff_report['verdict_changed'])}")
+        typer.echo(f"  估值触及低位：{len(diff_report['valuation_low'])}")
+        typer.echo(f"\n触发条件：")
+        typer.echo(f"  L2 重评估：{len(diff_report['l2_triggers'])} 只")
+        typer.echo(f"  L3 深研：{len(diff_report['l3_triggers'])} 只")
+
+
+@monitor_app.command(name="history")
+def monitor_history(
+    ticker: str = typer.Argument(..., help="股票代码（如 600519.SH）"),
+    date_from: str = typer.Option(None, "--from", help="起始日期（YYYY-MM-DD）"),
+    date_to: str = typer.Option(None, "--to", help="截止日期（YYYY-MM-DD）"),
+):
+    """查询单只股票历史轨迹."""
+    from monitor.diff import history
+
+    records = history(ticker, date_from, date_to)
+
+    if not records:
+        typer.echo(f"无历史记录：{ticker}")
+        return
+
+    typer.echo(f"📈 {ticker} 历史轨迹")
+    typer.echo("")
+    typer.echo("| 日期 | l1_score | stage | l3_verdict | pe_percentile |")
+    typer.echo("|------|----------|-------|------------|---------------|")
+    for r in records:
+        typer.echo(
+            f"| {r['date']} | {r.get('l1_score', 'N/A')} | "
+            f"{r.get('stage', 'l1')} | {r.get('l3_verdict', 'N/A')} | "
+            f"{r.get('pe_percentile_5y', 'N/A')} |"
+        )
+
 
 def _get_fetcher(dim: str):
     from data.fetchers.basic import BasicFetcher

@@ -7,6 +7,7 @@ A 股价值投资选股 + 多 agent 研判系统。当前处于**设计讨论阶
 | 目录 | 角色 |
 |---|---|
 | `design/total-design.md` | **当前设计稿**（第一参考源）——第一性原理、借鉴与砍掉的范围、目标架构、分阶段实施路径、技术决策 |
+| `design/architecture-decisions.md` | **架构决策记录**（AD-01 ~ AD-06）——跨 change 的架构级决策，change 拆分的依据，各 change 的 proposal/design 必须引用而非重复搬运 |
 | `design/prd-rule&case.md` | **补充 PRD**——RULE.md 分层体系 + 历史案例库设计 |
 | `design/2bdiscuss.md` | **待讨论话题清单**——total-design 未覆盖的 8 个细节，含优先级和状态标记 |
 | `uzi-skill/` | 借鉴资产——开源股票分析 Claude plugin（v3.9.0，可运行，独立 git 仓库） |
