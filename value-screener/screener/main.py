@@ -51,6 +51,13 @@ def screen_a_shares(tickers: list[str], exclude_cyclicals: bool = False) -> dict
 
     total = len(tickers)
 
+    # 退化标记（l4b-docker-run）：让单只/小批输入的语义退化可见，不改漏斗逻辑
+    # - input_scale: < 300 只 → "subset"（top_300 截断无意义），否则 "full_market"
+    # - industry_pe_degraded: 行业 PE 映射为空（样本不足，无行业达 MIN_INDUSTRY_SAMPLES）
+    #   → true。单只/小批必退化；全市场通常 false。
+    input_scale = "subset" if total < 300 else "full_market"
+    industry_pe_degraded = len(industry_pe_map) == 0
+
     # 第一道漏斗: Hard Gates
     after_hard_gates = []
     excluded_by_gates = {}
@@ -134,6 +141,8 @@ def screen_a_shares(tickers: list[str], exclude_cyclicals: bool = False) -> dict
             "after_hard_gates": len(after_hard_gates),
             "after_factors": len(top_300),
             "after_heat_filter": len(final_candidates),
-            "excluded_by_gates": excluded_by_gates
+            "excluded_by_gates": excluded_by_gates,
+            "industry_pe_degraded": industry_pe_degraded,
+            "input_scale": input_scale,
         }
     }

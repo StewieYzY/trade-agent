@@ -4,3 +4,4 @@ data/cache/
 debate/
 watchlist/
 *.pyc
+.env

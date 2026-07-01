@@ -33,24 +33,24 @@ L0→L4 全流程骨架已落地（`value-screener/`），6 个 OpenSpec change 
 | L4 监控 | `value-screener/monitor/`（`weekly` `aggregation` `diff` `catalyst` `alert`） | 已落地 |
 | L3→L4 接口 | `value-screener/watchlist/*.json` | 由 `council/debate.py::_write_council_output` 直接写 JSON，无 `watchlist/manager.py` |
 | 前端 | — | **未落地**，total-design §8 规划的 `frontend/`（Streamlit）未创建 |
-| 部署 | `value-screener/Dockerfile` | 仅 Dockerfile，**无 `docker-compose.yml`** |
+| 部署 | `value-screener/Dockerfile` + `docker-compose.yml` | 已落地（单服务 + bind mount 三卷 + `.env` 注入 5 个 LLM env，`${VAR:?err}` fail-fast）；`docker-runtime` capability 已建。**真实端到端实跑门待手动验证**（见已知差距） |
 | RULE.md 三层 | — | **未落地**，见下 |
 
-CLI 入口：`value-screener/cli.py`（typer），子命令 `fetch` / `fetch-batch` / `cache-clear` / `screen` / `scout` / `council`（含 `--calibrate`）/ `monitor weekly|watchlist|diff|history`。测试：`value-screener/tests/`（17 个测试文件）。
+CLI 入口：`value-screener/cli.py`（typer），子命令 `fetch` / `batch` / `cache-clear` / `screen` / `scout` / `council`（含 `--calibrate`）/ `monitor weekly|watchlist|diff|history`。测试：`value-screener/tests/`（18 个测试文件）。Docker：`docker compose -f value-screener/docker-compose.yml run --rm value-screener <子命令>`，LLM env 走 `.env`（模板 `.env.example`）。
 
 ## 已知差距（设计目标 vs 现状）
 
 - **RULE.md 三层体系未落地**：`~/.trade-agent/RULE.md`、`value-screener/RULE.md` 均不存在，`council/prompts/*.md` 目录不存在。当前 agent prompt 内联在 `council/prompt.py` 的 `build_*_prompt()` 函数里，**没有 global→project→agent 三层拼接逻辑**（设计目标见 `design/prd-rule&case.md`，实现位置原计划 `council/prompt_builder.py` 但该文件不存在）。
 - **前端未落地**：Streamlit 前端（total-design Phase 5）未创建。
 - **watchlist 无 manager**：`watchlist/` 目前只有 L3 写出的产出 JSON，total-design §8 规划的 `watchlist/manager.py`（增量 diff / 历史轨迹）未实现，diff 逻辑现由 `monitor/diff.py` 承担。
-- **端到端全天团实跑未验证**：核心架构假设（5+1 天团 4 轮辩论产生信息增量，AD-05/AD-09）尚无真实多 agent 辩论产出佐证。这是当前最高优先级的待验证项。
+- **端到端全天团实跑未验证**：核心架构假设（5+1 天团 4 轮辩论产生信息增量，AD-05/AD-09）尚无真实多 agent 辩论产出佐证。Docker 运行时已就绪（`l4b-docker-run` change：compose + VOLUME + LLM env fail-fast），但两道实跑验证门（最小闭环 `council --ticker 600519`、完整链路 L1→L2→L3）尚未手动跑通。这是当前最高优先级的待验证项。
 
 ## 技术栈
 
 Python 3.10+，数据层 akshare，LLM 调用走 OpenAI 兼容 HTTP API（`httpx`，`council/llm.py` + `scout/batch.py`），无 LLM 框架依赖。CLI 用 typer，测试用 pytest。
 
 **部署与前端**（见 total-design「九、技术决策」，部分未落地）：
-- Docker 容器化部署：`Dockerfile` 已有，`docker-compose.yml` 未创建
+- Docker 容器化部署：`Dockerfile` + `docker-compose.yml` 均已有（`l4b-docker-run` change），单服务 + `command` 覆盖 ENTRYPOINT，bind mount `data`/`watchlist`/`debate` 三卷，`.env` 注入 5 个 LLM env
 - MVP 前端用 **Streamlit**（纯 Python 数据看板）——未落地
 - 后续如需复杂交互可迁移到 FastAPI + React
 

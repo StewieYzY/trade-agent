@@ -50,6 +50,51 @@ export HTTPS_PROXY="http://proxy.example.com:8080"
 - 本地部署的 Ollama/vLLM/LM Studio
 - 其他 OpenAI API 兼容服务
 
+## Docker 运行
+
+项目提供 `docker-compose.yml`,单服务 + `command` 覆盖模式,一条 `docker compose run` 跑任意 CLI 子命令,产出持久化到宿主。
+
+### 首次配置
+
+```bash
+cd value-screener
+cp .env.example .env
+# 编辑 .env,填入 5 个 LLM 变量(LLM_API_KEY / LLM_API_BASE / LLM_MODEL / LLM_MODEL_HEAVY / LLM_MODEL_MODERATE)
+# .env 不进 git(已在 .gitignore),.env.example 进 git 但只含占位符
+```
+
+`.env` 缺失任一必填变量时,`docker compose run` 会在容器启动前 fail-fast 报错(避免容器跑起来后 LLM 调用才失败)。
+
+### 构建镜像
+
+```bash
+docker compose build
+```
+
+### 常用命令
+
+```bash
+# 任何 CLI 子命令追加到 ENTRYPOINT(python cli.py)之后
+docker compose run --rm value-screener --help
+docker compose run --rm value-screener fetch --ticker 600519 --dim basic
+docker compose run --rm value-screener council --ticker 600519          # L3 最小闭环(跳过 L1)
+docker compose run --rm value-screener batch tickers.txt               # L0 批量采集
+docker compose run --rm value-screener screen --tickers tickers.txt --output l1.json
+docker compose run --rm value-screener scout --input l1.json --output l2.json
+```
+
+### 数据卷
+
+三个 bind mount 把容器内产出直接落到宿主同名目录,人可直接 `cat` 查看,无需 `docker cp`:
+
+| 容器路径 | 宿主路径 | 内容 |
+|---|---|---|
+| `/app/data` | `value-screener/data` | L0 采集缓存 |
+| `/app/watchlist` | `value-screener/watchlist` | L3/L4 watchlist JSON |
+| `/app/debate` | `value-screener/debate` | L3 辩论记录 |
+
+`--rm` 退出即删容器,但 bind mount 的产出留在宿主。`Dockerfile` 也声明了 `VOLUME` 作为无 compose 时的兜底,但 `--rm` 场景必须配 bind mount,不可依赖 VOLUME 兜底(匿名卷会随 `--rm` 一并删除)。
+
 ## 使用指南
 
 ### 1. 数据采集 (L0)

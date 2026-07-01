@@ -1,0 +1,25 @@
+# value-screener Docker Compose
+#
+# 单服务 + command 覆盖（design 决策 1）：
+#   docker compose run --rm value-screener <cli-subcommand>
+# 子命令参数追加到镜像 ENTRYPOINT（python cli.py）之后。
+#
+# LLM env 从同目录 .env 文件读取（.env.example 为模板，.env 不进 git）。
+# ${VAR:?err} 语法：变量缺失时 compose 在容器启动前 fail-fast 报错，
+# 避免容器跑起来后 LLM 调用时才报错（design 决策 2）。
+#
+# 三个数据卷 bind mount 到宿主同名目录（design 决策 3）：
+# 产出直接落宿主，人可直接 cat 查看，无需 docker cp。
+services:
+  value-screener:
+    build: .
+    environment:
+      - LLM_API_KEY=${LLM_API_KEY:?LLM_API_KEY is required (see .env.example)}
+      - LLM_API_BASE=${LLM_API_BASE:?LLM_API_BASE is required (see .env.example)}
+      - LLM_MODEL=${LLM_MODEL:?LLM_MODEL is required (see .env.example)}
+      - LLM_MODEL_HEAVY=${LLM_MODEL_HEAVY:?LLM_MODEL_HEAVY is required (see .env.example)}
+      - LLM_MODEL_MODERATE=${LLM_MODEL_MODERATE:?LLM_MODEL_MODERATE is required (see .env.example)}
+    volumes:
+      - ./data:/app/data
+      - ./watchlist:/app/watchlist
+      - ./debate:/app/debate
