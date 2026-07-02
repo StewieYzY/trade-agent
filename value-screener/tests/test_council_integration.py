@@ -95,11 +95,13 @@ def mock_full_council():
     }
 
     # 完整序列：R1×4 + R2×4 + R3 + R4 = 10 次调用
+    # f1-deviation-fix §7：call_llm 返回 (content, usage)，mock 带 usage
+    usage = {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}
     return [
-        *[json.dumps(r, ensure_ascii=False) for r in r1_responses],
-        *[json.dumps(r, ensure_ascii=False) for r in r2_responses],
-        json.dumps(da_response, ensure_ascii=False),
-        json.dumps(synthesizer_response, ensure_ascii=False),
+        *[(json.dumps(r, ensure_ascii=False), usage) for r in r1_responses],
+        *[(json.dumps(r, ensure_ascii=False), usage) for r in r2_responses],
+        (json.dumps(da_response, ensure_ascii=False), usage),
+        (json.dumps(synthesizer_response, ensure_ascii=False), usage),
     ]
 
 

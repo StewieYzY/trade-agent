@@ -303,12 +303,13 @@ def scout(
 
     typer.echo(f"读取 L1 输出：{len(candidates)} 只候选")
 
-    # 2. 调用 scout_batch（异步）
+    # 2. 调用 scout_batch（异步，返回 (shortlist, usage_summary)，P1 修复）
     from scout.batch import scout_batch
-    shortlist = asyncio.run(scout_batch(candidates, force=force))
+    shortlist, usage_summary = asyncio.run(scout_batch(candidates, force=force))
 
-    # 3. 输出结果
-    output_json = json.dumps(shortlist, ensure_ascii=False, indent=2)
+    # 3. 输出结果（P1 修复：shortlist + usage_summary 一起写，供成本分析用全量调用数据）
+    output_payload = {"shortlist": shortlist, "usage_summary": usage_summary}
+    output_json = json.dumps(output_payload, ensure_ascii=False, indent=2)
 
     if output:
         Path(output).write_text(output_json, encoding="utf-8")
@@ -317,6 +318,21 @@ def scout(
         typer.echo(output_json)
 
     typer.echo(f"L2 筛选完成：{len(shortlist)}/{len(candidates)} 只 deep_dive（top-20 cap）")
+
+    # f1-deviation-fix §7 / P1 修复：AD-03 成本实测——汇总**所有** LLM 调用（非仅 deep_dive）
+    call_count = usage_summary.get("call_count", 0)
+    cache_hits = usage_summary.get("cache_hits", 0)
+    total_prompt = usage_summary.get("prompt_tokens", 0)
+    total_completion = usage_summary.get("completion_tokens", 0)
+    total_tokens = usage_summary.get("total_tokens", 0)
+    typer.echo(
+        f"Token usage（本次实跑）：LLM 调用 {call_count} 次，cache 命中 {cache_hits} 次，"
+        f"prompt={total_prompt}，completion={total_completion}，total={total_tokens}"
+    )
+    if total_tokens:
+        est_cost = total_tokens / 1000 * 0.001
+        typer.echo(f"  费用估算：≈¥{est_cost:.4f}（按 ¥0.001/1k token）"
+                   f"；等效全量调用数 = {call_count + cache_hits}")
 
 
 def _normalize_ticker(ticker: str) -> str:

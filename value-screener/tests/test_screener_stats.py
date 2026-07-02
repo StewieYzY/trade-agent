@@ -139,14 +139,15 @@ def test_scout_batch_only_reads_ticker_unchanged_by_new_stats():
     tracking_candidates = [TrackingDict(c) for c in candidates]
 
     async def mock_call(snapshot, system):
-        return json.dumps({
+        # f1-deviation-fix §7：call_llm 返回 (content, usage)
+        return (json.dumps({
             "verdict": "deep_dive",
             "confidence": 85,
             "one_liner": "test",
             "red_flags": [],
             "green_flags": [],
             "anti_trap_flags": [],
-        })
+        }), {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2})
 
     with patch("scout.batch.call_llm_snapshot", new=mock_call):
         with patch("scout.batch.assemble_snapshot") as mock_assemble:
@@ -174,7 +175,7 @@ def test_scout_batch_only_reads_ticker_unchanged_by_new_stats():
             }
             with patch("scout.batch.ScoutCache") as mock_cache_cls:
                 mock_cache_cls.return_value.get.return_value = None
-                result = asyncio.run(scout_batch(tracking_candidates, force=True))
+                result, _usage = asyncio.run(scout_batch(tracking_candidates, force=True))
 
     # 只返回 deep_dive 的那只
     assert len(result) == 1

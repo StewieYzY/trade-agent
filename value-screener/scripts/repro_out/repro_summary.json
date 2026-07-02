@@ -1,0 +1,86 @@
+{
+  "600519": {
+    "status": "insufficient_data",
+    "error": "insufficient_data",
+    "missing_fields": [
+      "name",
+      "industry",
+      "market_cap",
+      "pe_ttm",
+      "pb",
+      "pe_percentile_5y",
+      "roe_3y",
+      "net_margin",
+      "debt_ratio",
+      "goodwill_ratio",
+      "operating_cashflow",
+      "net_profit",
+      "revenue_growth",
+      "pledge_ratio",
+      "price_change_60d",
+      "turnover_avg_percentile_60d",
+      "f_score"
+    ],
+    "financials_floor": {
+      "pe_ttm": null,
+      "roe_3y": null,
+      "net_margin": null
+    }
+  },
+  "600900": {
+    "status": "insufficient_data",
+    "error": "insufficient_data",
+    "missing_fields": [
+      "name",
+      "industry",
+      "market_cap",
+      "pe_ttm",
+      "pb",
+      "pe_percentile_5y",
+      "roe_3y",
+      "net_margin",
+      "debt_ratio",
+      "goodwill_ratio",
+      "operating_cashflow",
+      "net_profit",
+      "revenue_growth",
+      "pledge_ratio",
+      "price_change_60d",
+      "turnover_avg_percentile_60d",
+      "f_score"
+    ],
+    "financials_floor": {
+      "pe_ttm": null,
+      "roe_3y": null,
+      "net_margin": null
+    }
+  },
+  "600009": {
+    "status": "insufficient_data",
+    "error": "insufficient_data",
+    "missing_fields": [
+      "name",
+      "industry",
+      "market_cap",
+      "pe_ttm",
+      "pb",
+      "pe_percentile_5y",
+      "roe_3y",
+      "net_margin",
+      "debt_ratio",
+      "goodwill_ratio",
+      "operating_cashflow",
+      "net_profit",
+      "revenue_growth",
+      "pledge_ratio",
+      "price_change_60d",
+      "turnover_avg_percentile_60d",
+      "f_score"
+    ],
+    "financials_floor": {
+      "pe_ttm": null,
+      "roe_3y": null,
+      "net_margin": null
+    }
+  }
+}

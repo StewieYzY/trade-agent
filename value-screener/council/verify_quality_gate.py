@@ -14,11 +14,114 @@
 import argparse
 import asyncio
 import json
+import re
 import sys
 from pathlib import Path
 
 from council.debate import run_debate
 from council.features import assemble_council_features
+from council.schema import AgentOutput
+
+
+# ── 可导入的校验函数（f1-deviation-fix §6, G4）──────────────────────────
+# 把核心校验逻辑抽成可单测函数，CLI 的 argparse+print 部分只做包装。
+# spec debate-quality-gate: R1 输出引用真实特征校验（反向校验）+ 环形引用检测。
+
+
+def verify_r1_feature_grounding(output: AgentOutput, features: dict) -> tuple[bool, list[str]]:
+    """R1 反向特征校验：key_metrics 里的数字必须在 features 任一字段值中出现.
+
+    spec debate-quality-gate Requirement: R1 输出不得含 features 中不存在的凭空数字。
+    反向校验比正向（NLP 模糊匹配）可靠——提取 key_metrics 里的数字，检查是否在
+    features 任一字段值中出现；含凭空数字则标记幻觉。
+
+    Args:
+        output: R1 AgentOutput（含 key_metrics）
+        features: assemble_council_features 返回的 features dict
+
+    Returns:
+        (ok, issues)：ok=True 通过，issues 为问题列表（空则通过）
+    """
+    issues: list[str] = []
+    # 收集 features 中所有数值（含 list 中的元素、标量），按绝对值 + 容差归一化
+    # 用于模糊匹配：R1 常把 -17.84 写成 "17.84"（跌幅取绝对值），或 2.22 写成 "2.2"（四舍五入）
+    feature_numbers: list[float] = []
+    for v in features.values():
+        if isinstance(v, (int, float)):
+            feature_numbers.append(abs(float(v)))
+        elif isinstance(v, list):
+            for item in v:
+                if isinstance(item, (int, float)):
+                    feature_numbers.append(abs(float(item)))
+
+    def _found_in_features(n: float) -> bool:
+        """数字 n 是否在 features 任一字段值中（绝对值 + 0.5 容差，模糊匹配）."""
+        target = abs(n)
+        return any(abs(fv - target) <= 0.5 for fv in feature_numbers)
+
+    for metric in (output.key_metrics or []):
+        # 提取该 metric 里的数据点数字，跳过单位/标签语境的数字：
+        # - "60日"/"5年"/"3季" → 紧跟 日/年/季 的是时间窗标签，非数据值
+        # - "降至15-20倍" → 紧跟 倍 的是单位/预测，非历史数据值
+        for m in re.finditer(r"(\d+\.?\d*)", metric):
+            n = m.group(1)
+            end = m.end()
+            next_char = metric[end:end + 1]
+            if next_char in ("日", "年", "季", "倍", "期"):
+                continue  # 单位/时间窗标签，跳过
+            n_val = float(n)
+            if _found_in_features(n_val):
+                continue
+            # 该数字在 features 中找不到来源 → 凭空
+            issues.append(
+                f"key_metrics '{metric}' 含数字 {n}，但 features 中无对应字段值"
+                f"（疑似凭空编造/数据未注入）"
+            )
+
+    return (len(issues) == 0), issues
+
+
+def detect_circular_reference(
+    output: AgentOutput,
+    agent_ids: tuple[str, ...] | None = None,
+) -> tuple[bool, list[str]]:
+    """R1 环形引用检测：core_thesis 出现其他 agent_id 名字 → 幻觉引用.
+
+    spec debate-quality-gate Scenario: 环形引用检测。R1（other_opinions=None，本该隔离）
+    的 core_thesis 中出现其他 agent_id 的名字（如 buffett 写 "munger 看好..."），
+    则 R1 信息隔离被破坏——R1 无 other_opinions 输入，引用他人只能是模型编造。
+
+    Args:
+        output: R1 AgentOutput
+        agent_ids: 可选，参与互引检测的 agent_id 集合。缺省时动态从
+            `council.agents.AGENT_REGISTRY.keys()` 读取（f1-deviation-fix P3 修复：
+            原硬编码 (buffett/munger/duan/feng_liu)，张坤加入时漏检；现动态读取，
+            且支持调用方注入便于单测——run_debate 可传当前 agents 列表）。
+
+    Returns:
+        (ok, issues)：ok=True 通过，issues 为问题列表
+    """
+    if agent_ids is None:
+        # 延迟 import 避免模块加载时耦合；调用时读 AGENT_REGISTRY（测试可 patch）
+        from council.agents import AGENT_REGISTRY
+        agent_ids = tuple(AGENT_REGISTRY.keys())
+
+    issues: list[str] = []
+    thesis = (output.core_thesis or "").lower()
+    self_id = output.name.lower()
+
+    for agent_id in agent_ids:
+        aid = agent_id.lower()
+        if aid == self_id:
+            continue  # 自引不算环形
+        if aid in thesis:
+            issues.append(
+                f"R1 core_thesis 引用其他 agent '{agent_id}'（{output.name} 的 R1 应隔离，"
+                f"无 other_opinions 输入，引用他人只能是模型编造）"
+            )
+
+    return (len(issues) == 0), issues
+
 
 
 async def verify_mechanism_gate(ticker: str, force: bool = False) -> bool:
@@ -130,6 +233,30 @@ async def verify_quality_gate(ticker: str, force: bool = False) -> bool:
         else:
             print(f"\n[INFO] R1 core_thesis: {unique_theses}/4 个唯一论点")
 
+        # f1-deviation-fix §6：R1 特征接地 + 环形引用校验（spec debate-quality-gate）
+        print("\n[R1 特征接地 + 环形引用校验]")
+        grounding_failures = 0
+        circular_failures = 0
+        features = assemble_council_features(ticker)
+        # features 不足时跳过反向校验（已在 R1 入口 fail-fast，此处 features 可能空）
+        if "error" in features:
+            print("[INFO] features 不足（insufficient_data），跳过反向特征校验")
+            features = {}
+        for agent in result.round1:
+            ok_ground, ground_issues = verify_r1_feature_grounding(agent, features)
+            ok_circ, circ_issues = detect_circular_reference(agent)
+            if not ok_ground:
+                grounding_failures += 1
+                print(f"  [❌ 幻觉] {agent.name}: {ground_issues}")
+            if not ok_circ:
+                circular_failures += 1
+                print(f"  [❌ 环形引用] {agent.name}: {circ_issues}")
+        if grounding_failures == 0 and circular_failures == 0:
+            print(f"  [PASSED] R1 全部 agent 引用真实特征、无环形引用")
+        else:
+            print(f"  [WARNING] 接地失败 {grounding_failures} 个，环形引用 {circular_failures} 个"
+                  f"——若 features 充足仍失败，触发根因排查（数据未注入或模型幻觉）")
+
         # R2 修订检查
         print("\n[R2 修订检查]")
         revision_count = 0
@@ -179,11 +306,8 @@ async def verify_quality_gate(ticker: str, force: bool = False) -> bool:
 async def verify_cost(ticker: str, force: bool = False) -> bool:
     """7.3 成本验证.
 
-    记录全天团单股 LLM 调用次数（作为参考数据，不做硬阈值约束）。
-
-    注意：token 消耗和费用采集需后续从 API 响应中提取（修改 call_llm 签名
-    或增加 side-channel 记录）。当前 call_llm 只返回 JSON 字符串，
-    token usage 未被采集，此处仅记录调用次数。
+    记录全天团单股 LLM 调用次数 + token 消耗（f1-deviation-fix §7：call_llm 已采集 usage，
+    run_debate 写入辩论记录 md 的 `## Token Usage` 段，此处解析汇总）。
     """
     print(f"\n{'='*60}")
     print(f"7.3 成本验证: {ticker}")
@@ -204,14 +328,68 @@ async def verify_cost(ticker: str, force: bool = False) -> bool:
         print(f"  R3: {r3_count} 次 LLM 调用（重度推理，DA）")
         print(f"  R4: {r4_count} 次 LLM 调用（中度推理，Synthesizer）")
         print(f"  总计: {total} 次 LLM 调用")
-        print("\n[INFO] 实际 token 消耗和费用需从 LLM API 响应中提取")
-        print("       当前 call_llm 未返回 token usage，需后续工程补充")
+
+        # 解析辩论记录 md 的 Token Usage 段（f1-deviation-fix §7）
+        usage_summary = _parse_usage_from_debate(result.debate_path)
+        if usage_summary:
+            print(f"  prompt_tokens 合计: {usage_summary['prompt_tokens']}")
+            print(f"  completion_tokens 合计: {usage_summary['completion_tokens']}")
+            print(f"  total_tokens 合计: {usage_summary['total_tokens']}")
+            # AD-03 粗略费用估算（按 DeepSeek 定价 ≈¥0.001/1k token，仅参考量级）
+            est_cost = usage_summary["total_tokens"] / 1000 * 0.001
+            print(f"  费用估算: ≈¥{est_cost:.4f}（参考量级，按 ¥0.001/1k token）")
+        else:
+            print("  token usage: 未采集到（可能为 mock 或 API 未返回 usage 字段）")
 
         return True
 
     except Exception as e:
         print(f"[FAILED] 异常: {e}")
         return False
+
+
+def _parse_usage_from_debate(debate_path: str | Path | None) -> dict | None:
+    """从辩论记录 md 解析 `## Token Usage` 段（f1-deviation-fix §7）.
+
+    run_debate 把 usage_log 写成 md 末尾的 JSON 块。返回汇总 dict
+    {prompt_tokens, completion_tokens, total_tokens, call_count}，无则 None。
+    """
+    if not debate_path:
+        return None
+    p = Path(debate_path)
+    if not p.exists():
+        return None
+
+    text = p.read_text(encoding="utf-8")
+    marker = "## Token Usage"
+    idx = text.find(marker)
+    if idx < 0:
+        return None
+
+    # 找 marker 之后的第一个 ```json ... ``` 块
+    json_start = text.find("```json", idx)
+    if json_start < 0:
+        return None
+    json_start = text.find("\n", json_start) + 1
+    json_end = text.find("```", json_start)
+    if json_end < 0:
+        return None
+    block = text[json_start:json_end].strip()
+
+    try:
+        usage_log = json.loads(block)
+    except json.JSONDecodeError:
+        return None
+
+    if not isinstance(usage_log, list) or not usage_log:
+        return None
+
+    return {
+        "call_count": len(usage_log),
+        "prompt_tokens": sum(int(u.get("prompt_tokens", 0) or 0) for u in usage_log),
+        "completion_tokens": sum(int(u.get("completion_tokens", 0) or 0) for u in usage_log),
+        "total_tokens": sum(int(u.get("total_tokens", 0) or 0) for u in usage_log),
+    }
 
 
 def print_fallback_path():

@@ -30,6 +30,7 @@ async def call_agent(
     features: dict,
     other_opinions: list[AgentOutput] | None = None,
     reasoning_level: str = "heavy",
+    usage_accumulator: list[dict] | None = None,
 ) -> AgentOutput:
     """调用单个 agent，返回 AgentOutput.
 
@@ -39,6 +40,8 @@ async def call_agent(
         features: 特征数据 dict
         other_opinions: 其他 agent 的 R1 输出（R2 用，R1 为空列表）
         reasoning_level: 推理等级（"heavy" / "moderate"）
+        usage_accumulator: 可选，传入则每次调用的 token usage 追加到此列表
+            （f1-deviation-fix §7：供 run_debate 累加 AD-03 成本，不改 CouncilResult schema）
 
     Returns:
         AgentOutput 实例
@@ -54,8 +57,10 @@ async def call_agent(
     # 构建 user message
     user_message = _build_user_message(ticker, features, other_opinions)
 
-    # 调用 LLM
-    raw_json = await call_llm(system_prompt, user_message, reasoning_level)
+    # 调用 LLM（f1-deviation-fix §7：返回 (content, usage)，usage 供 AD-03 成本累加）
+    raw_json, usage = await call_llm(system_prompt, user_message, reasoning_level)
+    if usage_accumulator is not None and usage:
+        usage_accumulator.append({"agent": agent_id, "round": reasoning_level, **usage})
 
     # 解析并校验
     return AgentOutput.from_json(agent_id, raw_json)
@@ -171,11 +176,36 @@ def _append_synthesizer_round(path: Path, syn: SynthesizerOutput) -> None:
         f.write("\n```\n")
 
 
+def _append_usage_summary(path: Path, usage_log: list[dict]) -> None:
+    """追加 token usage 汇总段（f1-deviation-fix §7，AD-03 成本实测）.
+
+    把每次 LLM 调用的 usage 累加，写入辩论记录 md 末尾。不改 CouncilResult schema。
+    缺失 usage（mock/旧 API 无 usage 字段）时写"未采集"占位，不崩溃。
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    total_prompt = sum(int(u.get("prompt_tokens", 0) or 0) for u in usage_log)
+    total_completion = sum(int(u.get("completion_tokens", 0) or 0) for u in usage_log)
+    total_tokens = sum(int(u.get("total_tokens", 0) or 0) for u in usage_log)
+    with path.open("a", encoding="utf-8") as f:
+        f.write("\n## Token Usage（AD-03 成本实测）\n")
+        if not usage_log:
+            f.write("（本次未采集到 usage，可能为 mock 或 API 未返回 usage 字段）\n")
+            return
+        f.write(f"- 调用次数：{len(usage_log)}\n")
+        f.write(f"- prompt_tokens 合计：{total_prompt}\n")
+        f.write(f"- completion_tokens 合计：{total_completion}\n")
+        f.write(f"- total_tokens 合计：{total_tokens}\n")
+        f.write("```json\n")
+        f.write(json.dumps(usage_log, ensure_ascii=False, indent=2))
+        f.write("\n```\n")
+
+
 async def _call_da(
     round1: list[AgentOutput],
     round2: list[AgentOutput] | None,
     ticker: str,
     features: dict,
+    usage_accumulator: list[dict] | None = None,
 ) -> AgentOutput:
     """调用 DA（Devil's Advocate）.
 
@@ -206,7 +236,9 @@ async def _call_da(
 
     user_message = "\n".join(parts)
 
-    raw_json = await call_llm(system_prompt, user_message, "heavy")
+    raw_json, usage = await call_llm(system_prompt, user_message, "heavy")
+    if usage_accumulator is not None and usage:
+        usage_accumulator.append({"agent": "da", "round": "heavy", **usage})
     return AgentOutput.from_json("da", raw_json)
 
 
@@ -216,6 +248,7 @@ async def _call_synthesizer(
     da_result: AgentOutput | None,
     ticker: str,
     features: dict,
+    usage_accumulator: list[dict] | None = None,
 ) -> SynthesizerOutput:
     """调用 Synthesizer（共识收敛器）.
 
@@ -252,7 +285,9 @@ async def _call_synthesizer(
 
     user_message = "\n".join(parts)
 
-    raw_json = await call_llm(system_prompt, user_message, "moderate")
+    raw_json, usage = await call_llm(system_prompt, user_message, "moderate")
+    if usage_accumulator is not None and usage:
+        usage_accumulator.append({"agent": "synthesizer", "round": "moderate", **usage})
     return SynthesizerOutput.from_json(raw_json)
 
 
@@ -401,7 +436,14 @@ async def run_debate(
     if features is None:
         features = assemble_council_features(ticker)
         if "error" in features:
-            raise ValueError(f"insufficient_data: {features.get('missing_fields', [])}")
+            missing = features.get("missing_fields", [])
+            # P4 修复：区分 guard 触发路径（critical_fields / financials_floor / missing_ratio）
+            guard = features.get("guard", "unknown")
+            guard_detail = features.get("guard_detail", "")
+            raise ValueError(
+                f"insufficient_data [{guard}]: 缺失字段 {missing}。"
+                f"{guard_detail}。再重跑 council。"
+            )
 
     # 2. 确定 agent 列表
     if agents is None:
@@ -419,9 +461,16 @@ async def run_debate(
     if force and path.exists():
         path.unlink()
 
+    # f1-deviation-fix §7：token usage 累加器（供 AD-03 成本实测，写入辩论记录 md，不改 schema）
+    usage_log: list[dict] = []
+
     # 5. Round 1: 各自表态（并行，彼此隔离）
     r1_tasks = [
-        call_agent(agent_id, ticker, features, other_opinions=None, reasoning_level="heavy")
+        call_agent(
+            agent_id, ticker, features,
+            other_opinions=None, reasoning_level="heavy",
+            usage_accumulator=usage_log,
+        )
         for agent_id in agents
     ]
     round1 = await asyncio.gather(*r1_tasks)
@@ -444,7 +493,11 @@ async def run_debate(
                 others.append(mock_opinions[agent_id])
 
             r2_tasks.append(
-                call_agent(agent_id, ticker, features, other_opinions=others, reasoning_level="heavy")
+                call_agent(
+                    agent_id, ticker, features,
+                    other_opinions=others, reasoning_level="heavy",
+                    usage_accumulator=usage_log,
+                )
             )
         round2 = await asyncio.gather(*r2_tasks)
         _append_round(path, 2, round2)
@@ -454,7 +507,7 @@ async def run_debate(
         da_result = None
         _append_round(path, 3, None)
     else:
-        da_result = await _call_da(round1, round2, ticker, features)
+        da_result = await _call_da(round1, round2, ticker, features, usage_accumulator=usage_log)
         _append_da_round(path, da_result)
 
     # 8. Round 4: 收敛共识（单 agent 跳过）
@@ -462,8 +515,13 @@ async def run_debate(
         consensus = None
         _append_round(path, 4, None)
     else:
-        consensus = await _call_synthesizer(round1, round2, da_result, ticker, features)
+        consensus = await _call_synthesizer(
+            round1, round2, da_result, ticker, features, usage_accumulator=usage_log
+        )
         _append_synthesizer_round(path, consensus)
+
+    # f1-deviation-fix §7：把 token usage 汇总写入辩论记录（AD-03 成本实测，不改 CouncilResult schema）
+    _append_usage_summary(path, usage_log)
 
     # 9. 组装 CouncilResult
     key_variables = CouncilResult.extract_key_variables(round1, round2)

@@ -8,9 +8,11 @@
 - ROE 用近 3 年（非 5 年，与 L1 factor_scores 区分）
 - dividend_yield / receivables_growth 不在快照中（L0 无该字段）
 
-Insufficient data guard（spec Requirement: Insufficient data guard）：
-- 关键字段（name/industry/market_cap）任一缺失 → 跳过 LLM 调用
-- 整体缺失 >50% 字段 → 跳过 LLM 调用
+Insufficient data guard（spec Requirement: Insufficient data guard / R1 features 充分性门）：
+- 关键字段（name/market_cap）任一缺失 → 跳过 LLM 调用
+- 财务三件套（pe_ttm/roe_3y/net_margin）任一为 None → 跳过 LLM 调用（f1-deviation-fix §2，
+  修复"basic 命中、financials 维过期/缺失时缺失率 <50% 放行"的漏洞）
+- 整体缺失 >50% 字段 → 跳过 LLM 调用（兜底）
 """
 from __future__ import annotations
 
@@ -335,10 +337,17 @@ def assemble_snapshot(ticker: str, cache_manager: CacheManager | None = None) ->
         "f_score": f_score,
     }
 
-    # Insufficient data guard
+    # Insufficient data guard（f1-deviation-fix §2 / D2）
     # industry 从 critical_fields 移除（akshare spot_em 不返回行业，L3 深研主要依赖财务数据）
     critical_fields = ["name", "market_cap"]
     missing_critical = [f for f in critical_fields if features.get(f) is None]
+
+    # 财务三件套硬门槛（financials_floor）：L3 深研的命脉是财务维度，
+    # 不是 name/market_cap。任一缺失则 features 不足以支撑质性判断。
+    # 修复"basic 命中、financials 维过期/缺失时缺失率 <50% 放行"的漏洞
+    # （600519/600900 幻觉触发路径——模型拿无财务数据的 dict 靠案例锚定编造）。
+    financials_floor = ["pe_ttm", "roe_3y", "net_margin"]
+    missing_financials_floor = [f for f in financials_floor if features.get(f) is None]
 
     # 统计整体缺失（排除 ticker 和趋势标注字段）
     data_fields = [
@@ -350,7 +359,34 @@ def assemble_snapshot(ticker: str, cache_manager: CacheManager | None = None) ->
     missing_fields = [f for f in data_fields if features.get(f) is None]
     missing_ratio = len(missing_fields) / len(data_fields) if data_fields else 0
 
-    if missing_critical or missing_ratio > 0.5:
-        return {"error": "insufficient_data", "missing_fields": missing_fields}
+    # 触发 insufficient_data 的条件（满足任一即 fail-fast，短路：只报首个命中 guard，P4 修复）：
+    # 1. critical 维度缺失（name/market_cap）——basic 维度过期/缺失触发
+    # 2. financials_floor 不齐（pe_ttm/roe_3y/net_margin 任一为 None）——独立于缺失率，
+    #    不依赖 TTL 配置的巧合兜底，financials 维度过期/缺失触发
+    # 3. 整体缺失率 > 0.5（原兜底阈值，保留）
+    if missing_critical:
+        return {
+            "error": "insufficient_data",
+            "missing_fields": missing_fields,
+            "guard": "critical_fields",
+            "guard_detail": f"basic 维度缺失 {missing_critical}（basic TTL 2h 可能过期，"
+                            f"先跑 `batch` 重采 basic 维度）",
+        }
+    if missing_financials_floor:
+        return {
+            "error": "insufficient_data",
+            "missing_fields": missing_fields,
+            "guard": "financials_floor",
+            "guard_detail": f"财务三件套缺失 {missing_financials_floor}（financials TTL 24h "
+                            f"可能过期，先跑 `batch` 重采 financials 维度）",
+        }
+    if missing_ratio > 0.5:
+        return {
+            "error": "insufficient_data",
+            "missing_fields": missing_fields,
+            "guard": "missing_ratio",
+            "guard_detail": f"整体缺失率 {missing_ratio:.0%}（>50% 兜底阈值，数据整体稀疏，"
+                            f"先跑 `batch` 全维度重采）",
+        }
 
     return features

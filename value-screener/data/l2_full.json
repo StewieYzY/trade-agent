@@ -1,0 +1,48 @@
+{
+  "shortlist": [
+    {
+      "ticker": "002906",
+      "verdict": "deep_dive",
+      "confidence": 80,
+      "one_liner": "汽车电子和精密压铸供应商，业绩增长且估值处于历史低位。",
+      "red_flags": [
+        "负债率51.11%，略高于50%",
+        "大股东质押数据缺失，存在不确定性",
+        "审计意见数据缺失"
+      ],
+      "green_flags": [
+        "PE(TTM) 16.72倍处于5年分位0.38%，历史极低",
+        "ROE从7.7%上升至11.1%，趋势向好",
+        "经营现金流10.57亿覆盖净利润7.82亿，现金流健康",
+        "营收增速28.45%，高成长性",
+        "商誉/净资产仅0.69%，商誉风险极低",
+        "F-Score 6/9，基本面较好"
+      ],
+      "anti_trap_flags": [
+        "商誉仅占净资产0.69%，并购风险小",
+        "经营现金流/净利润=1.35，利润质量高"
+      ],
+      "low_confidence_anomaly": false,
+      "usage": {
+        "prompt_tokens": 443,
+        "completion_tokens": 543,
+        "total_tokens": 986,
+        "prompt_tokens_details": {
+          "cached_tokens": 384
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 307
+        },
+        "prompt_cache_hit_tokens": 384,
+        "prompt_cache_miss_tokens": 59
+      }
+    }
+  ],
+  "usage_summary": {
+    "call_count": 11,
+    "cache_hits": 0,
+    "prompt_tokens": 4877,
+    "completion_tokens": 4654,
+    "total_tokens": 9531
+  }
+}

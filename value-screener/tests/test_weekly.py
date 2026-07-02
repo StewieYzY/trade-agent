@@ -135,9 +135,10 @@ class TestWeekly:
                 "l3_triggers": [],  # Old diff says no L3 trigger
             }
             # L2 rerun returns deep_dive
-            mock_scout.return_value = [
-                {"ticker": "600519.SH", "verdict": "deep_dive", "confidence": 85}
-            ]
+            mock_scout.return_value = (
+                [{"ticker": "600519.SH", "verdict": "deep_dive", "confidence": 85}],
+                {"call_count": 1, "cache_hits": 0, "prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+            )
             mock_cat.return_value = []
             mock_alert.return_value = {
                 "valuation_alerts": {"status": "paused", "alerts": []},
@@ -186,9 +187,10 @@ class TestWeekly:
                 "l3_triggers": [],
             }
             # L2 rerun still returns pass (no flip)
-            mock_scout.return_value = [
-                {"ticker": "600519.SH", "verdict": "pass", "confidence": 55}
-            ]
+            mock_scout.return_value = (
+                [{"ticker": "600519.SH", "verdict": "pass", "confidence": 55}],
+                {"call_count": 1, "cache_hits": 0, "prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+            )
             mock_cat.return_value = []
             mock_alert.return_value = {
                 "valuation_alerts": {"status": "paused", "alerts": []},
@@ -233,9 +235,10 @@ class TestWeekly:
                 "l3_triggers": [],
             }
             # L2 returns error
-            mock_scout.return_value = [
-                {"ticker": "600519.SH", "error": "LLM API failure"}
-            ]
+            mock_scout.return_value = (
+                [{"ticker": "600519.SH", "error": "LLM API failure"}],
+                {"call_count": 0, "cache_hits": 0, "prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+            )
             mock_cat.return_value = []
             mock_alert.return_value = {
                 "valuation_alerts": {"status": "paused", "alerts": []},
@@ -290,10 +293,13 @@ class TestWeekly:
                 "l3_triggers": [],
             }
             # Both L2 reruns return deep_dive → 2 L3 triggers
-            mock_scout.return_value = [
-                {"ticker": "600519.SH", "verdict": "deep_dive", "confidence": 85},
-                {"ticker": "000858.SZ", "verdict": "deep_dive", "confidence": 72},
-            ]
+            mock_scout.return_value = (
+                [
+                    {"ticker": "600519.SH", "verdict": "deep_dive", "confidence": 85},
+                    {"ticker": "000858.SZ", "verdict": "deep_dive", "confidence": 72},
+                ],
+                {"call_count": 2, "cache_hits": 0, "prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+            )
             mock_cat.return_value = []
             mock_alert.return_value = {
                 "valuation_alerts": {"status": "paused", "alerts": []},

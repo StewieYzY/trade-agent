@@ -164,7 +164,8 @@ class TestAggregation:
         l3_file.write_text(json.dumps(sample_l3_output))
 
         with patch("monitor.aggregation.ScoutCache") as mock_cache_class, \
-             patch("monitor.aggregation.ValuationFetcher") as mock_valuation_class:
+             patch("monitor.aggregation.ValuationFetcher") as mock_valuation_class, \
+             patch("monitor.aggregation.CacheManager") as mock_cm_class:
 
             mock_cache = MagicMock()
             mock_cache.get.return_value = {
@@ -172,6 +173,12 @@ class TestAggregation:
                 "confidence": 82,
             }
             mock_cache_class.return_value = mock_cache
+
+            # CacheManager.get 返回 None（缓存未命中）→ 走 ValuationFetcher.fetch_with_fallback
+            # （f1-deviation-fix §4：避免测试依赖真实 data/cache 状态，原测试漏 mock CacheManager）
+            mock_cm = MagicMock()
+            mock_cm.get.return_value = None
+            mock_cm_class.return_value = mock_cm
 
             mock_valuation = MagicMock()
             mock_valuation.fetch_with_fallback.return_value = {"pe_percentile_5y": 18.5}

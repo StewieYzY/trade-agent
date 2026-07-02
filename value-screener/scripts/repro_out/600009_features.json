@@ -1,0 +1,24 @@
+{
+  "error": "insufficient_data",
+  "missing_fields": [
+    "name",
+    "industry",
+    "market_cap",
+    "pe_ttm",
+    "pb",
+    "pe_percentile_5y",
+    "roe_3y",
+    "net_margin",
+    "debt_ratio",
+    "goodwill_ratio",
+    "operating_cashflow",
+    "net_profit",
+    "revenue_growth",
+    "pledge_ratio",
+    "price_change_60d",
+    "turnover_avg_percentile_60d",
+    "f_score"
+  ],
+  "guard": "critical_fields",
+  "guard_detail": "basic 维度缺失 ['name', 'market_cap']（basic TTL 2h 可能过期，先跑 `batch` 重采 basic 维度）"
+}

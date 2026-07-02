@@ -54,7 +54,8 @@ class BasicFetcher(BaseFetcher):
 
         return {
             "code": ticker,
-            "name": str(r.get(col("名称"), "") or "") or None,
+            # col() 已返回单元格值，直接用；原 r.get(col("名称"),"") 把 name 值当 dict key 查恒空（pre-existing bug，f1-deviation-fix §5 修复）
+            "name": str(col("名称") or "") or None,
             "price": _to_float(col("最新价", "现价")),
             "pe": _to_float(col("市盈率", "动态", "pe")),
             "pb": _to_float(col("市净率", "pb")),

@@ -19,6 +19,9 @@ from council.calibrate import (
 )
 from council.schema import AgentOutput, SynthesizerOutput
 
+# f1-deviation-fix §7：call_llm 返回 (content, usage)，mock 带 usage
+LLM_USAGE = {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}
+
 
 @pytest.fixture
 def mock_features():
@@ -129,7 +132,7 @@ class TestAgentCalibration:
 
         with patch("council.debate.assemble_council_features", return_value=mock_features), \
              patch("council.debate.call_llm", new_callable=AsyncMock) as mock_llm:
-            mock_llm.return_value = json.dumps(mock_agent_output.to_dict(), ensure_ascii=False)
+            mock_llm.return_value = (json.dumps(mock_agent_output.to_dict(), ensure_ascii=False), LLM_USAGE)
             passed = await run_agent_calibration(case)
 
         assert passed is True
@@ -154,7 +157,7 @@ class TestAgentCalibration:
 
         with patch("council.debate.assemble_council_features", return_value=mock_features), \
              patch("council.debate.call_llm", new_callable=AsyncMock) as mock_llm:
-            mock_llm.return_value = json.dumps(bearish_output.to_dict(), ensure_ascii=False)
+            mock_llm.return_value = (json.dumps(bearish_output.to_dict(), ensure_ascii=False), LLM_USAGE)
             passed = await run_agent_calibration(case)
 
         assert passed is False
@@ -187,7 +190,7 @@ class TestDACalibration:
         with patch("council.calibrate.assemble_council_features", return_value=mock_features), \
              patch("council.calibrate.run_debate", new_callable=AsyncMock, return_value=mock_council_result), \
              patch("council.debate.call_llm", new_callable=AsyncMock) as mock_llm:
-            mock_llm.return_value = json.dumps(mock_da_output.to_dict(), ensure_ascii=False)
+            mock_llm.return_value = (json.dumps(mock_da_output.to_dict(), ensure_ascii=False), LLM_USAGE)
             passed = await run_da_calibration()
 
         assert passed is True
@@ -228,7 +231,7 @@ class TestDACalibration:
         with patch("council.calibrate.assemble_council_features", return_value=mock_features), \
              patch("council.calibrate.run_debate", new_callable=AsyncMock, return_value=mock_council_result), \
              patch("council.debate.call_llm", new_callable=AsyncMock) as mock_llm:
-            mock_llm.return_value = json.dumps(invalid_da_output.to_dict(), ensure_ascii=False)
+            mock_llm.return_value = (json.dumps(invalid_da_output.to_dict(), ensure_ascii=False), LLM_USAGE)
             passed = await run_da_calibration()
 
         assert passed is False
@@ -269,7 +272,7 @@ class TestDACalibration:
         with patch("council.calibrate.assemble_council_features", return_value=mock_features), \
              patch("council.calibrate.run_debate", new_callable=AsyncMock, return_value=mock_council_result), \
              patch("council.debate.call_llm", new_callable=AsyncMock) as mock_llm:
-            mock_llm.return_value = json.dumps(empty_blind_spots.to_dict(), ensure_ascii=False)
+            mock_llm.return_value = (json.dumps(empty_blind_spots.to_dict(), ensure_ascii=False), LLM_USAGE)
             passed = await run_da_calibration()
 
         assert passed is False

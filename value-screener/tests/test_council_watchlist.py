@@ -148,12 +148,15 @@ LLM_RESPONSE = json.dumps({
     "historical_parallel": None,
 }, ensure_ascii=False)
 
+# f1-deviation-fix §7：call_llm 返回 (content, usage)，mock 带 usage
+LLM_USAGE = {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}
+
 
 class TestRunDebateWritesWatchlist:
     @pytest.mark.anyio
     async def test_run_debate_writes_council_json(self, watchlist_dir):
         """run_debate 末尾自动写入 watchlist."""
-        with patch("council.debate.call_llm", new_callable=AsyncMock, return_value=LLM_RESPONSE):
+        with patch("council.debate.call_llm", new_callable=AsyncMock, return_value=(LLM_RESPONSE, LLM_USAGE)):
             result = await run_debate("600519", agents=["buffett"], features={"name": "test"})
 
         today = date.today().isoformat()

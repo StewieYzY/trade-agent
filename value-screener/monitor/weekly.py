@@ -102,8 +102,8 @@ async def run_weekly(
         candidates_to_rerun = [c for c in watchlist["candidates"] if c["ticker"] in l2_triggers]
 
         try:
-            # 调用 scout_batch，force=True 绕过 24h 缓存
-            l2_results = await scout_batch(candidates_to_rerun, force=True)
+            # 调用 scout_batch，force=True 绕过 24h 缓存（返回 (shortlist, usage_summary)，P1 修复）
+            l2_results, _usage = await scout_batch(candidates_to_rerun, force=True)
 
             # 记录成功和失败的 ticker
             for result in l2_results:

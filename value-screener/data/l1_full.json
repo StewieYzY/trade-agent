@@ -1,0 +1,271 @@
+{
+  "run_date": "2026-07-02",
+  "candidates": [
+    {
+      "ticker": "600699",
+      "name": null,
+      "industry": null,
+      "factor_scores": {
+        "quality": 71.82,
+        "value": 67.9,
+        "safety_margin": 95.34,
+        "composite": 75.35,
+        "f_score": 7
+      },
+      "anti_trap": {
+        "score": 98.0,
+        "flags": [
+          "A1_ROE_decline:1y"
+        ]
+      },
+      "adjusted_composite": 73.84299999999999,
+      "f_score": 7,
+      "graham_number": 15.4,
+      "pe_ttm": 24.26,
+      "pb": 1.93,
+      "pledge_ratio": 24.66
+    },
+    {
+      "ticker": "603459",
+      "name": null,
+      "industry": null,
+      "factor_scores": {
+        "quality": 93.68,
+        "value": 0.0,
+        "safety_margin": 100.0,
+        "composite": 66.84,
+        "f_score": 8
+      },
+      "anti_trap": {
+        "score": 100.0,
+        "flags": []
+      },
+      "adjusted_composite": 66.84,
+      "f_score": 8,
+      "graham_number": 7.35,
+      "pe_ttm": 142.08,
+      "pb": 32.33,
+      "pledge_ratio": null
+    },
+    {
+      "ticker": "300217",
+      "name": null,
+      "industry": null,
+      "factor_scores": {
+        "quality": 75.18,
+        "value": 30.0,
+        "safety_margin": 100.0,
+        "composite": 66.59,
+        "f_score": 6
+      },
+      "anti_trap": {
+        "score": 96.0,
+        "flags": [
+          "A1_ROE_decline:2y"
+        ]
+      },
+      "adjusted_composite": 63.9264,
+      "f_score": 6,
+      "graham_number": 2.47,
+      "pe_ttm": 46.19,
+      "pb": 1.52,
+      "pledge_ratio": 7.98
+    },
+    {
+      "ticker": "002429",
+      "name": null,
+      "industry": null,
+      "factor_scores": {
+        "quality": 79.62,
+        "value": 5.7,
+        "safety_margin": 100.0,
+        "composite": 61.52,
+        "f_score": 7
+      },
+      "anti_trap": {
+        "score": 96.0,
+        "flags": [
+          "A1_ROE_decline:2y"
+        ]
+      },
+      "adjusted_composite": 59.059200000000004,
+      "f_score": 7,
+      "graham_number": 4.63,
+      "pe_ttm": 40.34,
+      "pb": 2.81,
+      "pledge_ratio": 16.74
+    },
+    {
+      "ticker": "002906",
+      "name": null,
+      "industry": null,
+      "factor_scores": {
+        "quality": 75.93,
+        "value": 70.0,
+        "safety_margin": 0.0,
+        "composite": 58.96,
+        "f_score": 6
+      },
+      "anti_trap": {
+        "score": 100.0,
+        "flags": []
+      },
+      "adjusted_composite": 58.96,
+      "f_score": 6,
+      "graham_number": 21.81,
+      "pe_ttm": 16.72,
+      "pb": 1.85,
+      "pledge_ratio": null
+    },
+    {
+      "ticker": "600103",
+      "name": null,
+      "industry": null,
+      "factor_scores": {
+        "quality": 60.74,
+        "value": 30.0,
+        "safety_margin": 100.0,
+        "composite": 59.37,
+        "f_score": 6
+      },
+      "anti_trap": {
+        "score": 96.0,
+        "flags": [
+          "A1_ROE_decline:2y"
+        ]
+      },
+      "adjusted_composite": 56.9952,
+      "f_score": 6,
+      "graham_number": 0.83,
+      "pe_ttm": 178.53,
+      "pb": 1.76,
+      "pledge_ratio": null
+    },
+    {
+      "ticker": "301628",
+      "name": null,
+      "industry": null,
+      "factor_scores": {
+        "quality": 77.98,
+        "value": 0.0,
+        "safety_margin": 100.0,
+        "composite": 58.99,
+        "f_score": 5
+      },
+      "anti_trap": {
+        "score": 96.0,
+        "flags": [
+          "A1_ROE_decline:2y"
+        ]
+      },
+      "adjusted_composite": 56.6304,
+      "f_score": 5,
+      "graham_number": 23.05,
+      "pe_ttm": 67.86,
+      "pb": 6.65,
+      "pledge_ratio": null
+    },
+    {
+      "ticker": "600171",
+      "name": null,
+      "industry": null,
+      "factor_scores": {
+        "quality": 65.14,
+        "value": 9.2,
+        "safety_margin": 100.0,
+        "composite": 55.33,
+        "f_score": 6
+      },
+      "anti_trap": {
+        "score": 100.0,
+        "flags": []
+      },
+      "adjusted_composite": 55.33,
+      "f_score": 6,
+      "graham_number": 6.62,
+      "pe_ttm": 99.87,
+      "pb": 4.84,
+      "pledge_ratio": null
+    },
+    {
+      "ticker": "000969",
+      "name": null,
+      "industry": null,
+      "factor_scores": {
+        "quality": 66.75,
+        "value": 2.21,
+        "safety_margin": 100.0,
+        "composite": 54.04,
+        "f_score": 6
+      },
+      "anti_trap": {
+        "score": 100.0,
+        "flags": []
+      },
+      "adjusted_composite": 54.04,
+      "f_score": 6,
+      "graham_number": 6.95,
+      "pe_ttm": 66.77,
+      "pb": 4.33,
+      "pledge_ratio": null
+    },
+    {
+      "ticker": "688097",
+      "name": null,
+      "industry": null,
+      "factor_scores": {
+        "quality": 62.4,
+        "value": 1.1,
+        "safety_margin": 100.0,
+        "composite": 51.53,
+        "f_score": 5
+      },
+      "anti_trap": {
+        "score": 100.0,
+        "flags": []
+      },
+      "adjusted_composite": 51.53,
+      "f_score": 5,
+      "graham_number": 18.73,
+      "pe_ttm": 42.74,
+      "pb": 5.81,
+      "pledge_ratio": null
+    },
+    {
+      "ticker": "000818",
+      "name": null,
+      "industry": null,
+      "factor_scores": {
+        "quality": 10.78,
+        "value": 70.0,
+        "safety_margin": 100.0,
+        "composite": 46.39,
+        "f_score": 6
+      },
+      "anti_trap": {
+        "score": 98.0,
+        "flags": [
+          "A1_ROE_decline:1y"
+        ]
+      },
+      "adjusted_composite": 45.4622,
+      "f_score": 6,
+      "graham_number": null,
+      "pe_ttm": -68.98,
+      "pb": 4.48,
+      "pledge_ratio": 6.28
+    }
+  ],
+  "stats": {
+    "total": 50,
+    "after_hard_gates": 40,
+    "after_factors": 40,
+    "after_heat_filter": 11,
+    "excluded_by_gates": {
+      "H8": 8,
+      "H3": 3
+    },
+    "industry_pe_degraded": true,
+    "input_scale": "subset"
+  }
+}

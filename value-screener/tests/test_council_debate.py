@@ -290,12 +290,15 @@ LLM_RESPONSE = json.dumps({
     "historical_parallel": None,
 }, ensure_ascii=False)
 
+# f1-deviation-fix §7：call_llm 现在返回 (content, usage)，mock 需带 usage
+LLM_USAGE = {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}
+
 
 class TestRunDebate:
     @pytest.mark.anyio
     async def test_single_agent_r1_only(self, debate_dir):
         """单 agent: R1 调 LLM, R2-4 跳过."""
-        with patch("council.debate.call_llm", new_callable=AsyncMock, return_value=LLM_RESPONSE):
+        with patch("council.debate.call_llm", new_callable=AsyncMock, return_value=(LLM_RESPONSE, LLM_USAGE)):
             result = await run_debate("600519", agents=["buffett"], features={"name": "test"})
         assert result.final_verdict == "bullish"
         assert len(result.round1) == 1
@@ -326,7 +329,7 @@ class TestRunDebate:
             if call_count == 2:
                 assert "其他分析师" in user_message
                 assert "munger" in user_message  # mock agent 未注册，fallback 为 agent_id
-            return LLM_RESPONSE
+            return LLM_RESPONSE, LLM_USAGE
 
         with patch("council.debate.call_llm", side_effect=mock_call_llm):
             result = await run_debate(
@@ -415,7 +418,7 @@ class TestRunDebate:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(old_md, encoding="utf-8")
 
-        with patch("council.debate.call_llm", new_callable=AsyncMock, return_value=LLM_RESPONSE):
+        with patch("council.debate.call_llm", new_callable=AsyncMock, return_value=(LLM_RESPONSE, LLM_USAGE)):
             result = await run_debate("600519", agents=["buffett"], features={"name": "test"}, force=True)
 
         # 返回值验证：force=True 应该重跑 LLM，conviction 应该是 80 而非 90
@@ -460,7 +463,7 @@ class TestCallDA:
         async def mock_call_llm(system_prompt, user_message, reasoning_level="heavy"):
             assert reasoning_level == "heavy"
             assert "Round 1" in user_message
-            return DA_LLM_RESPONSE
+            return DA_LLM_RESPONSE, LLM_USAGE
 
         with patch("council.debate.call_llm", side_effect=mock_call_llm):
             result = await _call_da([agent], None, "600519", {"name": "test"})
@@ -484,7 +487,7 @@ class TestCallSynthesizer:
             assert reasoning_level == "moderate"
             assert "Round 1" in user_message
             assert "Round 3" in user_message
-            return SYNTHESIZER_LLM_RESPONSE
+            return SYNTHESIZER_LLM_RESPONSE, LLM_USAGE
 
         with patch("council.debate.call_llm", side_effect=mock_call_llm):
             result = await _call_synthesizer([agent], None, da, "600519", {"name": "test"})
@@ -507,11 +510,11 @@ class TestFullCouncil:
             nonlocal call_count
             call_count += 1
             if reasoning_level == "moderate":
-                return SYNTHESIZER_LLM_RESPONSE
+                return SYNTHESIZER_LLM_RESPONSE, LLM_USAGE
             # DA 或 R1/R2 都是 heavy
             if "你是质疑者" in system_prompt:
-                return DA_LLM_RESPONSE
-            return LLM_RESPONSE
+                return DA_LLM_RESPONSE, LLM_USAGE
+            return LLM_RESPONSE, LLM_USAGE
 
         with patch("council.debate.call_llm", side_effect=mock_call_llm):
             result = await run_debate(

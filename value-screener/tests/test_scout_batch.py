@@ -11,6 +11,80 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from scout.batch import scout_batch, call_llm_snapshot
 
+# f1-deviation-fix §7：call_llm（含 call_llm_light/call_llm_snapshot 别名）返回 (content, usage)
+LLM_USAGE = {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}
+
+
+# ── P1 修复（review 反馈）：scout_batch 返回 (shortlist, usage_summary)，累加所有 LLM 调用 ──
+
+def test_scout_batch_returns_tuple_with_usage_summary():
+    """scout_batch 返回 (shortlist, usage_summary)，usage_summary 含所有调用的 token（非仅 deep_dive）."""
+    candidates = [{"ticker": "600001"}, {"ticker": "600002"}, {"ticker": "600003"}]
+    call_seq = ["deep_dive", "watch", "skip"]  # 第 1 次 deep_dive、第 2 次 watch、第 3 次 skip
+    call_idx = {"i": 0}
+
+    async def mock_call(snapshot, system):
+        # 按调用次序返回不同 verdict，验证 watch/skip 的 usage 也被累加（非仅 deep_dive）
+        verdict = call_seq[call_idx["i"] % len(call_seq)]
+        call_idx["i"] += 1
+        return (json.dumps({
+            "verdict": verdict,
+            "confidence": 80,
+            "one_liner": "test",
+            "red_flags": [],
+            "green_flags": [],
+            "anti_trap_flags": [],
+        }), {"prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150})
+
+    with patch("scout.batch.call_llm_snapshot", new=mock_call):
+        with patch("scout.batch.assemble_snapshot") as mock_assemble:
+            mock_assemble.return_value = {"name": "x", "market_cap": 1, "pe_ttm": 10,
+                                          "roe_3y": [1, 2, 3], "net_margin": 5}
+            with patch("scout.batch.ScoutCache") as mock_cache_cls:
+                mock_cache_cls.return_value.get.return_value = None
+                result = asyncio.run(scout_batch(candidates, force=True))
+
+    # 返回 tuple
+    assert isinstance(result, tuple)
+    assert len(result) == 2
+    shortlist, usage = result
+    # shortlist 只含 deep_dive（1 只）
+    assert len(shortlist) == 1
+    assert shortlist[0]["ticker"] == "600001"
+    # usage_summary 累加了所有 3 次调用（deep_dive + watch + skip），不是只 1 次
+    assert usage["call_count"] == 3
+    assert usage["prompt_tokens"] == 300  # 3 × 100
+    assert usage["completion_tokens"] == 150  # 3 × 50
+    assert usage["total_tokens"] == 450  # 3 × 150
+
+
+def test_scout_batch_usage_summary_counts_cache_hits_separately():
+    """cache hit 不产生新 LLM 调用（不计入 call_count），但 cache_hits 单独计数."""
+    candidates = [{"ticker": "600001"}, {"ticker": "600002"}]
+
+    async def mock_call(snapshot, system):
+        return (json.dumps({"verdict": "deep_dive", "confidence": 80, "one_liner": "t",
+                            "red_flags": [], "green_flags": [], "anti_trap_flags": []}),
+                {"prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150})
+
+    with patch("scout.batch.call_llm_snapshot", new=mock_call):
+        with patch("scout.batch.assemble_snapshot"):
+            with patch("scout.batch.ScoutCache") as mock_cache_cls:
+                mock_cache = mock_cache_cls.return_value
+                # 600001 cache hit（含 usage），600002 cache miss
+                def cache_get(ticker, date_str):
+                    if ticker == "600001":
+                        return {"verdict": "deep_dive", "confidence": 80, "one_liner": "cached",
+                                "red_flags": [], "green_flags": [], "anti_trap_flags": []}
+                    return None
+                mock_cache.get.side_effect = cache_get
+                shortlist, usage = asyncio.run(scout_batch(candidates, force=False))
+
+    # 600001 cache hit → 不调 LLM；600002 cache miss → 调 1 次
+    assert usage["call_count"] == 1
+    assert usage["cache_hits"] == 1
+    assert usage["prompt_tokens"] == 100  # 仅 600002 的 1 次
+
 
 def test_scout_batch_top20_cap():
     """验证 top-20 cap: 40 只 deep_dive 只返回前 20."""
@@ -22,14 +96,14 @@ def test_scout_batch_top20_cap():
         ticker = snapshot.split("(")[1].split(")")[0]
         idx = int(ticker[3:])
         confidence = 100 - idx
-        return json.dumps({
+        return (json.dumps({
             "verdict": "deep_dive",
             "confidence": confidence,
             "one_liner": f"Stock {ticker}",
             "red_flags": [],
             "green_flags": [],
             "anti_trap_flags": [],
-        })
+        }), LLM_USAGE)
 
     with patch("scout.batch.call_llm_snapshot", new=mock_call):
         with patch("scout.batch.assemble_snapshot") as mock_assemble:
@@ -61,7 +135,7 @@ def test_scout_batch_top20_cap():
                 mock_cache = mock_cache_cls.return_value
                 mock_cache.get.return_value = None  # 缓存未命中
 
-                result = asyncio.run(scout_batch(candidates, force=True))
+                result, _usage = asyncio.run(scout_batch(candidates, force=True))
 
                 # 验证只返回 20 只
                 assert len(result) == 20
@@ -82,14 +156,14 @@ def test_scout_batch_error_handling():
         ticker = snapshot.split("(")[1].split(")")[0]
         if ticker == "600002":
             raise httpx.HTTPStatusError("LLM API error", request=None, response=None)
-        return json.dumps({
+        return (json.dumps({
             "verdict": "deep_dive",
             "confidence": 85,
             "one_liner": f"Stock {ticker}",
             "red_flags": [],
             "green_flags": [],
             "anti_trap_flags": [],
-        })
+        }), LLM_USAGE)
 
     def mock_assemble(ticker, cache_manager=None):
         return {
@@ -121,7 +195,7 @@ def test_scout_batch_error_handling():
                 mock_cache = mock_cache_cls.return_value
                 mock_cache.get.return_value = None
 
-                result = asyncio.run(scout_batch(candidates, force=True))
+                result, _usage = asyncio.run(scout_batch(candidates, force=True))
 
                 # 验证只有 2 只成功（600002 失败）
                 assert len(result) == 2
@@ -166,14 +240,14 @@ def test_scout_batch_insufficient_data():
         }
 
     async def mock_call(snapshot, system):
-        return json.dumps({
+        return (json.dumps({
             "verdict": "deep_dive",
             "confidence": 85,
             "one_liner": "Test stock",
             "red_flags": [],
             "green_flags": [],
             "anti_trap_flags": [],
-        })
+        }), LLM_USAGE)
 
     with patch("scout.batch.call_llm_snapshot", new=mock_call):
         with patch("scout.batch.assemble_snapshot", new=mock_assemble):
@@ -181,7 +255,7 @@ def test_scout_batch_insufficient_data():
                 mock_cache = mock_cache_cls.return_value
                 mock_cache.get.return_value = None
 
-                result = asyncio.run(scout_batch(candidates, force=True))
+                result, _usage = asyncio.run(scout_batch(candidates, force=True))
 
                 # 验证只有 2 只成功（600002 数据不足）
                 assert len(result) == 2
@@ -217,14 +291,14 @@ def test_scout_batch_cache_hit():
         mock_cache.get.side_effect = mock_get
 
         async def mock_call(snapshot, system):
-            return json.dumps({
+            return (json.dumps({
                 "verdict": "deep_dive",
                 "confidence": 80,
                 "one_liner": "Fresh result",
                 "red_flags": [],
                 "green_flags": [],
                 "anti_trap_flags": [],
-            })
+            }), LLM_USAGE)
 
         with patch("scout.batch.call_llm_snapshot", new=mock_call):
             with patch("scout.batch.assemble_snapshot") as mock_assemble:
@@ -251,7 +325,7 @@ def test_scout_batch_cache_hit():
                     "f_score": 7,
                 }
 
-                result = asyncio.run(scout_batch(candidates, force=False))
+                result, _usage = asyncio.run(scout_batch(candidates, force=False))
 
                 # 验证 2 只都返回
                 assert len(result) == 2
@@ -280,14 +354,14 @@ def test_scout_batch_cache_write_failure():
     candidates = [{"ticker": "600001"}]
 
     async def mock_call(snapshot, system):
-        return json.dumps({
+        return (json.dumps({
             "verdict": "deep_dive",
             "confidence": 90,
             "one_liner": "Test",
             "red_flags": [],
             "green_flags": [],
             "anti_trap_flags": [],
-        })
+        }), LLM_USAGE)
 
     with patch("scout.batch.call_llm_snapshot", new=mock_call):
         with patch("scout.batch.assemble_snapshot") as mock_assemble:
@@ -319,7 +393,7 @@ def test_scout_batch_cache_write_failure():
                 mock_cache.get.return_value = None
                 mock_cache.set.side_effect = OSError("Disk full")
 
-                result = asyncio.run(scout_batch(candidates, force=True))
+                result, _usage = asyncio.run(scout_batch(candidates, force=True))
 
                 # 即使缓存写入失败，结果仍然返回
                 assert len(result) == 1

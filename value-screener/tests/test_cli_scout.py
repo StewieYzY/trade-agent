@@ -35,6 +35,7 @@ def test_scout_command_basic():
         import asyncio
 
         async def mock_scout_batch(candidates, force=False):
+            # P1 修复：scout_batch 返回 (shortlist, usage_summary)
             return [
                 {
                     "ticker": "600519",
@@ -45,7 +46,8 @@ def test_scout_command_basic():
                     "green_flags": ["ROE > 25%"],
                     "anti_trap_flags": [],
                 },
-            ]
+            ], {"call_count": 1, "cache_hits": 0, "prompt_tokens": 10,
+                "completion_tokens": 5, "total_tokens": 15}
 
         with patch("scout.batch.scout_batch", new=mock_scout_batch):
             result = runner.invoke(app, [
@@ -58,12 +60,15 @@ def test_scout_command_basic():
             assert result.exit_code == 0
             assert "L2 筛选完成" in result.stdout
 
-            # 验证输出文件
+            # 验证输出文件（P1 修复后格式为 {shortlist, usage_summary}）
             assert l2_path.exists()
             l2_data = json.loads(l2_path.read_text(encoding="utf-8"))
-            assert len(l2_data) == 1
-            assert l2_data[0]["ticker"] == "600519"
-            assert l2_data[0]["verdict"] == "deep_dive"
+            shortlist = l2_data["shortlist"]
+            assert len(shortlist) == 1
+            assert shortlist[0]["ticker"] == "600519"
+            assert shortlist[0]["verdict"] == "deep_dive"
+            # usage_summary 存在
+            assert l2_data["usage_summary"]["call_count"] == 1
 
 
 def test_scout_command_missing_input():
