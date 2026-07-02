@@ -21,3 +21,9 @@ venv/
 
 # UZI-Skill is an independent git repo, do not track
 uzi-skill/
+
+# SpecStory: tool-generated conversation history, not source code
+.specstory/
+
+# Claude Code: local personal settings (contains machine paths)
+.claude/settings.local.json

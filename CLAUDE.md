@@ -4,7 +4,7 @@ A 股价值投资选股 + 多 agent 研判系统。
 
 ## 当前状态
 
-L0→L4 全流程骨架已落地（`value-screener/`），6 个 OpenSpec change 全部 archived（`openspec/changes/archive/`），有真实数据缓存与 2 份 debate/watchlist 产出文件，但**端到端全天团实跑尚未验证**——现有 `debate/` 记录要么是单 agent 模式（巴菲特，R2-R4 跳过），要么四 agent 输出高度同质化（疑为测试桩或廉价模型输出），`watchlist/*.json` 的 `consensus_summary/conviction/dissent_points` 全为 `null`（因未真跑到 R4）。设计层仍有未稳定处，动手前必读 `design/total-design.md`，设计未稳定的部分先讨论再动手，不要自行假设填空。
+L0→L4 全流程骨架已落地（`value-screener/`），6 个 OpenSpec change 全部 archived（`openspec/changes/archive/`），有真实数据缓存与 2 份 debate/watchlist 产出文件，但**端到端全天团实跑尚未验证**——现有 `debate/` 记录要么是单 agent 模式（巴菲特，R2-R4 跳过），要么四 agent 输出高度同质化（疑为测试桩或廉价模型输出），`watchlist/*.json` 7 份中 6 份的 `consensus_summary/conviction/dissent_points` 为 `null`（R4 未跑到或 L3 R1 串台/同质化 bug），1 份（600009.SH）真实完整。两个核心需求的语义已稳定（需求 B 语义澄清见 `design/deviation-analysis-2026-07-01.md` §2.5），动手前必读 `design/total-design.md`，设计未稳定的部分先讨论再动手，不要自行假设填空。
 
 **动手前必读**：`design/total-design.md`（第一参考源）、`design/architecture-decisions.md`（AD-01 ~ AD-09）。
 
@@ -15,6 +15,7 @@ L0→L4 全流程骨架已落地（`value-screener/`），6 个 OpenSpec change 
 | `design/total-design.md` | **当前设计稿**（第一参考源）——第一性原理、借鉴与砍掉的范围、目标架构、分阶段实施路径、技术决策 | 持续更新 |
 | `design/architecture-decisions.md` | **架构决策记录**（AD-01 ~ AD-09）——跨 change 的架构级决策，change 拆分依据，各 change 的 proposal/design 必须引用而非重复搬运 | 持续更新 |
 | `design/prd-rule&case.md` | **补充 PRD**——RULE.md 分层体系 + 历史案例库设计 | 设计稿 |
+| `design/deviation-analysis-2026-07-01.md` | **偏移分析**——基于文件系统实证的开发偏移记录 + 纠偏优先级（P0/P1） | 活跃（纠偏中） |
 | `value-screener/` | **已落地的实现**——L0 数据层 / L1 screener / L2 scout / L3 council / L4 monitor | 骨架完成，见下 |
 | `uzi-skill/` | 借鉴资产——开源股票分析 Claude plugin（v3.9.0，可运行，独立 git 仓库） | 只读借鉴 |
 | `old-archive/` | 初版产品构想草稿，已被 total-design 融合吸收 | 只读 |
@@ -29,7 +30,7 @@ L0→L4 全流程骨架已落地（`value-screener/`），6 个 OpenSpec change 
 | L0 数据层 | `value-screener/data/`（`fetchers/` `lib/` `cache/`） | 已落地，多 ticker 多日缓存已采 |
 | L1 量化筛选 | `value-screener/screener/`（`hard_gates` `factor_scores` `anti_trap` `heat_filter` `main`） | 已落地 |
 | L2 LLM 初筛 | `value-screener/scout/`（`prompt` `input_assembly` `batch` `parse` `quality`） | 已落地 |
-| L3 天团辩论 | `value-screener/council/`（`agents` `debate` `prompt` `schema` `features` `llm` `calibrate` `verify_quality_gate`） | 已落地（4 agent：巴菲特/芒格/段永平/冯柳 + DA + Synthesizer），张坤留待后续 |
+| L3 天团辩论 | `value-screener/council/`（`agents` `debate` `prompt` `schema` `features` `llm` `calibrate` `verify_quality_gate`） | 已落地（4 agent：巴菲特/芒格/段永平/冯柳 + DA + Synthesizer），张坤留待后续。**R1 串台/同质化 bug 未修（P0）** |
 | L4 监控 | `value-screener/monitor/`（`weekly` `aggregation` `diff` `catalyst` `alert`） | 已落地 |
 | L3→L4 接口 | `value-screener/watchlist/*.json` | 由 `council/debate.py::_write_council_output` 直接写 JSON，无 `watchlist/manager.py` |
 | 前端 | — | **未落地**，total-design §8 规划的 `frontend/`（Streamlit）未创建 |
@@ -43,7 +44,9 @@ CLI 入口：`value-screener/cli.py`（typer），子命令 `fetch` / `batch` / 
 - **RULE.md 三层体系未落地**：`~/.trade-agent/RULE.md`、`value-screener/RULE.md` 均不存在，`council/prompts/*.md` 目录不存在。当前 agent prompt 内联在 `council/prompt.py` 的 `build_*_prompt()` 函数里，**没有 global→project→agent 三层拼接逻辑**（设计目标见 `design/prd-rule&case.md`，实现位置原计划 `council/prompt_builder.py` 但该文件不存在）。
 - **前端未落地**：Streamlit 前端（total-design Phase 5）未创建。
 - **watchlist 无 manager**：`watchlist/` 目前只有 L3 写出的产出 JSON，total-design §8 规划的 `watchlist/manager.py`（增量 diff / 历史轨迹）未实现，diff 逻辑现由 `monitor/diff.py` 承担。
-- **端到端全天团实跑未验证**：核心架构假设（5+1 天团 4 轮辩论产生信息增量，AD-05/AD-09）尚无真实多 agent 辩论产出佐证。Docker 运行时已就绪（`l4b-docker-run` change：compose + VOLUME + LLM env fail-fast），但两道实跑验证门（最小闭环 `council --ticker 600519`、完整链路 L1→L2→L3）尚未手动跑通。这是当前最高优先级的待验证项。
+- **【P0】L3 R1 串台/同质化 bug**：600519（茅台）全天团 R1 输出逐字同质化 + 环形串台（buffett→munger→duan→feng_liu→buffett）；600900（长江电力）单 agent R1 复读茅台特征（水电股输出 ROE 32%、毛利率 90%+）。根因未定位，详见 `design/deviation-analysis-2026-07-01.md` §1.2-1.3。这是 AD-09 假设存亡问题。
+- **【P1】全市场从未跑过**：`data/cache/` 26 个目录全是手工挑的白马，L1/L2 从没见过全市场 ~5000 只分布。ticker 后缀分裂（纯数字 vs .SH/.SZ）需归一。详见偏移分析 §1.5。
+- **端到端全天团实跑未完整验证**：600009.SH 是唯一真实完整产出（neutral + dissent + key_variables），7 份中 6 份空壳。Docker 运行时已就绪（`l4b-docker-run` change），但 P0 bug 未修前不宜大规模验证。
 
 ## 技术栈
 
@@ -65,6 +68,7 @@ LLM 环境变量：`LLM_API_KEY` / `LLM_API_BASE` / `LLM_MODEL`（L2 轻量）/ 
 - L2 是成本闸门（200 只全丢 L3 不可承受，AD-03）
 - 实施顺序：L1+L2 先行（ROI 最高）→ L3 从单 agent 起步验证辩论增量（AD-09 gate）→ L4 最后
 - 格雷厄姆在 L1 规则引擎内核，不在天团（AD-07）
+- L3 输出「好不好 + 为什么 + 什么条件下改变」，是仓位决策的前置判断；用户结合自身持仓做加仓/持有/减仓/清仓决策（需求 B 语义澄清，2026-07-01）
 
 ## RULE.md 分层体系（设计目标，未落地）
 
