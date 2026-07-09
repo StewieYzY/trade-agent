@@ -16,6 +16,7 @@ L0→L4 全流程骨架已落地（`value-screener/`），6 个 OpenSpec change 
 | `design/architecture-decisions.md` | **架构决策记录**（AD-01 ~ AD-09）——跨 change 的架构级决策，change 拆分依据，各 change 的 proposal/design 必须引用而非重复搬运 | 持续更新 |
 | `design/prd-rule&case.md` | **补充 PRD**——RULE.md 分层体系 + 历史案例库设计 | 设计稿 |
 | `design/deviation-analysis-2026-07-01.md` | **偏移分析**——基于文件系统实证的开发偏移记录 + 纠偏优先级（P0/P1） | 活跃（纠偏中） |
+| `design/kimi-worldcup-learnings.md` | **外部借鉴分析**——Kimi 2026 世界杯报告的辩论协议设计（6 要点）+ 校准降级机制（4 要点），含渐进式原文参照 | 参考文档 |
 | `value-screener/` | **已落地的实现**——L0 数据层 / L1 screener / L2 scout / L3 council / L4 monitor | 骨架完成，见下 |
 | `uzi-skill/` | 借鉴资产——开源股票分析 Claude plugin（v3.9.0，可运行，独立 git 仓库） | 只读借鉴 |
 | `old-archive/` | 初版产品构想草稿，已被 total-design 融合吸收 | 只读 |

@@ -830,6 +830,8 @@ debate/{ticker}/{date}.md
 
 **注意**：LLM 单次调用不存在「遗忘再读文件」的行为——context window 是固定的，要么塞得下要么塞不下。辩论记录文件是审计轨迹和外部消费用途，不是 agent 中途回溯的记忆存储。
 
+> **L3 辩论后续改进方向**：基于 Kimi 2026 世界杯 Multi-Agent 报告的深度分析，提炼了两套核心机制设计——**辩论协议**（分歧度量化、分级响应、强制新证据、第三方仲裁、分歧报告、时间收敛）和**校准降级**（校准 > 准确率、可量化降级条件、三层不确定性分解、优雅降级），详见 `design/kimi-worldcup-learnings.md`。MVP 先落地数据完整性检查 + Prompt 合规约束，其余按 Phase 2/3 迭代。
+
 ### 6.5 为什么不用 Multi-Agent 框架（如 AgentScope/LangGraph）
 
 **结论：不需要，甚至不应该用。天团辩论的本质是「带上下文的串行 LLM 调用」，不是分布式多 agent 系统。**
@@ -1386,3 +1388,4 @@ AI 能帮你做的：
 - akshare A 股实时行情接口：https://akshare.akfamily.xyz/data/stock/stock.html
 - LangGraph 多 agent 协作模式：https://langchain-ai.github.io/langgraph/tutorials/multi_agent/multi-agent-collaboration/
 - Piotroski F-score 九项标准：https://en.wikipedia.org/wiki/Piotroski_F-score
+- Kimi 2026 世界杯 Multi-Agent 报告借鉴分析：见 `design/kimi-worldcup-learnings.md`（辩论协议 6 要点 + 校准降级 4 要点，含渐进式原文参照）
