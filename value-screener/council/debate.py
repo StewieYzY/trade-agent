@@ -101,6 +101,10 @@ def _build_user_message(
 
         parts.extend([
             "",
+            "## R2 新证据引导",
+            "如果 R1 未充分覆盖某些数据维度，请在 new_evidence 中列出。",
+            "如果所有相关数据已在 R1 被引用，请声明 evidence_exhausted: true。",
+            "",
             "请基于以上信息修订你的立场（可以坚持原判，也可以调整）。",
         ])
     else:
@@ -200,6 +204,31 @@ def _append_usage_summary(path: Path, usage_log: list[dict]) -> None:
         f.write("\n```\n")
 
 
+def _append_orchestration_state(
+    path: Path,
+    da_skipped_reason: str | None,
+    council_degraded: bool,
+    degraded_reason: str | None,
+) -> None:
+    """f2 CR P2：追加编排状态段到 debate md，供 _parse_debate_markdown 缓存恢复.
+
+    写入 da_skipped_reason/council_degraded/degraded_reason 三字段。
+    缓存命中（同股同日重跑）时 _parse_debate_markdown 从此段恢复编排状态，
+    避免 CLI to_json / 质量门因缓存丢失降级/跳 DA 上下文。
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    state = {
+        "da_skipped_reason": da_skipped_reason,
+        "council_degraded": council_degraded,
+        "degraded_reason": degraded_reason,
+    }
+    with path.open("a", encoding="utf-8") as f:
+        f.write("\n## 编排状态\n")
+        f.write("```json\n")
+        f.write(json.dumps(state, ensure_ascii=False, indent=2))
+        f.write("\n```\n")
+
+
 async def _call_da(
     round1: list[AgentOutput],
     round2: list[AgentOutput] | None,
@@ -249,10 +278,14 @@ async def _call_synthesizer(
     ticker: str,
     features: dict,
     usage_accumulator: list[dict] | None = None,
+    da_skipped_reason: str | None = None,
 ) -> SynthesizerOutput:
     """调用 Synthesizer（共识收敛器）.
 
     传入 R1+R2+R3 的输出，返回 SynthesizerOutput。
+    f2 CR P1#1：da_skipped_reason 非空时，user message 注入引导，让 LLM 知道
+    为何没 DA（low/extreme/evidence_exhausted/runtime_degraded），并在
+    consensus_summary 标注此原因。
     """
     from council.prompt import build_synthesizer_prompt
 
@@ -282,6 +315,14 @@ async def _call_synthesizer(
         parts.append("```json")
         parts.append(json.dumps(da_result.to_dict(), ensure_ascii=False, indent=2))
         parts.append("```")
+    elif da_skipped_reason:
+        # f2 CR P1#1：DA 被跳过时，告知 synthesizer 原因，引导其基于 R1(+R2) 自行收敛
+        parts.append(
+            f"\n## ⚠️ DA 被跳过（da_skipped_reason: {da_skipped_reason}）\n"
+            f"本次无 Devil's Advocate 仲裁报告。原因：{da_skipped_reason}。\n"
+            f"请基于 R1（+R2 if 已提供）自行加权多数收敛，consensus_summary 须标注"
+            f"「DA 被跳过（{da_skipped_reason}）」。"
+        )
 
     user_message = "\n".join(parts)
 
@@ -367,6 +408,28 @@ def _parse_debate_markdown(content: str, ticker: str) -> CouncilResult | None:
 
     key_variables = CouncilResult.extract_key_variables(round1, round2)
 
+    # f2 CR P2：解析「## 编排状态」JSON 段恢复 da_skipped_reason/council_degraded/degraded_reason
+    # 老格式 md 无此段 → 3 字段走默认 None/False，向后兼容
+    da_skipped_reason: str | None = None
+    council_degraded = False
+    degraded_reason: str | None = None
+    state_marker = "## 编排状态"
+    state_idx = content.find(state_marker)
+    if state_idx >= 0:
+        state_json_start = content.find("```json", state_idx)
+        if state_json_start >= 0:
+            state_json_start = content.find("\n", state_json_start) + 1
+            state_json_end = content.find("```", state_json_start)
+            if state_json_end >= 0:
+                block = content[state_json_start:state_json_end].strip()
+                try:
+                    state = json.loads(block)
+                    da_skipped_reason = state.get("da_skipped_reason")
+                    council_degraded = state.get("council_degraded", False)
+                    degraded_reason = state.get("degraded_reason")
+                except json.JSONDecodeError:
+                    pass  # 编排状态段损坏 → 走默认，不崩
+
     # final_verdict 逻辑
     final_verdict = round4_synthesizer.final_signal if round4_synthesizer else round1[0].signal
 
@@ -379,6 +442,9 @@ def _parse_debate_markdown(content: str, ticker: str) -> CouncilResult | None:
         final_verdict=final_verdict,
         key_variables=key_variables,
         consensus_summary=round4_synthesizer.consensus_summary if round4_synthesizer else None,
+        da_skipped_reason=da_skipped_reason,
+        council_degraded=council_degraded,
+        degraded_reason=degraded_reason,
         dissent_points=round4_synthesizer.dissent_points if round4_synthesizer else None,
         pending_verification=round4_synthesizer.pending_verification if round4_synthesizer else None,
     )
@@ -464,7 +530,7 @@ async def run_debate(
     # f1-deviation-fix §7：token usage 累加器（供 AD-03 成本实测，写入辩论记录 md，不改 schema）
     usage_log: list[dict] = []
 
-    # 5. Round 1: 各自表态（并行，彼此隔离）
+    # f2 §3.5/3.6：R1 用 return_exceptions 收集，统计 error rate
     r1_tasks = [
         call_agent(
             agent_id, ticker, features,
@@ -473,55 +539,141 @@ async def run_debate(
         )
         for agent_id in agents
     ]
-    round1 = await asyncio.gather(*r1_tasks)
-    _append_round(path, 1, round1)
+    r1_raw = await asyncio.gather(*r1_tasks, return_exceptions=True)
 
-    # 6. Round 2: 交叉质疑
-    # 单 agent 下跳过 LLM 调用（不调 LLM 浪费 token）
-    if len(agents) == 1 and not mock_opinions:
-        # 单 agent 且无 mock 注入：跳过
-        round2 = None
-        _append_round(path, 2, None)
-    else:
-        # 全天团或有 mock 注入：跑 R2
-        r2_tasks = []
-        for agent_id in agents:
-            # 构建 other_opinions：排除自己，可注入 mock
-            others = [a for a in round1 if a.name != agent_id]
-            if mock_opinions and agent_id in mock_opinions:
-                # 注入 mock 观点（机制门验证）
-                others.append(mock_opinions[agent_id])
+    # 分离成功/失败：失败的是 Exception 实例
+    round1: list[AgentOutput] = []
+    r1_errors: list[Exception] = []
+    for item in r1_raw:
+        if isinstance(item, Exception):
+            r1_errors.append(item)
+        else:
+            round1.append(item)
 
-            r2_tasks.append(
-                call_agent(
-                    agent_id, ticker, features,
-                    other_opinions=others, reasoning_level="heavy",
-                    usage_accumulator=usage_log,
-                )
+    # f2 §3.5/3.6：error rate ≥ 0.4 触发运行时降级（动态比，spec review #4）
+    active_count = len(agents)
+    failed_count = len(r1_errors)
+    error_rate = failed_count / active_count if active_count else 0.0
+    runtime_degraded = error_rate >= 0.4
+
+    # 编排状态：DA skipped reason + 降级标记（写 CouncilResult，spec review #3 连带）
+    da_skipped_reason: str | None = None
+    council_degraded = False
+    degraded_reason: str | None = None
+
+    if runtime_degraded:
+        # f2 CR P1#3：R1 全部失败（无幸存 agent）→ fail-fast，不跑 R4/不写空壳 watchlist。
+        # 「用幸存 R1 做 R4」前提是有幸存 R1；全空时连 final_verdict 都凑不出，
+        # 硬出结论会重新引入 L3 最怕的无依据输出（600900 教训）。与 f1 insufficient_data 同模式。
+        if not round1:
+            raise ValueError(
+                f"council_failed: all_agents_failed——R1 全部 {active_count} 个 agent 失败"
+                f"（error_rate=100%），无幸存观点，无法产出 council。"
+                f"检查 LLM 限流/模型故障后重跑。"
             )
-        round2 = await asyncio.gather(*r2_tasks)
-        _append_round(path, 2, round2)
-
-    # 7. Round 3: Devil's Advocate（单 agent 跳过）
-    if len(agents) == 1:
+        # 运行时降级：跳 R2/R3，用幸存 R1 做 R4，confidence_cap=40
+        council_degraded = True
+        degraded_reason = "high_agent_error_rate"
+        da_skipped_reason = "runtime_degraded"
+        round2 = None
         da_result = None
+        _append_round(path, 1, round1 if round1 else None)
+        _append_round(path, 2, None)  # 跳 R2
+        _append_round(path, 3, None)  # 跳 R3
+    elif len(agents) == 1 and not mock_opinions:
+        # 单 agent 且无 mock 注入：跳过 R2/R3（沿用原逻辑，不调分歧度分流——
+        # 单 agent compute_divergence 无意义且会因 other_opinions 缺失影响 R2）
+        round2 = None
+        da_result = None
+        _append_round(path, 1, round1)
+        _append_round(path, 2, None)
         _append_round(path, 3, None)
     else:
-        da_result = await _call_da(round1, round2, ticker, features, usage_accumulator=usage_log)
-        _append_da_round(path, da_result)
+        _append_round(path, 1, round1)
 
-    # 8. Round 4: 收敛共识（单 agent 跳过）
-    if len(agents) == 1:
+        if len(agents) == 1:
+            # 单 agent + mock_opinions 注入：跑 R2（机制门验证），但不调分流/DA/synth
+            # （沿用原 test_mock_injection 行为）
+            r2_tasks = []
+            for agent_id in agents:
+                others = [a for a in round1 if a.name != agent_id]
+                if mock_opinions and agent_id in mock_opinions:
+                    others.append(mock_opinions[agent_id])
+                r2_tasks.append(
+                    call_agent(
+                        agent_id, ticker, features,
+                        other_opinions=others, reasoning_level="heavy",
+                        usage_accumulator=usage_log,
+                    )
+                )
+            round2 = await asyncio.gather(*r2_tasks)
+            _append_round(path, 2, round2)
+            da_result = None
+            _append_round(path, 3, None)
+        else:
+            # f2 §3.1/3.2：R1 后分歧度分流（D1）
+            from council.divergence import compute_divergence
+            divergence = compute_divergence(round1)
+            level = divergence["level"]
+
+            if level in ("low", "extreme"):
+                # 低/极高分歧跳 R2/R3，直接 R4（spec review #1：extreme 输出 neutral+divergence_level）
+                da_skipped_reason = "low_divergence" if level == "low" else "extreme_divergence"
+                round2 = None
+                da_result = None
+                _append_round(path, 2, None)
+                _append_round(path, 3, None)
+            else:
+                # medium/high：跑 R2
+                r2_tasks = []
+                for agent_id in agents:
+                    others = [a for a in round1 if a.name != agent_id]
+                    if mock_opinions and agent_id in mock_opinions:
+                        others.append(mock_opinions[agent_id])
+                    r2_tasks.append(
+                        call_agent(
+                            agent_id, ticker, features,
+                            other_opinions=others, reasoning_level="heavy",
+                            usage_accumulator=usage_log,
+                        )
+                    )
+                round2 = await asyncio.gather(*r2_tasks)
+                _append_round(path, 2, round2)
+
+                # f2 §3.3/3.4：R2 后聚合 evidence_exhausted，≥3 则跳 R3
+                exhausted_count = sum(
+                    1 for a in round2 if getattr(a, "evidence_exhausted", False)
+                )
+                if exhausted_count >= 3:
+                    da_skipped_reason = "evidence_exhausted"
+                    da_result = None
+                    _append_round(path, 3, None)
+                else:
+                    da_result = await _call_da(
+                        round1, round2, ticker, features, usage_accumulator=usage_log
+                    )
+                    _append_da_round(path, da_result)
+
+    # Round 4: 收敛共识（单 agent 或降级时仍跑 R4，用幸存 R1）
+    if len(agents) == 1 and not runtime_degraded:
         consensus = None
         _append_round(path, 4, None)
     else:
         consensus = await _call_synthesizer(
-            round1, round2, da_result, ticker, features, usage_accumulator=usage_log
+            round1, round2, da_result, ticker, features,
+            usage_accumulator=usage_log,
+            da_skipped_reason=da_skipped_reason,
         )
+        # f2 §3.5/3.6：运行时降级时 confidence_cap=40
+        if runtime_degraded and consensus and consensus.conviction > 40:
+            consensus.conviction = 40
         _append_synthesizer_round(path, consensus)
 
     # f1-deviation-fix §7：把 token usage 汇总写入辩论记录（AD-03 成本实测，不改 CouncilResult schema）
     _append_usage_summary(path, usage_log)
+
+    # f2 CR P2：编排状态写入 debate md，供缓存恢复（da_skipped_reason/council_degraded/degraded_reason）
+    _append_orchestration_state(path, da_skipped_reason, council_degraded, degraded_reason)
 
     # 9. 组装 CouncilResult
     key_variables = CouncilResult.extract_key_variables(round1, round2)
@@ -541,6 +693,9 @@ async def run_debate(
         consensus_summary=consensus.consensus_summary if consensus else None,
         dissent_points=consensus.dissent_points if consensus else None,
         pending_verification=consensus.pending_verification if consensus else None,
+        da_skipped_reason=da_skipped_reason,
+        council_degraded=council_degraded,
+        degraded_reason=degraded_reason,
     )
 
     # 10. 写入 L3→L4 接口文件
@@ -562,16 +717,29 @@ def _write_council_output(result: CouncilResult, debate_path: Path) -> None:
     # 从 debate_path 提取日期（debate/{ticker}/{date}.md）
     date_str = debate_path.stem
 
+    # f2 §3.7：分歧报告字段从 round4 SynthesizerOutput 取（DA skipped 时 round4 仍跑）
+    r4 = result.round4
     output = {
         "ticker": result.ticker,
         "date": date_str,
         "final_verdict": result.final_verdict,
-        "conviction": result.round4.conviction if result.round4 else None,
+        "conviction": r4.conviction if r4 else None,
         "consensus_summary": result.consensus_summary,
         "key_variables": result.key_variables,
         "dissent_points": result.dissent_points,
         "pending_verification": result.pending_verification,
         "debate_path": str(debate_path),
+        # f2 §1 分歧报告字段（round4 可能 None，如单 agent 跳 R4）
+        "divergence_level": r4.divergence_level if r4 else None,
+        "divergence_score": r4.divergence_score if r4 else None,
+        "key_disagreements": r4.key_disagreements if r4 else [],
+        "confidence_adjustment": r4.confidence_adjustment if r4 else 0.0,
+        "divergence_source": r4.divergence_source if r4 else None,
+        "calibration_status": r4.calibration_status if r4 else "uncalibrated",
+        # f2 §3.7 + spec review #3：DA skipped reason + 运行时降级标记
+        "da_skipped_reason": result.da_skipped_reason,
+        "council_degraded": result.council_degraded,
+        "degraded_reason": result.degraded_reason,
     }
 
     # L4 消费方：文件名用完整 ticker（含交易所后缀 600519.SH），与字段一致

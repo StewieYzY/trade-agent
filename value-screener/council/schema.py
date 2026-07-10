@@ -41,6 +41,8 @@ class AgentOutput:
         what_would_change_my_mind: 什么情况下会改变看法
         out_of_circle: 是否在能力圈外
         historical_parallel: 类似历史案例（选填）
+        new_evidence: R2 新增引用数据点列表（f2 §1，选填，默认 []）
+        evidence_exhausted: 是否声明 R1 已穷尽相关数据（f2 §1，选填，默认 False）
         extra: agent 特有字段透传（冯柳 5 字段、DA blind_spots 等）
     """
     name: str
@@ -52,6 +54,8 @@ class AgentOutput:
     what_would_change_my_mind: str = ""
     out_of_circle: bool = False
     historical_parallel: str | None = None
+    new_evidence: list[str] = field(default_factory=list)
+    evidence_exhausted: bool = False
     extra: dict = field(default_factory=dict)
 
     def to_json(self) -> str:
@@ -137,13 +141,27 @@ class AgentOutput:
         if not isinstance(risks, list):
             raise ValidationError(f"risks must be list, got {type(risks)}")
 
+        # f2 §1: new_evidence / evidence_exhausted（选填，默认 [] / False）
+        new_evidence = data.get("new_evidence", [])
+        if not isinstance(new_evidence, list):
+            raise ValidationError(
+                f"new_evidence must be list, got {type(new_evidence)}"
+            )
+
+        evidence_exhausted = data.get("evidence_exhausted", False)
+        if not isinstance(evidence_exhausted, bool):
+            raise ValidationError(
+                f"evidence_exhausted must be bool, got {type(evidence_exhausted)}"
+            )
+
         # 选填字段
         historical_parallel = data.get("historical_parallel")
 
         # 收集未定义字段到 extra（不再丢弃）
         known_fields = {
             "name", "signal", "conviction", "core_thesis", "key_metrics",
-            "risks", "what_would_change_my_mind", "out_of_circle", "historical_parallel"
+            "risks", "what_would_change_my_mind", "out_of_circle",
+            "historical_parallel", "new_evidence", "evidence_exhausted"
         }
         extra = {k: v for k, v in data.items() if k not in known_fields}
 
@@ -157,6 +175,8 @@ class AgentOutput:
             what_would_change_my_mind=wwcm,
             out_of_circle=out_of_circle,
             historical_parallel=historical_parallel,
+            new_evidence=new_evidence,
+            evidence_exhausted=evidence_exhausted,
             extra=extra,
         )
 
@@ -175,12 +195,24 @@ class SynthesizerOutput:
         consensus_summary: 一句话结论
         dissent_points: 保留的分歧点列表 [{topic, who_disagrees, their_reason}]
         pending_verification: 待验证事项列表（从 DA 盲点 + what_would_change_my_mind 提取）
+        divergence_level: 分歧等级（low/medium/high/extreme，f2 §1，选填，默认 None）
+        divergence_score: 分歧度量化分数 0-1（f2 §1，选填，默认 None）
+        key_disagreements: 关键分歧点结构化列表（f2 §1，选填，默认 []）
+        confidence_adjustment: 基于分歧度的确信度调整（f2 §1，选填，默认 0.0）
+        divergence_source: 分歧来源元信息（f2 §1，选填，默认 None）
+        calibration_status: 校准状态（uncalibrated/calibrated，f2 §1，选填，默认 "uncalibrated"）
     """
     final_signal: str
     conviction: int
     consensus_summary: str
     dissent_points: list[dict] = field(default_factory=list)
     pending_verification: list[str] = field(default_factory=list)
+    divergence_level: str | None = None
+    divergence_score: float | None = None
+    key_disagreements: list[dict] = field(default_factory=list)
+    confidence_adjustment: float = 0.0
+    divergence_source: dict | None = None
+    calibration_status: str = "uncalibrated"
 
     def __post_init__(self):
         """校验枚举和范围."""
@@ -246,12 +278,58 @@ class SynthesizerOutput:
                 f"pending_verification must be list, got {type(pending_verification)}"
             )
 
+        # f2 §1: 分歧报告字段（选填，缺字段走默认，不进 __post_init__ 必填校验）
+        divergence_level = data.get("divergence_level")
+        if divergence_level is not None and not isinstance(divergence_level, str):
+            raise ValidationError(
+                f"divergence_level must be str, got {type(divergence_level)}"
+            )
+
+        divergence_score = data.get("divergence_score")
+        if divergence_score is not None and not isinstance(
+            divergence_score, (int, float)
+        ):
+            raise ValidationError(
+                f"divergence_score must be float|number, got {type(divergence_score)}"
+            )
+
+        key_disagreements = data.get("key_disagreements", [])
+        if not isinstance(key_disagreements, list):
+            raise ValidationError(
+                f"key_disagreements must be list, got {type(key_disagreements)}"
+            )
+
+        confidence_adjustment = data.get("confidence_adjustment", 0.0)
+        if not isinstance(confidence_adjustment, (int, float)):
+            raise ValidationError(
+                f"confidence_adjustment must be float|number, "
+                f"got {type(confidence_adjustment)}"
+            )
+
+        divergence_source = data.get("divergence_source")
+        if divergence_source is not None and not isinstance(divergence_source, dict):
+            raise ValidationError(
+                f"divergence_source must be dict, got {type(divergence_source)}"
+            )
+
+        calibration_status = data.get("calibration_status", "uncalibrated")
+        if not isinstance(calibration_status, str):
+            raise ValidationError(
+                f"calibration_status must be str, got {type(calibration_status)}"
+            )
+
         return cls(
             final_signal=final_signal,
             conviction=conviction,
             consensus_summary=consensus_summary,
             dissent_points=dissent_points,
             pending_verification=pending_verification,
+            divergence_level=divergence_level,
+            divergence_score=divergence_score,
+            key_disagreements=key_disagreements,
+            confidence_adjustment=confidence_adjustment,
+            divergence_source=divergence_source,
+            calibration_status=calibration_status,
         )
 
 
@@ -283,6 +361,13 @@ class CouncilResult:
     dissent_points: list[dict] | None = None
     pending_verification: list[str] | None = None
     debate_path: str | None = None
+    # f2 spec review #3 连带：DA skipped 编排器内部状态（非 L3 输出 schema，
+    # 不违反 f1 N1——N1 保护 AgentOutput/SynthesizerOutput 输出语义）。
+    # DA ran 时为 None，skipped 时填四值之一（low/extreme/evidence_exhausted/runtime_degraded）。
+    da_skipped_reason: str | None = None
+    # f2 §3.5/3.6 运行时降级标记（R1 error rate ≥0.4 触发，跳 R2/R3 + confidence_cap=40）
+    council_degraded: bool = False
+    degraded_reason: str | None = None
 
     def __post_init__(self):
         """单 agent fallback: final_verdict 取 round1[0].signal."""
@@ -303,6 +388,10 @@ class CouncilResult:
             "dissent_points": self.dissent_points,
             "pending_verification": self.pending_verification,
             "debate_path": self.debate_path,
+            # f2 CR P2：编排状态字段（CLI to_json 输出 + 缓存恢复）
+            "da_skipped_reason": self.da_skipped_reason,
+            "council_degraded": self.council_degraded,
+            "degraded_reason": self.degraded_reason,
         }
         return json.dumps(data, ensure_ascii=False, indent=2)
 

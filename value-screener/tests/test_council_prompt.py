@@ -7,6 +7,8 @@
 """
 from __future__ import annotations
 
+import pytest
+
 from council.prompt import (
     build_buffett_prompt,
     build_munger_prompt,
@@ -158,3 +160,65 @@ class TestAllPromptsReturnStrings:
             result = builder()
             assert isinstance(result, str)
             assert len(result) > 100
+
+
+# ── f2 §4 prompt 改造测试 ──────────────────────────────────────
+
+class TestAgentNewEvidenceFields:
+    """f2 §4.1: 各 agent prompt 输出格式段含 new_evidence / evidence_exhausted 字段说明."""
+
+    @pytest.mark.parametrize("builder", [
+        build_buffett_prompt, build_munger_prompt,
+        build_duan_prompt, build_feng_liu_prompt,
+    ])
+    def test_agent_prompt_contains_new_evidence_fields(self, builder):
+        prompt = builder()
+        assert "new_evidence" in prompt
+        assert "evidence_exhausted" in prompt
+
+
+class TestDAPromptArbitration:
+    """f2 §4.3: DA prompt 加仲裁职责（事实回查 + evidence_quality_assessment + recommendation）."""
+
+    def test_contains_fact_check_duty(self):
+        """DA prompt 含事实回查约束（回查 features 实际值）."""
+        prompt = build_da_prompt()
+        assert "回查" in prompt or "事实" in prompt
+        assert "evidence_quality_assessment" in prompt
+
+    def test_contains_recommendation_field(self):
+        """DA prompt 含 recommendation 输出结构."""
+        prompt = build_da_prompt()
+        assert "recommendation" in prompt
+
+    def test_contains_evidence_quality_assessment_values(self):
+        """evidence_quality_assessment 的取值说明（accurate/moderate/weak/inaccurate）."""
+        prompt = build_da_prompt()
+        assert "accurate" in prompt
+        assert "inaccurate" in prompt
+
+
+class TestSynthesizerPromptDivergenceReport:
+    """f2 §4.4: synthesizer prompt 加 DA 仲裁依赖 + 分歧报告字段 + structural 约束."""
+
+    def test_contains_da_arbitration_dependency(self):
+        """synthesizer 基于 DA 的 evidence_quality_assessment/recommendation 做最终判断."""
+        prompt = build_synthesizer_prompt()
+        assert "evidence_quality_assessment" in prompt
+        assert "recommendation" in prompt
+
+    def test_contains_divergence_report_fields(self):
+        """含分歧报告输出字段（divergence_level/key_disagreements/confidence_adjustment/
+        divergence_source/calibration_status）."""
+        prompt = build_synthesizer_prompt()
+        assert "divergence_level" in prompt
+        assert "key_disagreements" in prompt
+        assert "confidence_adjustment" in prompt
+        assert "divergence_source" in prompt
+        assert "calibration_status" in prompt
+
+    def test_contains_structural_unresolvable_constraint(self):
+        """structural 高分歧时标「不可解决」约束."""
+        prompt = build_synthesizer_prompt()
+        assert "不可解决" in prompt
+        assert "structural" in prompt

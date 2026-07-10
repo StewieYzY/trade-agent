@@ -88,6 +88,17 @@ class TestBuildUserMessage:
         # compact JSON 不应有多余缩进
         assert "  " not in msg.split("## 特征数据")[1].split("请独立判断")[0]
 
+    def test_r2_contains_new_evidence_guidance(self, sample_agent):
+        """f2 §4.2: R2 user message 含鼓励性新证据引导（非硬约束，不含「必须」）."""
+        features = {"name": "贵州茅台", "pe_ttm": 18.0}
+        msg = _build_user_message("600519", features, other_opinions=[sample_agent])
+        assert "new_evidence" in msg
+        assert "evidence_exhausted" in msg
+        # 鼓励性引导而非硬约束
+        assert "未充分覆盖" in msg
+        # 不含「必须」（spec review #3：降级为 encourage）
+        assert "必须引用" not in msg
+
 
 # ── _debate_path ───────────────────────────────────────────────
 
@@ -227,6 +238,78 @@ class TestParseDebateMarkdown:
         assert result is not None
         assert result.round1 is not None
         assert result.round2 is not None
+
+    def test_orchestration_state_recovered_from_md(self):
+        """f2 CR P2: _parse_debate_markdown 从「## 编排状态」JSON 段恢复
+        da_skipped_reason/council_degraded/degraded_reason。"""
+        agent_json = json.dumps({
+            "name": "buffett", "signal": "bullish", "conviction": 80,
+            "core_thesis": "好公司", "key_metrics": [], "risks": [],
+            "what_would_change_my_mind": "业绩下滑", "out_of_circle": False,
+            "historical_parallel": None,
+        }, ensure_ascii=False, indent=2)
+        synth_json = json.dumps({
+            "final_signal": "neutral", "conviction": 40,
+            "consensus_summary": "DA skipped low_divergence",
+            "dissent_points": [], "pending_verification": [],
+            "divergence_level": "low",
+        }, ensure_ascii=False, indent=2)
+        state_json = json.dumps({
+            "da_skipped_reason": "low_divergence",
+            "council_degraded": False,
+            "degraded_reason": None,
+        }, ensure_ascii=False, indent=2)
+        md = f"""
+## Round 1 · 各自表态
+
+### 巴菲特
+```json
+{agent_json}
+```
+
+## Round 2 · 交叉质疑
+（单 agent 模式，跳过）
+
+## Round 3 · Devil's Advocate
+（单 agent 模式，跳过）
+
+## Round 4 · 收敛共识
+```json
+{synth_json}
+```
+
+## 编排状态
+```json
+{state_json}
+```
+"""
+        result = _parse_debate_markdown(md, "600519")
+        assert result is not None
+        assert result.da_skipped_reason == "low_divergence"
+        assert result.council_degraded is False
+        assert result.degraded_reason is None
+
+    def test_orchestration_state_absent_defaults_to_none(self):
+        """无编排状态段（老格式 md）→ 3 字段走默认 None/False，不崩。"""
+        agent_json = json.dumps({
+            "name": "buffett", "signal": "bullish", "conviction": 80,
+            "core_thesis": "好公司", "key_metrics": [], "risks": [],
+            "what_would_change_my_mind": "业绩下滑", "out_of_circle": False,
+            "historical_parallel": None,
+        }, ensure_ascii=False, indent=2)
+        md = f"""
+## Round 1 · 各自表态
+
+### 巴菲特
+```json
+{agent_json}
+```
+"""
+        result = _parse_debate_markdown(md, "600519")
+        assert result is not None
+        assert result.da_skipped_reason is None
+        assert result.council_degraded is False
+        assert result.degraded_reason is None
 
 
 # ── _check_cache ───────────────────────────────────────────────
@@ -429,6 +512,171 @@ class TestRunDebate:
         assert "缓存命中" not in new_md, "旧记录残留：force=True 未清除旧文件"
         assert new_md.count("## Round 1") == 1, "Round 1 重复：文件追加而非覆盖"
         assert "好公司" in new_md, "新记录未写入"
+
+
+# ── f2 §3 分流 + 运行时降级测试 ──────────────────────────────────
+
+class TestRunDebateDivergenceRouting:
+    """f2 §3: R1 后分歧度分流（low/extreme 跳 R2/R3）+ 运行时降级."""
+
+    @pytest.mark.anyio
+    async def test_low_divergence_skips_r2_r3(self, debate_dir):
+        """R1 全员一致（low 分歧）→ 跳 R2/R3，只跑 R1+R4."""
+        call_count = 0
+
+        async def mock_call_llm(system_prompt, user_message, reasoning_level="heavy"):
+            nonlocal call_count
+            call_count += 1
+            # R4 synthesizer 返回 SynthesizerOutput JSON；其余返回 AgentOutput JSON
+            if reasoning_level == "moderate":
+                return SYNTHESIZER_LLM_RESPONSE, LLM_USAGE
+            return LLM_RESPONSE, LLM_USAGE  # R1 全 bullish（consensus=1.0, std=0 → low）
+
+        with patch("council.debate.call_llm", side_effect=mock_call_llm):
+            result = await run_debate(
+                "600009", agents=["buffett", "munger", "duan", "feng_liu"],
+                features={"name": "test"},
+            )
+
+        assert result.round2 is None  # low 分歧跳 R2
+        assert result.round3 is None  # 跳 R3
+        assert result.round4 is not None  # R4 仍跑
+        # LLM 调用次数 = R1(4) + R4(1) = 5，非全 4 轮的 10
+        assert call_count == 5, f"low 分歧应跳 R2/R3，调用 {call_count} 次（期望 5）"
+
+    @pytest.mark.anyio
+    async def test_extreme_divergence_skips_r2_r3(self, debate_dir):
+        """R1 signal 完全分散（extreme）→ 跳 R2/R3，R4 输出 neutral + divergence_level=extreme."""
+        # 4 个 agent 返回不同 signal：bullish/bearish/neutral/skip
+        signals = ["bullish", "bearish", "neutral", "skip"]
+        agent_names = ["buffett", "munger", "duan", "feng_liu"]
+
+        async def mock_call_llm(system_prompt, user_message, reasoning_level="heavy"):
+            if reasoning_level == "moderate":
+                # R4 synthesizer 返回 neutral + divergence_level=extreme
+                return json.dumps({
+                    "final_signal": "neutral",
+                    "conviction": 20,
+                    "consensus_summary": "天团意见完全分散，无法收敛",
+                    "dissent_points": [],
+                    "pending_verification": [],
+                    "divergence_level": "extreme",
+                    "key_disagreements": [{"topic": "方向", "bull_case": "多", "bear_case": "空", "strength": 0.9}],
+                }, ensure_ascii=False), LLM_USAGE
+            # R1：按调用顺序返回不同 signal
+            idx = mock_call_llm._r1_count
+            mock_call_llm._r1_count += 1
+            sig = signals[idx] if idx < len(signals) else "bullish"
+            return json.dumps({
+                "signal": sig, "conviction": 50, "core_thesis": f"{sig}观点",
+                "key_metrics": [], "risks": [],
+                "what_would_change_my_mind": "证据", "out_of_circle": False,
+                "historical_parallel": None,
+            }, ensure_ascii=False), LLM_USAGE
+        mock_call_llm._r1_count = 0
+
+        with patch("council.debate.call_llm", side_effect=mock_call_llm):
+            result = await run_debate(
+                "600010", agents=agent_names, features={"name": "test"},
+            )
+
+        assert result.round2 is None  # extreme 跳 R2
+        assert result.round3 is None  # 跳 R3
+        assert result.round4 is not None
+        assert result.round4.final_signal == "neutral"
+        assert result.round4.divergence_level == "extreme"
+
+
+class TestRunDebateEvidenceExhaustedSkip:
+    """f2 §3.3/3.4: R2 后 ≥3 agent 标 evidence_exhausted=true → 跳 R3."""
+
+    @pytest.mark.anyio
+    async def test_evidence_exhausted_skips_r3_medium(self, debate_dir):
+        """R1 medium 分歧（不跳 R2），R2 ≥3 agent evidence_exhausted → 跳 R3，仍跑 R4."""
+        # R1: 3 bullish + 1 neutral → consensus 0.75, std≈7.5 → medium（不跳 R2）
+        r1_signals = ["bullish", "bullish", "bullish", "neutral"]
+        r1_convs = [80, 80, 80, 65]
+        call_idx = 0
+
+        async def mock_call_llm(system_prompt, user_message, reasoning_level="heavy"):
+            nonlocal call_idx
+            call_idx += 1
+            if reasoning_level == "moderate":
+                return SYNTHESIZER_LLM_RESPONSE, LLM_USAGE  # R4
+            if call_idx <= 4:
+                # R1
+                return json.dumps({
+                    "signal": r1_signals[call_idx - 1], "conviction": r1_convs[call_idx - 1],
+                    "core_thesis": "t", "key_metrics": [], "risks": [],
+                    "what_would_change_my_mind": "w", "out_of_circle": False,
+                    "historical_parallel": None,
+                }, ensure_ascii=False), LLM_USAGE
+            # R2 (call_idx 5-8)：前 3 个 evidence_exhausted=True，第 4 个 False+new_evidence
+            r2_idx = call_idx - 5
+            return json.dumps({
+                "signal": r1_signals[r2_idx], "conviction": r1_convs[r2_idx],
+                "core_thesis": "r2", "key_metrics": [], "risks": [],
+                "what_would_change_my_mind": "w", "out_of_circle": False,
+                "historical_parallel": None,
+                "evidence_exhausted": r2_idx < 3,
+                "new_evidence": ["dim"] if r2_idx == 3 else [],
+            }, ensure_ascii=False), LLM_USAGE
+
+        with patch("council.debate.call_llm", side_effect=mock_call_llm):
+            result = await run_debate(
+                "600012", agents=["buffett", "munger", "duan", "feng_liu"],
+                features={"name": "test"},
+            )
+
+        assert result.round2 is not None  # medium 不跳 R2
+        assert result.round3 is None  # ≥3 evidence_exhausted → 跳 R3
+        assert result.round4 is not None  # R4 仍跑
+
+
+class TestRunDebateRuntimeDegrade:
+    """f2 §3.5/3.6: R1 error rate ≥0.4 → 运行时降级（跳 R2/R3，confidence_cap=40）."""
+
+    @pytest.mark.anyio
+    async def test_high_error_rate_triggers_degradation(self, debate_dir):
+        """R1 4 agent 中 ≥2 抛异常（error rate=0.5≥0.4）→ 降级：跳 R2/R3，council_degraded."""
+        call_idx = 0
+
+        async def mock_call_llm(system_prompt, user_message, reasoning_level="heavy"):
+            nonlocal call_idx
+            call_idx += 1
+            if reasoning_level == "moderate":
+                return SYNTHESIZER_LLM_RESPONSE, LLM_USAGE  # R4（降级仍跑 R4）
+            # R1: call_idx 1-4，前 2 个抛异常
+            if call_idx <= 2:
+                raise TimeoutError("LLM timeout")
+            return LLM_RESPONSE, LLM_USAGE  # 后 2 个成功
+
+        with patch("council.debate.call_llm", side_effect=mock_call_llm):
+            result = await run_debate(
+                "600013", agents=["buffett", "munger", "duan", "feng_liu"],
+                features={"name": "test"},
+            )
+
+        assert result.round2 is None  # 降级跳 R2
+        assert result.round3 is None  # 跳 R3
+        assert result.round4 is not None  # 用幸存 R1 做 R4
+        # 运行时降级标记
+        assert getattr(result, "council_degraded", False) or result.round4.conviction <= 40
+
+    @pytest.mark.anyio
+    async def test_all_agents_failed_raises_value_error(self, debate_dir):
+        """f2 CR P1#3: R1 全部 agent 失败（error_rate=1.0）→ fail-fast 抛 ValueError，
+        不跑 R4、不写空壳 watchlist（避免无 R1 观点也让 R4 出结论）。"""
+        async def mock_call_llm(system_prompt, user_message, reasoning_level="heavy"):
+            raise TimeoutError("LLM timeout")  # 全失败
+
+        with patch("council.debate.call_llm", side_effect=mock_call_llm):
+            with pytest.raises(ValueError, match="all_agents_failed|council_failed"):
+                await run_debate(
+                    "600014", agents=["buffett", "munger", "duan", "feng_liu"],
+                    features={"name": "test"},
+                )
+
 # ── DA 和 Synthesizer 测试 ────────────────────────────────────────
 
 DA_LLM_RESPONSE = json.dumps({
@@ -499,34 +747,87 @@ class TestCallSynthesizer:
         assert len(result.dissent_points) == 1
         assert len(result.pending_verification) == 1
 
+    @pytest.mark.anyio
+    async def test_call_synthesizer_da_skipped_reason_in_user_message(self, debate_dir):
+        """f2 CR P1#1: DA skipped 时 da_skipped_reason 传给 synthesizer，
+        user message 含引导（让 LLM 知道为何没 DA + 标注 consensus_summary）。"""
+        agent = AgentOutput.from_dict("buffett", VALID_AGENT_DATA)
+
+        captured_message = []
+
+        async def mock_call_llm(system_prompt, user_message, reasoning_level="moderate"):
+            captured_message.append(user_message)
+            return SYNTHESIZER_LLM_RESPONSE, LLM_USAGE
+
+        with patch("council.debate.call_llm", side_effect=mock_call_llm):
+            # da_result=None + da_skipped_reason="low_divergence"
+            await _call_synthesizer(
+                [agent], None, None, "600519", {"name": "test"},
+                da_skipped_reason="low_divergence",
+            )
+
+        msg = captured_message[0]
+        # user message 应含 da_skipped_reason 引导
+        assert "low_divergence" in msg
+        assert "DA 被跳过" in msg or "da_skipped" in msg or "跳过" in msg
+
+    @pytest.mark.anyio
+    async def test_call_synthesizer_no_da_skipped_reason_omits_guidance(self, debate_dir):
+        """DA ran 时 da_skipped_reason=None，user message 不含跳过引导（正常路径）。"""
+        agent = AgentOutput.from_dict("buffett", VALID_AGENT_DATA)
+        da = AgentOutput.from_dict("da", json.loads(DA_LLM_RESPONSE))
+
+        captured_message = []
+
+        async def mock_call_llm(system_prompt, user_message, reasoning_level="moderate"):
+            captured_message.append(user_message)
+            return SYNTHESIZER_LLM_RESPONSE, LLM_USAGE
+
+        with patch("council.debate.call_llm", side_effect=mock_call_llm):
+            await _call_synthesizer([agent], None, da, "600519", {"name": "test"})
+
+        msg = captured_message[0]
+        assert "DA 被跳过" not in msg  # 正常路径无跳过引导
+
 
 class TestFullCouncil:
     @pytest.mark.anyio
     async def test_full_council_4_rounds(self, debate_dir):
-        """全天团：R1×2 + R2×2 + R3 + R4 完整跑通."""
+        """全天团 4 轮完整跑通（R1×4 + R2×4 + R3 + R4）.
+
+        f2 §3：R1 用 medium 分歧（3 bullish + 1 neutral，conviction 有差异），
+        避免触发 low/extreme 跳轮——本测试验证全 4 轮编排完整性。
+        """
         call_count = 0
+        # R1: 3 bullish + 1 neutral，conviction 75/78/80/65 → consensus 0.75, std≈6 → medium
+        r1_signals = ["bullish", "bullish", "bullish", "neutral"]
+        r1_convs = [75, 78, 80, 65]
 
         async def mock_call_llm(system_prompt, user_message, reasoning_level="heavy"):
             nonlocal call_count
             call_count += 1
             if reasoning_level == "moderate":
                 return SYNTHESIZER_LLM_RESPONSE, LLM_USAGE
-            # DA 或 R1/R2 都是 heavy
             if "你是质疑者" in system_prompt:
                 return DA_LLM_RESPONSE, LLM_USAGE
-            return LLM_RESPONSE, LLM_USAGE
+            # R1/R2 heavy：按调用序返回带 signal 的 AgentOutput
+            idx = (call_count - 1) % 4
+            base = json.loads(LLM_RESPONSE)
+            base["signal"] = r1_signals[idx]
+            base["conviction"] = r1_convs[idx]
+            return json.dumps(base, ensure_ascii=False), LLM_USAGE
 
         with patch("council.debate.call_llm", side_effect=mock_call_llm):
             result = await run_debate(
                 "600519",
-                agents=["buffett", "munger"],
+                agents=["buffett", "munger", "duan", "feng_liu"],
                 features={"name": "test"},
             )
 
-        # R1(2) + R2(2) + R3(DA,1) + R4(synthesizer,1) = 6
-        assert call_count == 6
-        assert len(result.round1) == 2
-        assert len(result.round2) == 2
+        # R1(4) + R2(4) + R3(DA,1) + R4(synthesizer,1) = 10
+        assert call_count == 10
+        assert len(result.round1) == 4
+        assert len(result.round2) == 4
         assert result.round3 is not None
         assert result.round3.name == "da"
         assert result.round4 is not None

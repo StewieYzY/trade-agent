@@ -239,16 +239,24 @@ def _compute_revenue_growth(financials: dict) -> float | None:
     return (latest / prev - 1) * 100
 
 
-def assemble_snapshot(ticker: str, cache_manager: CacheManager | None = None) -> dict:
+def assemble_snapshot(
+    ticker: str,
+    cache_manager: CacheManager | None = None,
+    degrade_on_financials_gap: bool = False,
+) -> dict:
     """从 L0 CacheManager 取全维度数据，组装为特征快照 dict.
 
     Args:
         ticker: 股票代码（6 位）
         cache_manager: CacheManager 实例（缺省用默认路径）
+        degrade_on_financials_gap: f2 §6 L2 降级模式。True 时（L2 scout 调用），
+            critical_fields 齐但 financials_floor 不齐返回 degraded 标记 + partial features
+            而非 fail-fast error；False 时（L3 council 默认）仍 fail-fast。
 
     Returns:
         features dict（含所有字段 + 趋势标注），或
-        {"error": "insufficient_data", "missing_fields": [...]} 若数据不足
+        {"error": "insufficient_data", "missing_fields": [...]} 若数据不足（fail-fast），或
+        {"degraded": True, "degraded_reason": ..., **features} L2 降级模式（critical 齐 financials 不齐）
 
     字段来源：
     - basic: name, industry, market_cap
@@ -373,6 +381,16 @@ def assemble_snapshot(ticker: str, cache_manager: CacheManager | None = None) ->
                             f"先跑 `batch` 重采 basic 维度）",
         }
     if missing_financials_floor:
+        # f2 §6 L2 降级：critical 齐但 financials 不齐时，L2（degrade_on_financials_gap=True）
+        # 返回 degraded 标记 + partial features 继续跑整批；L3（False）仍 fail-fast。
+        # critical 缺失时不降级（basic 都没数据，连 partial 都无意义）。
+        if degrade_on_financials_gap and not missing_critical:
+            features["degraded"] = True
+            features["degraded_reason"] = (
+                f"financials_floor 缺失 {missing_financials_floor}（L2 降级："
+                f"confidence_cap=50 + verdict=watch，不进 deep_dive）"
+            )
+            return features
         return {
             "error": "insufficient_data",
             "missing_fields": missing_fields,

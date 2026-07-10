@@ -13,7 +13,7 @@ L3 天团辩论骨架已落地（`council/`：4 agent 巴菲特/芒格/段永平
 
 **Goals:**
 - 低分歧时跳 R2/R3 省 heavy-model token（分歧度作为元信号）
-- R2 强制新证据，防辩论退化为复读（f1 没覆盖的 Kimi MVP② 缺口）
+- R2 新证据 soft 信号（防辩论退化为复读，原「强制新证据」已降级，见 D2 scope 调整；f1 没覆盖的 Kimi MVP② 缺口）
 - DA 从「找盲点」升级为「仲裁」——做事实回查而非纯文字评估
 - R4 输出结构化分歧报告，保留不确定性而非强行抹平
 - L2/L3 降级分场景：L2 优雅降级（继续跑整批），L3 fail-fast（单只深研诚实）
@@ -35,29 +35,33 @@ L3 天团辩论骨架已落地（`council/`：4 agent 巴菲特/芒格/段永平
 
 **决策**：分歧度量化函数 `compute_divergence(round1) -> {signal_consensus, conviction_std, level}`：
 - `signal_consensus` = 多数 signal 占比（如 4 个 bullish 1 个 neutral → 0.8）——**主信号**
-- `conviction_std` = 5 个 agent conviction 的标准差——**辅助信号**（仅当 signal 一致时用来区分「都看多但确信度差异大」）
+- `conviction_std` = 全体 agent conviction 的标准差——**辅助信号**（仅当 signal 一致时用来区分「都看多但确信度差异大」）。agent 数 <2 时返回 0（spec review #4 修订：不硬编码 agent 数，当前 4 位投资大师，未来张坤加入变 5）
 - `level` 映射（保守默认值，**待 MVP 实测校准**）：
   - `low`：signal_consensus ≥ 0.8 且 conviction_std < 10 → 跳 R2/R3，直接 R4
   - `medium`：signal_consensus ≥ 0.6 或 conviction_std 10-20 → 正常跑 R2/R3
   - `high`：signal 不一致（无多数派，如 2:2 或 2:1:1）→ 正常跑 R2/R3，R4 输出 `divergence_level: "high"` + confidence_adjustment 负向调整
-  - `extreme`：signal 完全分散（1:1:1:1:1 类似）→ 跳 R2/R3，直接 R4 输出 conflict + 分歧报告
+  - `extreme`：signal 完全分散（1:1:1:1:1 类似）→ 跳 R2/R3，直接 R4 输出 `final_signal: "neutral"`（无法收敛到多数派，最诚实的投资动作信号是「无法形成方向判断」）+ `divergence_level: "extreme"` + 非空 `key_disagreements`（分歧信息靠 divergence_level/key_disagreements 表达，不污染 final_signal 枚举——见 spec review #1 调整，守 f1 N1「不改 L3 schema 语义」）
 
 **为何不照搬 Kimi 的 15%/30%/50%**：那是世界杯概率场景调的阈值，trade-agent 是质性 signal（枚举 4 值不是连续概率），百分点数口径不适用。先用保守默认（signal_consensus 0.8/0.6 为主），标注待校准，MVP 实测后调。
 
 **备选**：纯 conviction std 分流——否决，因 conviction 未校准；纯 signal 多数决——可作主信号但丢了「都看多但分歧大」的 nuance，故 conviction std 作辅助。
 
-### D2：强制新证据——schema 字段 + R2 prompt 约束 + 跳 R3 触发
+### D2：新证据字段——结构化信号（soft），非硬约束（f3 落地后升为 hard gate）
 
-**问题**：多轮辩论最易退化成「双方各执一词复读」。Kimi 约束每轮必须提供新数据证据。
+> **scope 调整（2026-07-10）**：原 D2 设计为「R2 强制引用 R1 未讨论维度，否则声明 evidence_exhausted」。但偏移分析实证（Explore 验证）显示 L3 输入仅 21 个纯量化字段，R1 已引用信息量最高的几个（PE/ROE/F-score/涨跌幅），R2 要引「新维度」只能凑低信息量字段（换手率量比/60日高点距离）或像 600009 DA 那样从训练知识里编——两者都比不引更差。**根因不在 agent 不想引新证据，在数据里就没有新维度可引。** 此为信息基底问题（属 f3-l3-research-dossier 范畴），本 change 不解决。故 D2 从硬约束降为结构化信号，避免在 21 字段底座上触发「编造-校验-拦截」死循环、evidence_exhausted 成为常态而非例外。字段保留是为 f3 铺路：f3 引入定性维度后，agent R2 确有新东西可引，`new_evidence` 字段即报告「引用了哪个新维度」的载体，届时 soft warning 升回 hard gate。
 
 **决策**：
-- `AgentOutput` 加两个选填字段（向后兼容，老输出无此字段不报错）：
-  - `new_evidence: list[str]`——本轮新引用的数据点（R1 时为空或全部，R2 时应为 R1 未讨论的维度）
+- `AgentOutput` 加两个选填字段（向后兼容，老输出无此字段不报错）——**字段保留，仅约束降级**：
+  - `new_evidence: list[str]`——本轮引用的数据点（R1 时为空或全部，R2 时鼓励引用 R1 未充分覆盖的维度）
   - `evidence_exhausted: bool`——是否已穷尽所有可用数据（默认 false）
-- R2 prompt 加约束：「你在 R2 的回应中，必须引用至少一个 R1 中未被讨论的数据维度。如果所有相关数据已在 R1 中被引用，请明确声明 `evidence_exhausted: true` 并说明，系统将提前终止辩论。」
-- `run_debate` 在 R2 后聚合：若 ≥3 个 agent 标 `evidence_exhausted=true`，跳 R3（DA 无新信息可仲裁），直接 R4。
+- R2 prompt 从「**必须**引用至少一个 R1 未讨论维度，否则声明 evidence_exhausted」改为「**鼓励**性引导」：
+  > 「如果 R1 未充分覆盖某些数据维度，请在 `new_evidence` 中列出。如果所有相关数据已在 R1 被引用，请声明 `evidence_exhausted: true`。」
+- `run_debate` 在 R2 后聚合逻辑（task 3.3/3.4）**保留不变**：≥3 个 agent 标 `evidence_exhausted=true` 仍跳 R3——这是合理的穷尽退出路径，不依赖硬约束。
+- **质量门降级**（task 5.1/5.2/5.7 改动）：`verify_r2_new_evidence` 从「`new_evidence` 空 且 `evidence_exhausted=false` → 拦截（hard gate）」改为「soft warning——仅记录日志，不阻断流程」。对 `new_evidence` 中数字的反向特征校验（复用 `verify_r1_feature_grounding`）保留，命中伪造数字仍可降级为 warning 内的标记，但不拦截产出（防在 21 字段底座上误杀 R2 全员穷尽声明的诚实退出）。
 
-**为何不强制每轮必产新证据**：会逼模型编造。允许 `evidence_exhausted=true` 显式声明穷尽是诚实的退出路径。
+**为何不全删 D2**：`new_evidence`/`evidence_exhausted` 字段是 f3 的 enabling carrier——f3 给 L3 补定性维度后，R2 的 new_evidence 才有真东西可填，届时把 soft warning 改回 hard gate 是一行改动。现在删字段，f3 还得加回来，且 schema 重构成本高。
+
+**为何不维持原硬约束**：design 自列风险「强制新证据逼模型编造」在 21 字段底座上必然触发——R2 凑数（低信息字段）或编造（训练知识）二选一，质量门拦截编造但产出 evidence_exhausted 全员命中，R3 被跳光，辩论退化。降为 soft 是把该风险从「设计缺陷」降为「已知局限 + f3 修复路径」。
 
 ### D3：DA 升级为仲裁——事实回查而非 LLM 评 LLM 文字
 
@@ -92,7 +96,7 @@ L3 天团辩论骨架已落地（`council/`：4 agent 巴菲特/芒格/段永平
 
 **决策**：分场景：
 - **L2（scout-agent）优雅降级**：`financials_floor` 不齐但 `basic` 命中时，从 fail-fast 改为 `confidence_cap=50` + 强制 `verdict="watch"` + 标注 `degraded=true`，继续跑完整批不中断。注：L2 现有 guard 是 `critical_fields=["name","industry","market_cap"]` + 缺失率>50%，本 change 补「financials 不齐但 basic 齐」这一中间态的降级路径（非 fail-fast 非 full）。
-- **L3（council）保持 fail-fast**：f1 的 `financials_floor` 入口门槛不变。本 change 补 L3 **运行时**降级：agent error rate ≥40%（如 5 个里 ≥2 个 timeout/error）时，跳 R2/R3 只做 R1+R4 + `confidence_cap=40` + 标注 `council_degraded`。区别于入口 fail-fast（数据根本进不来）vs 运行时降级（数据进来了但 agent 跑崩了）。
+- **L3（council）保持 fail-fast**：f1 的 `financials_floor` 入口门槛不变。本 change 补 L3 **运行时**降级：agent error rate `failed_count / active_agent_count ≥ 0.4` 时（spec review #4 修订：动态比，当前 4 agent ≥2 失败即 50%≥40% 触发；未来张坤加入变 5 agent，逻辑不变），跳 R2/R3 只做 R1+R4 + `confidence_cap=40` + 标注 `council_degraded`。区别于入口 fail-fast（数据根本进不来）vs 运行时降级（数据进来了但 agent 跑崩了）。
 
 **为何不照搬 Kimi「永远有输出」**：L3 单只深研若数据不足硬出结论，就是 600900 悲剧重演。L3 的诚实比「有输出」重要。L2 批处理则不同，单只降级比整批 fail 体验好。
 
@@ -102,11 +106,11 @@ L3 天团辩论骨架已落地（`council/`：4 agent 巴菲特/芒格/段永平
 
 **问题**：L3 入口 fail-fast 只防「数据不足」。若数据够但 LLM 调用大面积失败（限流/超时），当前会逐个抛异常中断。
 
-**决策**：`run_debate` 用 `asyncio.gather(*, return_exceptions=True)` 收集 R1 结果，统计 error rate：
-- error rate < 40%：正常继续（个别失败容忍，R2 时 other_opinions 跳过失败 agent）
-- error rate ≥ 40%：触发运行时降级——跳 R2/R3，用幸存 R1 做 R4（synthesizer 收到不完整 R1），`confidence_cap=40`，watchlist 标注 `council_degraded: true` + `degraded_reason: "high_agent_error_rate"`
+**决策**：`run_debate` 用 `asyncio.gather(*, return_exceptions=True)` 收集 R1 结果，统计 error rate = `failed_count / active_agent_count`（**spec review #4 修订：动态比，不硬编码 agent 数**）：
+- error rate < 0.4：正常继续（个别失败容忍，R2 时 other_opinions 跳过失败 agent）
+- error rate ≥ 0.4：触发运行时降级——跳 R2/R3，用幸存 R1 做 R4（synthesizer 收到不完整 R1），`confidence_cap=40`，watchlist 标注 `council_degraded: true` + `degraded_reason: "high_agent_error_rate"`
 
-**为何 40%**：5 个 agent，≥2 个失败（40%）即说明非偶发（限流/模型故障），继续辩论意义不大。保守阈值，待实测。
+**为何 0.4**：当前 4 位投资大师，≥2 失败（50%）即说明非偶发（限流/模型故障），继续辩论意义不大；用动态比 `failed_count / active_agent_count` 而非硬编码「5 agent ≥2」，因未来张坤加入变 5 agent 时逻辑无需改（4 agent 阈值=≥2，5 agent 阈值=≥2）。保守阈值，待实测。
 
 ### D7：structural 不确定性标注——只标 structural，粗标
 
@@ -135,10 +139,10 @@ L3 天团辩论骨架已落地（`council/`：4 agent 巴菲特/芒格/段永平
 ## Risks / Trade-offs
 
 - **[分流阈值误判]** → 该辩论的分歧被跳过（低分歧误跳 R2/R3）。缓解：默认值保守（signal_consensus ≥0.8 才跳，宁可多跑一轮）+ 标注「待校准」+ §6 质量门监控跳轮比例，实测后调。
-- **[DA 仲裁退化成文字游戏]** → DA 只评估 agent 文字不真回查 features。缓解：D3 强制 DA prompt 要求事实回查 + §6 `verify_da_fact_check` 拦截 DA 引用了 features 中不存在的数据点；首次落地人工验证 DA 输出确含 features 比对。
+- **[新证据字段在 21 字段底座上无物可引（已知局限，f3 范畴）]** → L3 输入仅 21 个纯量化字段（实证见 2026-07-10 Explore），R2 引「新维度」只能凑低信息字段或编造。本 change 的缓解是把 D2 从 hard gate 降为 soft warning（详见 D2 scope 调整），**不彻底解决**——根治需 f3-l3-research-dossier 把 L3 输入升级为含定性维度的结构化研究档案。降级后的残留风险：soft warning 无强制力，R2 可能仍复读 R1（无新证据也无穷尽声明）；缓解靠 D3（DA 事实回查）+ f2 的 R2 可见 R1 的辩论可见性约束兜底，f3 落地后升 hard gate。
+- **[DA 仲裁退化成文字游戏]** → DA 只评估 agent 文字不真回查 features。缓解：D3 强制 DA prompt 要求事实回查 + §6 `verify_da_fact_check` 拦截 DA 引用了 features 中不存在的数据点；首次落地人工验证 DA 输出确含 features 比对。**已知局限**：features 仅 21 量化字段，DA 想回查的定性维度（如 600009 的资本开支/扣点率）features 里没有，DA 事实回查只能覆盖 agent 引用的量化指标真假，覆盖不到 DA/agent 从训练知识调取的定性事实——这部分根治需 f3。
 - **[SynthesizerOutput 加字段 LLM 不稳定输出]** → R4 整体校验失败。缓解：6 个新字段全选填 + 缺失时 `calibration_status` 等降级为默认值 + 不进 `__post_init__` 必填校验，避免破坏现有 final_verdict 链路（与 f1 N1「不改 L3 schema」原则调和）。
 - **[L2 降级 vs L3 fail-fast 边界模糊]** → L2 guard 与 L3 guard 共用 `input_assembly`，降级逻辑互相污染。缓解：D5 明确 L2 降级是 `scout/batch.py` 层逻辑（confidence_cap+watch），L3 fail-fast 是 `council/debate.py` 层逻辑（入口门槛不变），不在同一函数混用。
-- **[强制新证据逼模型编造]** → R2 prompt 要求新证据，模型可能编数据点凑数。缓解：§6 `verify_r2_new_evidence` + 复用 f1 的 `verify_r1_feature_grounding` 对 R2 的 new_evidence 也做反向特征校验（新引用数字必须在 features 中有来源），编造即拦截。
 - **[conviction std 不可靠]** → 不同 agent 对「75 分」主观锚定不同，std 失真。缓解：D1 以 signal_consensus 为主，conviction std 仅辅助（仅 signal 一致时用）。
 
 ## Migration Plan
