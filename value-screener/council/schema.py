@@ -388,6 +388,10 @@ class CouncilResult:
             "dissent_points": self.dissent_points,
             "pending_verification": self.pending_verification,
             "debate_path": self.debate_path,
+            # f2 CR P2：编排状态字段（CLI to_json 输出 + 缓存恢复）
+            "da_skipped_reason": self.da_skipped_reason,
+            "council_degraded": self.council_degraded,
+            "degraded_reason": self.degraded_reason,
         }
         return json.dumps(data, ensure_ascii=False, indent=2)
 

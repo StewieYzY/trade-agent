@@ -225,6 +225,33 @@ class TestCouncilResult:
         assert parsed["round4"] is not None
         assert parsed["consensus_summary"] == "品牌护城河深厚"
 
+    def test_to_json_includes_f2_orchestration_state(self):
+        """f2 CR P2: CouncilResult.to_json 输出 da_skipped_reason/council_degraded/degraded_reason."""
+        agent = AgentOutput.from_dict("buffett", VALID_DATA)
+        result = CouncilResult(
+            ticker="600519",
+            round1=[agent],
+            final_verdict="neutral",
+            da_skipped_reason="low_divergence",
+            council_degraded=False,
+            degraded_reason=None,
+        )
+        parsed = json.loads(result.to_json())
+        assert parsed["da_skipped_reason"] == "low_divergence"
+        assert parsed["council_degraded"] is False
+        assert parsed["degraded_reason"] is None
+
+    def test_to_json_omits_none_orchestration_state_by_default(self):
+        """默认（DA ran）编排状态字段为 None/False 但仍输出（CLI 可见）。"""
+        agent = AgentOutput.from_dict("buffett", VALID_DATA)
+        result = CouncilResult(
+            ticker="600519", round1=[agent], final_verdict="bullish",
+        )
+        parsed = json.loads(result.to_json())
+        assert parsed["da_skipped_reason"] is None
+        assert parsed["council_degraded"] is False
+        assert parsed["degraded_reason"] is None
+
 
 # ── AgentOutput extra 字段 ─────────────────────────────────────
 

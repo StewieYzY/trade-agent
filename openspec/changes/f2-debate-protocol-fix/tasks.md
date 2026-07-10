@@ -69,3 +69,12 @@
 - [x] 8.1 跑 `pytest value-screener/tests/` 全套测试，确认无回归（尤其 schema 加字段后老测试 + debate 分流改动后 integration 测试）。**Verify**：测试全 pass（已知 pre-existing 的 test_cli_council.py rounds 字段不符不计）✓ 待
 - [x] 8.2 更新 `design/deviation-analysis-2026-07-01.md` 或 `design/kimi-worldcup-learnings.md` 标注借鉴落地状态（完全借鉴 2 项 + 部分借鉴 7 项的落地情况）。**Verify**：文档状态与实际一致 ✓ 待
 - [x] 8.3 准备 archive：确认 proposal/design/specs/tasks 一致，spec scenario 与实现对齐。**Verify**：可进入 `opsx:archive` ✓ 待（`openspec validate` 通过，316 测试全绿覆盖 spec scenario）
+
+## 9. Code Review 修复（2026-07-10）
+
+> CR 4 项修复（3 P1 + 1 P2），TDD 逐个，327 测试全绿（+11 测试）。
+
+- [x] 9.1 P1#1：`_call_synthesizer` 加 `da_skipped_reason` 参数 + user message 注入引导（DA skipped 时 R4 知道为何没 DA），run_debate 调用时传参（debate.py）
+- [x] 9.2 P1#2：`verify_quality_gate` hard fail 时 `return False`（divergence/DA 机器门 fail 阻断，非无条件 True；人工 WARNING 项保持不阻断）（verify_quality_gate.py）
+- [x] 9.3 P1#3：R1 全失败 fail-fast 抛 `ValueError("all_agents_failed")`（无幸存 R1 时不跑 R4/不写空壳 watchlist，避免无依据输出）（debate.py）
+- [x] 9.4 P2：`CouncilResult.to_json` 加 3 编排状态字段 + debate md 加「## 编排状态」JSON 段 + `_parse_debate_markdown` 解析恢复（CLI 输出 + 缓存命中均保留降级/跳 DA 状态）（schema.py + debate.py）

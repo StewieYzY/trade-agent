@@ -455,6 +455,9 @@ async def verify_quality_gate(ticker: str, force: bool = False) -> bool:
                 print(f"\n[INFO] DA 盲点覆盖: {high_coverage_count} 个盲点被 ≥3 个 agent 忽略")
 
         # f2 §5.7：三个新校验（soft warning / hard fail / pass 三态）
+        # f2 CR P1#2：机器 hard gate（divergence/DA fact-check）fail 时 return False，
+        # 非无条件 True。人工检查项（R1 同质化/R2 修订/DA 盲点）保持 WARNING 不阻断。
+        hard_fail = False
         print("\n[f2 §5 新增校验]")
         # 1. R2 新证据校验（soft warning）
         if result.round2 is not None:
@@ -472,6 +475,7 @@ async def verify_quality_gate(ticker: str, force: bool = False) -> bool:
                 print(f"  [PASS] R4 分歧报告完整性校验通过（level={result.round4.divergence_level}）")
             else:
                 print(f"  [❌ HARD FAIL] R4 分歧报告: {issues_div}")
+                hard_fail = True
 
         # 3. DA 事实回查校验（含 skipped 分支）
         ok_da, issues_da = verify_da_fact_check(
@@ -488,9 +492,10 @@ async def verify_quality_gate(ticker: str, force: bool = False) -> bool:
                 print(f"  [PASS] DA 事实回查校验通过")
             else:
                 print(f"  [❌ HARD FAIL] DA 事实回查: {issues_da}")
+                hard_fail = True
 
         print(f"\n[质量门 人工检查完成] 请根据上述输出判断是否通过")
-        return True
+        return not hard_fail
 
     except Exception as e:
         print(f"[FAILED] 异常: {e}")
