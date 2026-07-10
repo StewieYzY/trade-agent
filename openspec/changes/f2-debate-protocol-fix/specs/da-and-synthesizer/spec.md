@@ -30,7 +30,7 @@
 ### Requirement: Synthesizer prompt 职责导向
 `build_synthesizer_prompt()` SHALL 返回 synthesizer 的 system prompt，职责导向（非 Level 2 四层结构）：
 
-- 职责：综合 R1+R2+DA 产出结构化结论，**基于 DA 的 `evidence_quality_assessment` 和 `recommendation` 做最终判断，而非自行重新综合所有观点**（新增约束）
+- 职责：综合 R1+R2+DA 产出结构化结论，**条件依赖 DA 仲裁报告**（spec review #2 修订：DA 可能被跳过）——**DA ran 时**基于 DA 的 `evidence_quality_assessment` 和 `recommendation` 做最终判断，而非自行重新综合所有观点；**DA skipped 时**基于 R1（+R2 if ran）收敛，`consensus_summary` SHALL 标注 `da_skipped_reason`（取值：`"low_divergence"` / `"extreme_divergence"` / `"evidence_exhausted"` / `"runtime_degraded"`，spec review #3 补 extreme_divergence；reason 存 `CouncilResult` 由 `_call_synthesizer` 读取传入 prompt），此时 synthesizer 自行加权多数收敛但 conviction SHALL 受 `confidence_cap` 约束（降级时=40）
 - 工作守则：收敛结论反映加权多数，保留真实分歧点（不抹平），列出待验证事项，structural 高分歧时标注「不可解决」
 - 输出格式：`SynthesizerOutput`（独立 dataclass，非 `AgentOutput`）
   - `final_signal`: "bullish" | "bearish" | "neutral" | "skip"
@@ -64,15 +64,19 @@ DA 和 synthesizer SHALL NOT 注册到 `AGENT_REGISTRY`（设计决策 3），`d
 - **THEN** `AGENT_REGISTRY` SHALL 只包含 4 位投资大师，不含 `da` / `synthesizer`
 
 ### Requirement: debate.py 独立调用 DA/synthesizer
-`debate.py` SHALL 新增私有函数 `_call_da(round1, round2, ticker, features)` 和 `_call_synthesizer(round1, round2, da_result, ticker, features)`，内部调用 `call_llm`（不走 `call_agent`，因为 prompt 构建和输出解析逻辑不同）。
+`debate.py` SHALL 新增私有函数 `_call_da(round1, round2, ticker, features)` 和 `_call_synthesizer(round1, round2, da_result, ticker, features)`，内部调用 `call_llm`（不走 `call_agent`，因为 prompt 构建和输出解析逻辑不同）。**spec review #2**：`_call_synthesizer` 的 `da_result` 参数类型为 `AgentOutput | None`（DA 可能被跳过），`round2` 同样可为 None（低分歧/extreme 跳 R2）。
 
 #### Scenario: R3 调用 DA
-- **WHEN** 全天团执行 Round 3
+- **WHEN** 全天团执行 Round 3（DA 未被跳过：medium/high 分歧且 R2 未全员 evidence_exhausted）
 - **THEN** `debate.py` SHALL 调用 `_call_da`，传入 R1+R2 的 AgentOutput 列表 + features，返回 DA 的 AgentOutput（含 `extra.blind_spots` + `extra.evidence_quality_assessment`）
 
-#### Scenario: R4 调用 synthesizer
-- **WHEN** 全天团执行 Round 4
-- **THEN** `debate.py` SHALL 调用 `_call_synthesizer`，传入 R1+R2+R3 的输出，返回 `SynthesizerOutput`（含分歧报告字段）
+#### Scenario: R4 调用 synthesizer（DA ran）
+- **WHEN** 全天团执行 Round 4 且 R3 已执行（DA ran）
+- **THEN** `debate.py` SHALL 调用 `_call_synthesizer`，传入 R1+R2+R3 的输出（`da_result` 非空），返回 `SynthesizerOutput`（含分歧报告字段），synthesizer 基于 DA 仲裁报告收敛
+
+#### Scenario: R4 调用 synthesizer（DA skipped，spec review #2）
+- **WHEN** 全天团执行 Round 4 但 R3 被跳过（low/extreme 分流跳轮，或 R2 ≥3 agent 标 `evidence_exhausted`，或运行时降级跳轮）
+- **THEN** `debate.py` SHALL 调用 `_call_synthesizer`，传入 R1（+R2 if ran，`da_result=None`）+ `da_skipped_reason`（从 `CouncilResult` 读），返回 `SynthesizerOutput`，`consensus_summary` SHALL 标注 `da_skipped_reason`（`"low_divergence"` / `"extreme_divergence"` / `"evidence_exhausted"` / `"runtime_degraded"`），synthesizer 基于 R1(+R2) 自行加权多数收敛，conviction 受 `confidence_cap` 约束
 
 #### Scenario: DA/synthesizer 使用正确的推理等级
 - **WHEN** R3/R4 调用 LLM

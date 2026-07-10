@@ -11,7 +11,7 @@
 - `low`（signal_consensus ≥ 0.8 且 conviction_std < 10）：跳 R2/R3，直接 R4 收敛
 - `medium`（signal_consensus ≥ 0.6 或 conviction_std 10-20）：正常跑 R2/R3
 - `high`（signal 无多数派，如 2:2 或 2:1:1）：正常跑 R2/R3，R4 输出 `divergence_level: "high"`
-- `extreme`（signal 完全分散，如 1:1:1:1:1）：跳 R2/R3，直接 R4 输出 conflict + 分歧报告
+- `extreme`（signal 完全分散，如 1:1:1:1:1）：跳 R2/R3，直接 R4 输出 `final_signal: "neutral"`（无法收敛到多数派）+ `divergence_level: "extreme"` + 非空 `key_disagreements`——**不引入 `conflict` 枚举值**（spec review #1 调整：守 f1 N1「不改 L3 schema 语义」，`VALID_SIGNALS` 仍为 bullish/bearish/neutral/skip，分歧状态靠 `divergence_level`/`key_disagreements` 表达而非污染 `final_signal`）
 
 > 背景：Kimi 辩论要点 1（分歧度作为元信号）+ 要点 2（分级响应）。当前 `run_debate` 固定跑完 4 轮，低分歧也跑 R2/R3 浪费 heavy-model token。以 signal 一致性为主、conviction std 为辅，因 conviction 是主观 0-100 分从未校准（[[design]] D1）。
 >
@@ -29,24 +29,24 @@
 - **WHEN** R1 的 4 个 agent signal 为 2 bullish + 2 bearish
 - **THEN** `level == "high"`，`run_debate` SHALL 正常跑 R2/R3，R4 的 `divergence_level` SHALL 为 "high"
 
-#### Scenario: R1 signal 完全分散跳轮输出 conflict
+#### Scenario: R1 signal 完全分散跳轮输出极端分歧报告
 - **WHEN** R1 的 4 个 agent signal 全不同（如 1 bullish + 1 bearish + 1 neutral + 1 skip）
-- **THEN** `level == "extreme"`，`run_debate` SHALL 跳 R2/R3，R4 输出 `final_signal: "conflict"` 等级标记 + 分歧报告
+- **THEN** `level == "extreme"`，`run_debate` SHALL 跳 R2/R3，R4 输出 `final_signal: "neutral"`（signal 完全分散无法收敛到多数派，最诚实的投资动作信号是「无法形成方向判断」）+ `divergence_level: "extreme"` + 非空 `key_disagreements`。**SHALL NOT** 输出 `final_signal: "conflict"`（该值不在 `VALID_SIGNALS`，会触发 `SynthesizerOutput.__post_init__` ValidationError）
 
 #### Scenario: 单 agent 不触发分流
 - **WHEN** 只有 1 个 agent 运行（单 agent 模式）
 - **THEN** SHALL 跳过分流逻辑（沿用现有单 agent 跳过 R2/R3/R4 逻辑），不计算分歧度
 
-### Requirement: AgentOutput 新证据字段
+### Requirement: AgentOutput 新证据字段（soft signal，f3 落地后升 hard）
 `AgentOutput` schema SHALL 新增两个选填字段（向后兼容，老输出缺失不报错）：
 
-- `new_evidence: list[str]`：本轮新引用的数据点列表（R1 时可为空或全部，R2 时应为 R1 未讨论的维度）
+- `new_evidence: list[str]`：本轮引用的数据点列表（R1 时可为空或全部，R2 时**鼓励**引用 R1 未充分覆盖的维度）
 - `evidence_exhausted: bool`：是否已穷尽所有可用数据，默认 `false`
 
-> 背景：Kimi 辩论要点 3（每轮强制新数据证据，防辩论退化复读）。这是 f1-deviation-fix 没覆盖的 Kimi MVP② 缺口——f1 堵的是「数据没进去」，本 requirement 堵「数据进去后 R2 复读 R1」。
+> 背景：Kimi 辩论要点 3（新数据证据防辩论退化复读）。**scope 调整（2026-07-10）**：原设计为「每轮强制新数据证据」，但实证显示 L3 输入仅 21 个纯量化字段，R2 无新维度可引（R1 已引用信息量最高的 PE/ROE/F-score/涨跌幅），硬约束触发「编造-校验-拦截」死循环或 evidence_exhausted 全员命中。根因属信息基底不足（f3-l3-research-dossier 范畴）。本 requirement 降为 soft：字段保留作 f3 的 enabling carrier（f3 补定性维度后，R2 确有新东西可引，质量门升回 hard gate），R2 prompt 改鼓励性引导而非「必须」。
 
 #### Scenario: R2 输出含 new_evidence
-- **WHEN** agent 在 R2 引用了 R1 未讨论的数据维度
+- **WHEN** agent 在 R2 引用了 R1 未充分覆盖的数据维度
 - **THEN** `new_evidence` SHALL 非空，列出该数据点
 
 #### Scenario: R2 声明证据穷尽
@@ -97,20 +97,22 @@
 
 #### Scenario: structural 高分歧标不可解决
 - **WHEN** `divergence_source.structural == "high"`
-- **THEN** `consensus_summary` SHALL 含「不可解决」标注，`final_signal` SHALL 倾向 neutral 或 conflict，不强行 bullish/bearish
+- **THEN** `consensus_summary` SHALL 含「不可解决」标注，`final_signal` SHALL 倾向 `"neutral"`（不强行 bullish/bearish），`divergence_level` SHALL 为 `"high"` 或 `"extreme"` + 非空 `key_disagreements`。**SHALL NOT** 用 `final_signal: "conflict"`（spec review #1 调整：`conflict` 不在 `VALID_SIGNALS`，分歧状态靠 `divergence_level`/`key_disagreements` 表达）
 
 ### Requirement: L3 运行时降级（agent error rate）
-`run_debate` SHALL 用 `asyncio.gather(*, return_exceptions=True)` 收集 R1 结果并统计 error rate。当 error rate ≥ 40% 时触发运行时降级：跳 R2/R3，用幸存 R1 做 R4，`confidence_cap=40`，watchlist 标注 `council_degraded: true`。
+`run_debate` SHALL 用 `asyncio.gather(*, return_exceptions=True)` 收集 R1 结果并统计 error rate = `failed_count / active_agent_count`（spec review #4 修订：**动态比**，不硬编码 agent 数——当前 4 位投资大师，未来张坤加入变 5 agent 时逻辑不变）。当 error rate ≥ 0.4 时触发运行时降级：跳 R2/R3，用幸存 R1 做 R4，`confidence_cap=40`，watchlist 标注 `council_degraded: true`。
 
 > 区别于入口 fail-fast（f1 的 `financials_floor`，数据根本进不来）vs 运行时降级（数据进来了但 agent 跑崩了）。L3 单只深研入口保持 fail-fast 不变（[[design]] D5/D6）。
 
 #### Scenario: agent error rate 高触发运行时降级
-- **WHEN** R1 的 5 个 agent 中 ≥2 个抛异常（timeout/HTTP error）
+- **WHEN** R1 的 4 个 agent 中 ≥2 个抛异常（timeout/HTTP error），即 error rate = `2/4 = 0.5 ≥ 0.4`
 - **THEN** `run_debate` SHALL 跳过 R2/R3，用幸存的 R1 做 R4，watchlist 输出 `council_degraded: true` + `degraded_reason: "high_agent_error_rate"`，conviction 上限 40
 
 #### Scenario: 个别 agent 失败容忍继续
-- **WHEN** R1 的 5 个 agent 中仅 1 个失败
+- **WHEN** R1 的 4 个 agent 中仅 1 个失败，即 error rate = `1/4 = 0.25 < 0.4`
 - **THEN** `run_debate` SHALL 正常继续 R2/R3，R2 的 other_opinions 跳过失败 agent
+
+> 注（spec review #4）：scenario 按当前 4 位投资大师写以符合 TDD「测试覆盖当前实现」；张坤（第 5 agent）加入后补 5-agent scenario，动态比逻辑不变（5 agent 阈值 = ≥2 失败）。
 
 ## MODIFIED Requirements
 
@@ -119,11 +121,11 @@ debate.py SHALL 实现 4 轮串行辩论编排：
 
 - **Round 1（各自表态）**：所有 agent 并行调用 LLM，彼此隔离（不传他人论点），使用重度推理模型
 - **分歧度分流（新增）**：R1 完成后计算分歧度，按 level 决定是否跳过 R2/R3
-- **Round 2（交叉质疑）**：所有 agent 并行调用 LLM，每个 agent 可见其他 agent 的 R1 AgentOutput JSON，使用重度推理模型；单 agent 场景下跳过 LLM 调用；R2 prompt SHALL 要求引用 R1 未讨论的数据维度或声明 evidence_exhausted
-- **Round 3（DA 仲裁）**：Devil's Advocate 单独调用，可见 R1+R2 全部讨论 + 原始 features（做事实回查），使用重度推理模型；当 R2 中 ≥3 agent 标 evidence_exhausted 时跳过
-- **Round 4（收敛共识）**：Synthesizer 单独调用，可见 R1+R2+R3 + DA 仲裁报告，使用中度推理模型，产出含分歧报告的 SynthesizerOutput
+- **Round 2（交叉质疑）**：所有 agent 并行调用 LLM，每个 agent 可见其他 agent 的 R1 AgentOutput JSON，使用重度推理模型；单 agent 场景下跳过 LLM 调用；R2 prompt SHALL **encourage** 引用 R1 未充分覆盖的数据维度，如无则 **may** 声明 `evidence_exhausted`（**soft signal，非硬约束**，见上方「AgentOutput 新证据字段」requirement 的 scope 调整；spec review #3 修订：原「SHALL 要求」与 D2 降级不一致）
+- **Round 3（DA 仲裁）**：Devil's Advocate 单独调用，可见 R1+R2 全部讨论 + 原始 features（做事实回查），使用重度推理模型；**DA skipped 条件**（spec review #2）：① 分流 `level == "low"` 或 `"extreme"` 跳 R2/R3；② R2 中 ≥3 agent 标 `evidence_exhausted` 跳 R3；③ 运行时降级（error rate ≥0.4）跳 R3。被跳时 `CouncilResult.round3 == None` + `CouncilResult.da_skipped_reason` 取四值之一（`"low_divergence"` / `"extreme_divergence"` / `"evidence_exhausted"` / `"runtime_degraded"`，spec review #3 补 extreme_divergence）。注：`da_skipped_reason` 存 `CouncilResult`（编排器内部状态，非 L3 输出 schema，不违反 f1 N1）
+- **Round 4（收敛共识）**：Synthesizer 单独调用，可见 R1（+R2 if ran）+（DA 仲裁报告 if ran，否则 `da_skipped_reason`），使用中度推理模型，产出含分歧报告的 SynthesizerOutput（spec review #2：DA skipped 时 synthesizer 基于 R1(+R2) 自行加权收敛，`consensus_summary` 标注 `da_skipped_reason`，conviction 受 `confidence_cap` 约束）
 
-信息可见性 SHALL 由编排器控制（R1 彼此隔离 / R2 可见他人 / R3 全知含 features / R4 全知含 DA 仲裁），不由 agent 自行决定。
+信息可见性 SHALL 由编排器控制（R1 彼此隔离 / R2 可见他人 / R3 全知含 features / R4 全知——含 DA 仲裁报告 if ran，否则含 `da_skipped_reason`），不由 agent 自行决定。
 
 #### Scenario: R1 信息隔离
 - **WHEN** 执行 Round 1 时
@@ -144,3 +146,7 @@ debate.py SHALL 实现 4 轮串行辩论编排：
 #### Scenario: 单 agent 下 R3/R4 跳过
 - **WHEN** 只有 1 个 agent 且无 DA/synthesizer 注册
 - **THEN** R3/R4 SHALL 返回 None，不报错，CouncilResult 中对应轮次为 None
+
+#### Scenario: DA skipped 时 CouncilResult 记录 da_skipped_reason（spec review #3 连带）
+- **WHEN** DA 被跳过（low/extreme 分流、R2 evidence_exhausted≥3、运行时降级任一）
+- **THEN** `CouncilResult` SHALL 在新增选填字段 `da_skipped_reason: str | None`（默认 None）填入对应取值（`"low_divergence"` / `"extreme_divergence"` / `"evidence_exhausted"` / `"runtime_degraded"`）；DA ran 时该字段为 None。`_call_synthesizer` 从该字段读 reason 传入 synthesizer prompt。**f1 N1 豁免说明**：`CouncilResult` 是编排器内部状态结构（非 L3 对外 JSON 输出 schema——f1 N1 保护的是 `AgentOutput`/`SynthesizerOutput` 的输出语义），加选填字段不触碰 N1；老代码构造 CouncilResult 不传该字段走默认 None，向后兼容。

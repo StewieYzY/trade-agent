@@ -458,3 +458,26 @@ Layer 3 → 不适用（不做蒙特卡洛）
 Layer 2 → L1 量化筛选 + L2 LLM 初筛
 Layer 1 → 数据采集层（22 维 + 三层漏斗 + 数据完整性检查）
 ```
+
+## 第六部分：f2-debate-protocol-fix 落地状态（2026-07-10）
+
+f2 change 将上述借鉴点落地到 trade-agent L3，状态如下：
+
+### 完全借鉴（2 项）
+- **辩论要点 1（分歧度作为元信号）→ D1**：R1 后 `compute_divergence` 算 signal_consensus + conviction_std → level 分流。低/极高分歧跳 R2/R3 省 token。
+- **辩论要点 5（产出是分歧报告）→ D4**：SynthesizerOutput 加 6 个增量字段（divergence_level/key_disagreements/confidence_adjustment 等），叠加不替换 final_verdict。
+
+### 部分借鉴（7 项）
+- **辩论要点 2（分级响应）→ D1 改造**：Kimi 的 15%/30%/50% 阈值是世界杯概率场景调的，trade-agent 用保守默认（signal_consensus 0.8/0.6）+ 标注待 MVP 校准。
+- **辩论要点 3（每轮新数据证据）→ D2 降级**：原硬约束降为 soft warning——实证 L3 输入仅 21 量化字段，R2 无新维度可引，硬约束触发编造-校验死循环。字段保留作 f3 enabling carrier。
+- **辩论要点 4（第三方仲裁）→ D3 改造**：DA 加事实回查（回查 features 实际值）而非 LLM 评 LLM 文字游戏。已知局限：features 仅 21 字段，DA 想回查的定性维度没有。
+- **辩论要点 6（分歧时间收敛）→ D9 暂缓**：L4 分歧追踪依赖全市场跑通 + watchlist 稳定，当前仅预留 schema 字段。
+- **校准要点 1（校准 > 准确率）→ D8 只标注**：watchlist 标 `calibration_status: "uncalibrated"`，Brier 实际计算 Phase 3（conviction 主观分非概率，概念别扭）。
+- **校准要点 2（降级条件可量化）→ D5/D6 分场景**：L2 优雅降级（critical 齐但 financials 不齐 → watch+cap50）、L3 fail-fast（financials_floor 入口）+ L3 运行时降级（error rate≥0.4）。
+- **校准要点 3（三层不确定性）→ D7 只 structural**：parameter vs model 细分 LLM 自评不靠谱，只标 structural（high 时标「不可解决」省死辩论）。
+
+### 不借鉴（1 项）
+- **校准要点 4（优雅降级，永远有输出）**：L3 单只深研若数据不足硬出结论 = 600900 复读茅台悲剧，L3 用 fail-fast 更诚实。L2 批处理则走优雅降级。
+
+### 未解决的根因（f3 范畴）
+f2 优化辩论**过程**而非辩论**信息基础**——L3 输入仍 21 量化字段，无定性维度（主营构成/研报/治理/竞品）。真正让「深」变深需 f3-l3-research-dossier 升级输入为结构化研究档案，届时 D2 soft warning 升回 hard gate、D3 事实回查能覆盖定性维度。详见 `design/kimi-worldcup-learnings.md` 配套偏移分析。

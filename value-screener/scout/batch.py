@@ -103,16 +103,34 @@ async def scout_batch(candidates: list[dict], force: bool = False) -> tuple[list
                         "from_cache": True,
                     }
 
-            # 2. 组装特征快照
-            features = assemble_snapshot(ticker)
+            # 2. 组装特征快照（f2 §6: L2 降级模式——financials 不齐但 critical 齐时降级）
+            features = assemble_snapshot(ticker, degrade_on_financials_gap=True)
 
-            # Insufficient data guard
+            # Insufficient data guard（critical 缺失 → fail-fast，不降级）
             if "error" in features:
                 return {
                     "ticker": ticker,
                     "verdict": "error",
                     "error": features.get("error"),
                     "missing_fields": features.get("missing_fields", []),
+                }
+
+            # f2 §6.3 L2 降级：critical 齐但 financials 不齐 → 标 watch + confidence_cap=50
+            # + degraded，不调 LLM（数据不全调 LLM 会编造 + 省钱），不进 deep_dive 短名单。
+            # 用 `is True` 严格判断，避免 MagicMock/非 bool 假阳性触发降级。
+            if features.get("degraded") is True:
+                return {
+                    "ticker": ticker,
+                    "verdict": "watch",  # 强制 watch，不进 deep_dive
+                    "confidence": 50,  # confidence_cap=50
+                    "one_liner": f"L2 降级：{features.get('degraded_reason', 'financials 不齐')}",
+                    "red_flags": [],
+                    "green_flags": [],
+                    "anti_trap_flags": [],
+                    "low_confidence_anomaly": False,
+                    "degraded": True,
+                    "degraded_reason": features.get("degraded_reason"),
+                    "usage": None,  # 未调 LLM
                 }
 
             snapshot_text = format_snapshot(features)

@@ -22,15 +22,26 @@ from council.schema import AgentOutput, SynthesizerOutput
 
 @pytest.fixture
 def mock_full_council():
-    """模拟全天团 4 轮辩论的完整 LLM 响应序列."""
-    # R1: 4 个 agent 独立判断
+    """模拟全天团 4 轮辩论的完整 LLM 响应序列.
+
+    f2 §3：R1 构造 medium 分歧（3 bullish + 1 neutral，conviction 有差异），
+    避免触发 low/extreme 分流跳轮——本 fixture 验证全 4 轮编排完整性，
+    需 R1 走 medium 路径才能跑满 R2/R3/R4。
+    """
+    # R1: 4 个 agent 独立判断（3 bullish + 1 neutral → consensus 0.75, std≈6 → medium）
     r1_responses = []
-    for agent_id in ["buffett", "munger", "duan", "feng_liu"]:
+    r1_specs = [
+        ("buffett", "bullish", 75),
+        ("munger", "bullish", 78),
+        ("duan", "bullish", 80),
+        ("feng_liu", "neutral", 65),
+    ]
+    for agent_id, signal, conviction in r1_specs:
         r1_responses.append({
             "name": agent_id,
-            "signal": "bullish",
-            "conviction": 75,
-            "core_thesis": f"{agent_id} 看好长期价值",
+            "signal": signal,
+            "conviction": conviction,
+            "core_thesis": f"{agent_id} {'看好长期价值' if signal == 'bullish' else '观望'}",
             "key_metrics": ["ROE 32%", "毛利率 90%+"],
             "risks": ["估值偏高"],
             "what_would_change_my_mind": "市场份额大幅下降",

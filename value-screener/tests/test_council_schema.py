@@ -304,6 +304,82 @@ class TestAgentOutputExtraField:
         assert out.extra == {}
 
 
+# ── AgentOutput new_evidence / evidence_exhausted (f2 §1) ──────
+
+class TestAgentOutputNewEvidence:
+    """f2-debate-protocol-fix §1.1: new_evidence / evidence_exhausted 选填字段."""
+
+    def test_from_json_with_new_evidence_fields(self):
+        """from_json 能解析含 new_evidence / evidence_exhausted 的 JSON."""
+        data = {
+            **VALID_DATA,
+            "new_evidence": ["Q3 营收超预期", "毛利率回升"],
+            "evidence_exhausted": False,
+        }
+        out = AgentOutput.from_json("buffett", json.dumps(data))
+        assert out.new_evidence == ["Q3 营收超预期", "毛利率回升"]
+        assert out.evidence_exhausted is False
+
+    def test_from_json_evidence_exhausted_true(self):
+        data = {
+            **VALID_DATA,
+            "new_evidence": [],
+            "evidence_exhausted": True,
+        }
+        out = AgentOutput.from_json("munger", json.dumps(data))
+        assert out.new_evidence == []
+        assert out.evidence_exhausted is True
+
+    def test_missing_new_evidence_defaults_empty_list(self):
+        """缺失 new_evidence 时填默认 [] 不报错."""
+        out = AgentOutput.from_dict("buffett", VALID_DATA)
+        assert out.new_evidence == []
+
+    def test_missing_evidence_exhausted_defaults_false(self):
+        """缺失 evidence_exhausted 时填默认 false 不报错."""
+        out = AgentOutput.from_dict("buffett", VALID_DATA)
+        assert out.evidence_exhausted is False
+
+    def test_old_output_without_new_fields_still_parses(self):
+        """老输出（无新字段）仍能解析（向后兼容）."""
+        out = AgentOutput.from_dict("buffett", VALID_DATA)
+        assert out.signal == "bullish"
+        assert out.new_evidence == []
+        assert out.evidence_exhausted is False
+
+    def test_new_evidence_not_leaked_to_extra(self):
+        """new_evidence 不应透传到 extra（known_fields 已含）."""
+        data = {
+            **VALID_DATA,
+            "new_evidence": ["x"],
+            "evidence_exhausted": True,
+        }
+        out = AgentOutput.from_dict("buffett", data)
+        assert "new_evidence" not in out.extra
+        assert "evidence_exhausted" not in out.extra
+
+    def test_new_evidence_not_list_raises(self):
+        data = {**VALID_DATA, "new_evidence": "Q3 营收"}
+        with pytest.raises(ValidationError, match="new_evidence must be list"):
+            AgentOutput.from_dict("buffett", data)
+
+    def test_evidence_exhausted_not_bool_raises(self):
+        data = {**VALID_DATA, "evidence_exhausted": "yes"}
+        with pytest.raises(ValidationError, match="evidence_exhausted must be bool"):
+            AgentOutput.from_dict("buffett", data)
+
+    def test_to_dict_includes_new_evidence_fields(self):
+        data = {
+            **VALID_DATA,
+            "new_evidence": ["x"],
+            "evidence_exhausted": True,
+        }
+        out = AgentOutput.from_dict("buffett", data)
+        d = out.to_dict()
+        assert d["new_evidence"] == ["x"]
+        assert d["evidence_exhausted"] is True
+
+
 # ── SynthesizerOutput ──────────────────────────────────────────
 
 class TestSynthesizerOutput:
@@ -398,3 +474,129 @@ class TestSynthesizerOutput:
         assert d["final_signal"] == "bullish"
         assert d["consensus_summary"] == "test"
         assert len(d["dissent_points"]) == 1
+
+
+# ── SynthesizerOutput divergence 报告字段 (f2 §1.3) ────────────
+
+class TestSynthesizerDivergenceFields:
+    """f2-debate-protocol-fix §1.3: 6 个分歧报告字段，选填向后兼容."""
+
+    BASE_SYN = {
+        "final_signal": "neutral",
+        "conviction": 50,
+        "consensus_summary": "分歧较大",
+        "dissent_points": [],
+        "pending_verification": [],
+    }
+
+    def test_from_json_with_all_divergence_fields(self):
+        """from_json 能解析含 6 个分歧字段的 JSON."""
+        data = {
+            **self.BASE_SYN,
+            "divergence_level": "high",
+            "divergence_score": 0.72,
+            "key_disagreements": [
+                {"topic": "估值", "agents": ["buffett", "munger"]},
+            ],
+            "confidence_adjustment": -15.0,
+            "divergence_source": {"computed_by": "compute_divergence"},
+            "calibration_status": "calibrated",
+        }
+        syn = SynthesizerOutput.from_json(json.dumps(data))
+        assert syn.divergence_level == "high"
+        assert syn.divergence_score == 0.72
+        assert len(syn.key_disagreements) == 1
+        assert syn.key_disagreements[0]["topic"] == "估值"
+        assert syn.confidence_adjustment == -15.0
+        assert syn.divergence_source == {"computed_by": "compute_divergence"}
+        assert syn.calibration_status == "calibrated"
+
+    def test_missing_all_divergence_fields_fills_defaults(self):
+        """缺失所有分歧字段时填默认，不报错（选填向后兼容）."""
+        syn = SynthesizerOutput.from_dict(dict(self.BASE_SYN))
+        assert syn.divergence_level is None
+        assert syn.divergence_score is None
+        assert syn.key_disagreements == []
+        assert syn.confidence_adjustment == 0.0
+        assert syn.divergence_source is None
+        assert syn.calibration_status == "uncalibrated"
+
+    def test_missing_fields_no_post_init_error(self):
+        """缺失新字段不进 __post_init__ 必填校验（不抛 ValidationError）."""
+        # 只给必填三字段，缺所有分歧字段
+        data = {
+            "final_signal": "bullish",
+            "conviction": 75,
+            "consensus_summary": "共识强",
+        }
+        syn = SynthesizerOutput.from_dict(data)
+        assert syn.divergence_level is None
+        assert syn.calibration_status == "uncalibrated"
+
+    def test_old_watchlist_json_still_parses(self):
+        """老 watchlist JSON（无新字段）仍能解析."""
+        old_json = json.dumps({
+            "final_signal": "neutral",
+            "conviction": 40,
+            "consensus_summary": "中性",
+            "dissent_points": [{"topic": "估值"}],
+            "pending_verification": [],
+        })
+        syn = SynthesizerOutput.from_json(old_json)
+        assert syn.final_signal == "neutral"
+        assert syn.divergence_level is None
+        assert syn.calibration_status == "uncalibrated"
+
+    def test_divergence_level_only(self):
+        """只给 divergence_level，其余填默认."""
+        data = {**self.BASE_SYN, "divergence_level": "low"}
+        syn = SynthesizerOutput.from_dict(data)
+        assert syn.divergence_level == "low"
+        assert syn.divergence_score is None
+        assert syn.calibration_status == "uncalibrated"
+
+    def test_key_disagreements_not_list_raises(self):
+        data = {**self.BASE_SYN, "key_disagreements": "not a list"}
+        with pytest.raises(ValidationError, match="key_disagreements must be list"):
+            SynthesizerOutput.from_dict(data)
+
+    def test_divergence_score_not_float_raises(self):
+        data = {**self.BASE_SYN, "divergence_score": "high"}
+        with pytest.raises(ValidationError, match="divergence_score must be float|number"):
+            SynthesizerOutput.from_dict(data)
+
+    def test_confidence_adjustment_not_float_raises(self):
+        data = {**self.BASE_SYN, "confidence_adjustment": "abc"}
+        with pytest.raises(ValidationError, match="confidence_adjustment must be float|number"):
+            SynthesizerOutput.from_dict(data)
+
+    def test_to_dict_includes_divergence_fields(self):
+        data = {
+            **self.BASE_SYN,
+            "divergence_level": "high",
+            "divergence_score": 0.8,
+            "key_disagreements": [{"topic": "x"}],
+            "confidence_adjustment": -10.0,
+            "divergence_source": {"k": "v"},
+            "calibration_status": "calibrated",
+        }
+        syn = SynthesizerOutput.from_dict(data)
+        d = syn.to_dict()
+        assert d["divergence_level"] == "high"
+        assert d["divergence_score"] == 0.8
+        assert len(d["key_disagreements"]) == 1
+        assert d["confidence_adjustment"] == -10.0
+        assert d["divergence_source"] == {"k": "v"}
+        assert d["calibration_status"] == "calibrated"
+
+    def test_to_dict_includes_default_divergence_fields(self):
+        """asdict 带默认值：to_dict 含默认分歧字段."""
+        syn = SynthesizerOutput.from_dict(dict(self.BASE_SYN))
+        d = syn.to_dict()
+        assert d["divergence_level"] is None
+        assert d["divergence_score"] is None
+        assert d["key_disagreements"] == []
+        assert d["confidence_adjustment"] == 0.0
+        assert d["divergence_source"] is None
+        assert d["calibration_status"] == "uncalibrated"
+

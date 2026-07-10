@@ -82,7 +82,7 @@ class TestCouncilCommand:
         from council.schema import CouncilResult, AgentOutput
         mock_run_debate.return_value = CouncilResult(
             ticker="600519.SH",
-            rounds=[[AgentOutput(name="buffett", signal="bullish", conviction=80, core_thesis="好公司", what_would_change_my_mind="业绩下滑", out_of_circle=False)]],
+            round1=[AgentOutput(name="buffett", signal="bullish", conviction=80, core_thesis="好公司", what_would_change_my_mind="业绩下滑", out_of_circle=False)],
             final_verdict="bullish",
             key_variables=[]
         )
@@ -97,7 +97,7 @@ class TestCouncilCommand:
         from council.schema import CouncilResult
         mock_run_debate.return_value = CouncilResult(
             ticker="600519.SH",
-            rounds=[],
+            round1=[],
             final_verdict="bullish",
             key_variables=[]
         )

@@ -39,7 +39,7 @@ def watchlist_dir(tmp_path, monkeypatch):
 
 class TestWriteCouncilOutput:
     def test_full_council_fields(self, watchlist_dir):
-        """全天团接口文件字段完整."""
+        """全天团接口文件字段完整（含 f2 分歧报告 + da_skipped + degraded 字段）."""
         agent = AgentOutput.from_dict("buffett", VALID_AGENT_DATA)
         syn = SynthesizerOutput(
             final_signal="bullish",
@@ -47,6 +47,12 @@ class TestWriteCouncilOutput:
             consensus_summary="品牌护城河深厚",
             dissent_points=[{"topic": "估值", "who_disagrees": "munger", "their_reason": "PE过高"}],
             pending_verification=["现金流验证"],
+            # f2 §1 分歧报告字段
+            divergence_level="medium",
+            divergence_score=0.75,
+            key_disagreements=[{"topic": "估值", "bull_case": "低", "bear_case": "高", "strength": 0.6}],
+            confidence_adjustment=-0.1,
+            calibration_status="uncalibrated",
         )
         result = CouncilResult(
             ticker="600519.SH",
@@ -59,6 +65,10 @@ class TestWriteCouncilOutput:
             consensus_summary="品牌护城河深厚",
             dissent_points=[{"topic": "估值"}],
             pending_verification=["现金流验证"],
+            # f2 spec review #3 连带 + §3.5 降级标记
+            da_skipped_reason=None,  # DA ran
+            council_degraded=False,
+            degraded_reason=None,
         )
 
         debate_path = Path("debate/600519/2026-06-30.md")
@@ -77,6 +87,16 @@ class TestWriteCouncilOutput:
         assert len(data["dissent_points"]) == 1
         assert data["pending_verification"] == ["现金流验证"]
         assert "debate/600519/2026-06-30.md" in data["debate_path"]
+        # f2 §3.7：分歧报告字段透传
+        assert data["divergence_level"] == "medium"
+        assert data["divergence_score"] == 0.75
+        assert len(data["key_disagreements"]) == 1
+        assert data["confidence_adjustment"] == -0.1
+        assert data["calibration_status"] == "uncalibrated"
+        # f2 §3.7：DA skipped + 降级标记透传
+        assert data["da_skipped_reason"] is None  # DA ran
+        assert data["council_degraded"] is False
+        assert data["degraded_reason"] is None
 
     def test_single_agent_fallback_none_fields(self, watchlist_dir):
         """单 agent fallback: consensus_summary/dissent_points/pending_verification 为 None."""

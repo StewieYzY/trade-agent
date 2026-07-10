@@ -198,6 +198,57 @@ def test_assemble_snapshot_insufficient_data_too_many_missing():
         assert len(result["missing_fields"]) > 8  # 总共有 17 个数据字段，>50% 即 >8.5
 
 
+def test_assemble_snapshot_l2_degraded_financials_gap():
+    """f2 §6.1: L2 降级模式——critical_fields 齐但 financials_floor 不齐时，
+    degrade_on_financials_gap=True 返回 degraded 标记而非 fail-fast error。
+
+    L2 是 200 只快筛批处理，单只 financials 不齐应降级（confidence_cap=50 + watch）
+    而非中断整批；L3 仍 fail-fast（degrade_on_financials_gap=False，默认）。
+    """
+    with tempfile.TemporaryDirectory() as tmpdir:
+        cache_dir = Path(tmpdir) / "cache"
+        ticker = "888888"
+
+        # critical_fields 齐全（name/industry/market_cap）但 financials 缺 income
+        # （roe_3y/net_margin 派生不出 → financials_floor 不齐）+ valuation 缺 pe_ttm
+        mock_data = {
+            "basic": {
+                "name": "测试股",
+                "industry": "测试",
+                "market_cap": 1e10,
+            },
+            "valuation": {"pb": 2.0},  # 缺 pe_ttm
+            "financials": {
+                "income": {},  # 缺 net_profit/revenue → roe_3y/net_margin 无
+                "balance_sheet": {
+                    "TOTAL_ASSETS": [1000e8],
+                    "TOTAL_CURRENT_LIAB": [200e8],
+                    "TOTAL_NONCURRENT_LIAB": [100e8],
+                    "GOODWILL": [0],
+                },
+                "cash_flow": {"NETCASH_OPERATE": [50e8]},
+            },
+            "kline": {"close": [10.0] * 250, "turnover_rate": [0.5] * 250},
+            "risk": {"pledge_ratio": 5.0, "audit_opinion": "标准无保留意见"},
+        }
+
+        _create_mock_cache(ticker, cache_dir, mock_data)
+        cm = CacheManager(base_dir=str(cache_dir))
+
+        # 默认（L3）仍 fail-fast
+        result_l3 = assemble_snapshot(ticker, cache_manager=cm)
+        assert result_l3.get("error") == "insufficient_data"
+        assert result_l3.get("guard") == "financials_floor"
+
+        # L2 降级模式：critical 齐但 financials 不齐 → degraded 标记 + partial features
+        result_l2 = assemble_snapshot(ticker, cache_manager=cm, degrade_on_financials_gap=True)
+        assert result_l2.get("degraded") is True
+        assert "degraded_reason" in result_l2
+        # 仍返回 partial features（critical + kline 等），供 L2 继续跑
+        assert result_l2.get("name") == "测试股"
+        assert result_l2.get("market_cap") == 100.0  # 1e10/1e8=100 亿
+
+
 def test_cashflow_match_both_negative():
     """验证 NP<0 且 OCF<0 → '不匹配（亏损+现金消耗）'."""
     assert _annotate_cashflow_match(-50, -100) == "不匹配（亏损+现金消耗）"

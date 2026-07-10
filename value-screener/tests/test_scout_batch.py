@@ -165,7 +165,7 @@ def test_scout_batch_error_handling():
             "anti_trap_flags": [],
         }), LLM_USAGE)
 
-    def mock_assemble(ticker, cache_manager=None):
+    def mock_assemble(ticker, cache_manager=None, **kwargs):
         return {
             "ticker": ticker,
             "name": "测试股票",
@@ -213,7 +213,7 @@ def test_scout_batch_insufficient_data():
         {"ticker": "600003"},
     ]
 
-    def mock_assemble(ticker, cache_manager=None):
+    def mock_assemble(ticker, cache_manager=None, **kwargs):
         if ticker == "600002":
             return {"error": "insufficient_data", "missing_fields": ["name", "industry"]}
         return {
@@ -400,6 +400,67 @@ def test_scout_batch_cache_write_failure():
                 assert result[0]["ticker"] == "600001"
                 assert result[0]["verdict"] == "deep_dive"
                 assert result[0]["confidence"] == 90
+
+
+# ── f2 §6.3 L2 降级处理 ────────────────────────────────────────
+
+def test_scout_batch_degraded_financials_gap_to_watch():
+    """f2 §6.3: assemble_snapshot 返回 degraded=True 时，batch 标 watch + confidence_cap=50
+    + degraded，不调 LLM（数据不全不调 LLM 编造 + 省钱），不进 deep_dive 短名单。
+    """
+    candidates = [{"ticker": "600002"}]
+
+    async def mock_call(snapshot, system):
+        # 降级票不应调 LLM——若调用即测试失败
+        raise AssertionError("降级票不应调 LLM")
+
+    with patch("scout.batch.call_llm_snapshot", new=mock_call):
+        with patch("scout.batch.assemble_snapshot") as mock_assemble:
+            # critical 齐但 financials_floor 不齐 → degraded=True + partial features
+            mock_assemble.return_value = {
+                "name": "测试",
+                "market_cap": 100,
+                "degraded": True,
+                "degraded_reason": "financials_floor 缺失 pe_ttm",
+            }
+            with patch("scout.batch.ScoutCache") as mock_cache_cls:
+                mock_cache_cls.return_value.get.return_value = None
+                shortlist, usage = asyncio.run(scout_batch(candidates, force=True))
+
+    # shortlist（deep_dive）不应含降级票
+    assert shortlist == []
+    # usage 应有降级票的记录但不产生 LLM token（call_count=0）
+    assert usage["call_count"] == 0
+
+    # 验证 batch 调 assemble_snapshot 时传了 degrade_on_financials_gap=True
+    assert mock_assemble.call_args is not None
+    assert mock_assemble.call_args.kwargs.get("degrade_on_financials_gap") is True
+
+
+def test_scout_batch_degraded_not_in_deep_dive_shortlist():
+    """f2 §6.3: 降级票不进 deep_dive 短名单（即使 confidence 被错误标高）。
+
+    降级票 confidence 强制 cap=50 + verdict=watch，watch 不进 deep_dive。
+    但 watchlist/usage_summary 仍累加（不丢结果）。
+    """
+    candidates = [{"ticker": "600003"}]
+
+    with patch("scout.batch.call_llm_snapshot", new=AsyncMock()):
+        with patch("scout.batch.assemble_snapshot") as mock_assemble:
+            mock_assemble.return_value = {
+                "name": "测试",
+                "market_cap": 100,
+                "degraded": True,
+                "degraded_reason": "financials_floor 缺失",
+            }
+            with patch("scout.batch.ScoutCache") as mock_cache_cls:
+                mock_cache_cls.return_value.get.return_value = None
+                shortlist, usage = asyncio.run(scout_batch(candidates, force=True))
+
+    # 降级票不进 deep_dive
+    assert shortlist == []
+    # usage_summary 仍累加（降级票虽不调 LLM，但计为处理过）
+    assert usage["call_count"] == 0
 
 
 if __name__ == "__main__":
