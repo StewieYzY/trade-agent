@@ -24,6 +24,9 @@ from ..fetchers.financials import FinancialsFetcher
 from ..fetchers.kline import KlineFetcher
 from ..fetchers.valuation import ValuationFetcher
 from ..fetchers.risk import RiskFetcher
+from ..fetchers.fetch_main_business import MainBusinessFetcher
+from ..fetchers.fetch_peers import PeersFetcher
+from ..fetchers.fetch_research import ResearchFetcher
 
 _DIM_FETCHERS: dict[str, type] = {
     "basic": BasicFetcher,
@@ -31,6 +34,10 @@ _DIM_FETCHERS: dict[str, type] = {
     "kline": KlineFetcher,
     "valuation": ValuationFetcher,
     "risk": RiskFetcher,
+    # f3a §1.7：3 新建 fetcher（L3 dossier 定性维度）
+    "main_business": MainBusinessFetcher,
+    "peers": PeersFetcher,
+    "research": ResearchFetcher,
 }
 
 

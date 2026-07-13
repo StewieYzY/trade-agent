@@ -21,6 +21,7 @@ from typing import Any
 from council.agents import AGENT_REGISTRY, get_prompt_builder, get_agent_display_name
 from council.features import assemble_council_features
 from council.llm import call_llm
+from council.research_dossier import build_research_dossier
 from council.schema import AgentOutput, CouncilResult, SynthesizerOutput, ValidationError
 
 
@@ -55,7 +56,8 @@ async def call_agent(
     system_prompt = builder()
 
     # 构建 user message
-    user_message = _build_user_message(ticker, features, other_opinions)
+    # f3a §3 D3：透传 agent_id 给 _build_user_message 做角色分发
+    user_message = _build_user_message(ticker, features, other_opinions, agent_id=agent_id)
 
     # 调用 LLM（f1-deviation-fix §7：返回 (content, usage)，usage 供 AD-03 成本累加）
     raw_json, usage = await call_llm(system_prompt, user_message, reasoning_level)
@@ -70,13 +72,24 @@ def _build_user_message(
     ticker: str,
     features: dict,
     other_opinions: list[AgentOutput] | None = None,
+    agent_id: str | None = None,
 ) -> str:
     """构建 user message（特征数据 + 他人观点）.
 
+    f3a §3/§4（D3）：角色分发按 agent_id 从分层 dossier 取角色侧重子集，
+    core_snapshot 全员共享，定性维度按 D1 角色表分发。
+    - agent_id 为 buffett/munger/duan/feng_liu：按角色表分发定性维度
+    - agent_id 为 da/synthesizer：走全量路径（仲裁要全知，不分发）
+    - agent_id=None 或 features 是旧扁平结构：退化为全员共享（向后兼容）
+
+    f3a §4：prompt 物理分区——公司事实段（core+main_business+peers+capex_proxy）
+    + 市场共识段（research 单独成段），研报引用写明「市场预期认为……」不当事实。
+
     Args:
         ticker: 股票代码
-        features: 特征数据 dict
+        features: 特征数据 dict（f3a 起为分层 dossier，旧调用为扁平 21 字段）
         other_opinions: 其他 agent 的输出（R2 用）
+        agent_id: 当前 agent 标识（角色分发用）
 
     Returns:
         user message 字符串
@@ -84,9 +97,17 @@ def _build_user_message(
     parts = [
         f"请分析以下股票：{ticker}",
         "",
-        "## 特征数据",
-        json.dumps(features, ensure_ascii=False),
     ]
+
+    # 分层 dossier（f3a）→ 按角色分发；旧扁平 features → 全员共享退化
+    if isinstance(features, dict) and "research_dossier" in features:
+        parts.extend(_build_dossier_sections(features, agent_id))
+    else:
+        # 旧扁平 21 字段（向后兼容，agent_id=None 退化路径）
+        parts.extend([
+            "## 特征数据",
+            json.dumps(features, ensure_ascii=False),
+        ])
 
     if other_opinions:
         parts.extend([
@@ -114,6 +135,98 @@ def _build_user_message(
         ])
 
     return "\n".join(parts)
+
+
+# f3a §3 D1：角色 → 定性维度侧重映射
+# core_snapshot 全员共享，定性维度按角色分发
+_AGENT_DIM_MAP: dict[str, tuple[str, ...]] = {
+    "buffett": ("main_business", "peers", "capex_proxy"),
+    "munger": ("main_business", "peers"),       # pledge 在顶层，单独注入
+    "duan": ("main_business", "peers", "research"),
+    "feng_liu": ("research", "capex_proxy"),
+}
+# DA / Synthesizer 走全量路径（仲裁要全知）
+_FULL_ACCESS_AGENTS = {"da", "synthesizer"}
+
+
+def _build_dossier_sections(dossier: dict, agent_id: str | None) -> list[str]:
+    """从分层 dossier 按 agent_id 角色分发构造 user message 段.
+
+    物理分区（§4）：
+    - 「公司事实特征」段：core_snapshot + main_business + peers + capex_proxy
+    - 「市场共识/外部预期」段：research（单独成段，研报引用写明「市场预期认为……」）
+    芒格的 pledge 单独注明（治理代理）。
+    """
+    core = dossier.get("core_snapshot", {})
+    rd = dossier.get("research_dossier", {}) or {}
+    degraded_fields = rd.get("degraded_fields", []) or []
+    pledge = dossier.get("pledge")
+
+    # 决定可见维度
+    if agent_id is None or agent_id in _FULL_ACCESS_AGENTS:
+        # 全量路径（agent_id=None 退化 / DA / Synthesizer）
+        visible_dims = ("main_business", "peers", "capex_proxy", "research")
+        include_pledge = True
+    else:
+        visible_dims = _AGENT_DIM_MAP.get(agent_id, ())
+        # 芒格含 pledge（治理代理），其他 agent 不含 pledge
+        include_pledge = (agent_id == "munger")
+
+    parts: list[str] = []
+
+    # ── 公司事实特征段（core + 可见的定性事实维度）──────────────
+    parts.append("## 公司事实特征")
+    parts.append(json.dumps(core, ensure_ascii=False, indent=2))
+
+    fact_dims = [d for d in ("main_business", "peers", "capex_proxy")
+                 if d in visible_dims]
+    for dim in fact_dims:
+        dim_data = rd.get(dim)
+        is_degraded = dim in degraded_fields or _is_error_data(dim_data)
+        if is_degraded:
+            parts.append(f"\n### {dim}（该维度缺失/降级）")
+            parts.append(_degraded_note(dim))
+            continue
+        parts.append(f"\n### {dim}")
+        parts.append(json.dumps(dim_data, ensure_ascii=False, indent=2))
+
+    # pledge（芒格治理代理）单独注入公司事实段
+    if include_pledge and pledge is not None:
+        parts.append(f"\n### pledge（质押率，治理代理）")
+        parts.append(json.dumps({"pledge_ratio": pledge}, ensure_ascii=False))
+
+    # ── 市场共识/外部预期段（research，单独成段）───────────────
+    if "research" in visible_dims:
+        research_data = rd.get("research")
+        parts.append("")
+        parts.append("## 市场共识/外部预期（研报，非公司事实）")
+        parts.append(
+            "以下为卖方研报共识，是「市场预期」而非公司事实。引用时须写明"
+            "「市场预期认为……」，不得作为客观事实陈述。"
+        )
+        is_research_degraded = "research" in degraded_fields or _is_error_data(research_data)
+        if is_research_degraded:
+            parts.append(_degraded_note("research"))
+        else:
+            parts.append(json.dumps(research_data, ensure_ascii=False, indent=2))
+
+    return parts
+
+
+def _is_error_data(data) -> bool:
+    """数据是否为 fetch 全失败 __error__ 标记."""
+    return isinstance(data, dict) and data.get("__error__") is True
+
+
+def _degraded_note(dim: str) -> str:
+    """降级维度的 prompt 注明（D5：诚实标注不静默退化）."""
+    dim_cn = {
+        "main_business": "主营构成",
+        "peers": "竞品对比",
+        "capex_proxy": "资本开支",
+        "research": "研报共识",
+    }.get(dim, dim)
+    return f"你的{dim_cn}维度缺失，请基于核心特征（core_snapshot）判断，勿臆测该维度数据。"
 
 
 def _debate_path(ticker: str) -> Path:
@@ -499,11 +612,15 @@ async def run_debate(
         ValueError: 数据不足（insufficient_data）
     """
     # 1. 获取特征数据
+    # f3a §3 D4：L3 入口从 assemble_council_features 改为 build_research_dossier，
+    # features 形参语义从「扁平 21 字段」变为「分层 dossier」（形参名保持 features 不变）。
+    # build_research_dossier 内部 core_snapshot 不足时已抛 ValueError（与原 guard 同模式）。
     if features is None:
-        features = assemble_council_features(ticker)
-        if "error" in features:
+        features = build_research_dossier(ticker)
+        # build_research_dossier 对 core_snapshot 不足已在内部 fail-fast 抛 ValueError；
+        # 此处保留向后兼容：若调用方传入旧扁平 features 含 error 仍走原 guard
+        if isinstance(features, dict) and "error" in features and "research_dossier" not in features:
             missing = features.get("missing_fields", [])
-            # P4 修复：区分 guard 触发路径（critical_fields / financials_floor / missing_ratio）
             guard = features.get("guard", "unknown")
             guard_detail = features.get("guard_detail", "")
             raise ValueError(

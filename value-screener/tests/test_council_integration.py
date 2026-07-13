@@ -127,6 +127,22 @@ def mock_features():
     }
 
 
+def _mock_dossier(mock_features):
+    """f3a：build_research_dossier 的 mock——扁平 mock_features 包为 core_snapshot，
+    定性维度全部降级（e2e 测试只测 4 轮编排，不测 dossier 组装）。"""
+    return {
+        "core_snapshot": mock_features,
+        "research_dossier": {
+            "main_business": {"code": "600519", "by_industry": []},
+            "peers": {"__error__": True, "reason": "mock"},
+            "capex_proxy": {"__error__": True, "reason": "mock"},
+            "research": {"coverage_count": 0},
+            "degraded_fields": ["peers", "capex_proxy"],
+        },
+        "pledge": None,
+    }
+
+
 class TestEndToEnd:
     """8.1 端到端测试."""
 
@@ -135,7 +151,7 @@ class TestEndToEnd:
         """端到端测试：council --ticker 跑全天团."""
         monkeypatch.chdir(tmp_path)
 
-        with patch("council.debate.assemble_council_features", return_value=mock_features), \
+        with patch("council.debate.build_research_dossier", return_value=_mock_dossier(mock_features)), \
              patch("council.debate.call_llm", new_callable=AsyncMock) as mock_llm:
             mock_llm.side_effect = mock_full_council
 
@@ -170,7 +186,7 @@ class TestCache:
         monkeypatch.chdir(tmp_path)
 
         # 第一次运行
-        with patch("council.debate.assemble_council_features", return_value=mock_features), \
+        with patch("council.debate.build_research_dossier", return_value=_mock_dossier(mock_features)), \
              patch("council.debate.call_llm", new_callable=AsyncMock) as mock_llm:
             mock_llm.side_effect = mock_full_council
             result1 = await run_debate("600519.SH")
@@ -178,7 +194,7 @@ class TestCache:
         assert mock_llm.call_count == 10
 
         # 第二次运行（应命中缓存）
-        with patch("council.debate.assemble_council_features", return_value=mock_features), \
+        with patch("council.debate.build_research_dossier", return_value=_mock_dossier(mock_features)), \
              patch("council.debate.call_llm", new_callable=AsyncMock) as mock_llm2:
             result2 = await run_debate("600519.SH")
 
@@ -191,7 +207,7 @@ class TestCache:
         monkeypatch.chdir(tmp_path)
 
         # 第一次运行
-        with patch("council.debate.assemble_council_features", return_value=mock_features), \
+        with patch("council.debate.build_research_dossier", return_value=_mock_dossier(mock_features)), \
              patch("council.debate.call_llm", new_callable=AsyncMock) as mock_llm:
             mock_llm.side_effect = mock_full_council
             await run_debate("600519.SH")
@@ -199,7 +215,7 @@ class TestCache:
         assert mock_llm.call_count == 10
 
         # 第二次运行 with force=True（应跳过缓存）
-        with patch("council.debate.assemble_council_features", return_value=mock_features), \
+        with patch("council.debate.build_research_dossier", return_value=_mock_dossier(mock_features)), \
              patch("council.debate.call_llm", new_callable=AsyncMock) as mock_llm2:
             mock_llm2.side_effect = mock_full_council
             await run_debate("600519.SH", force=True)
@@ -216,7 +232,7 @@ class TestCalibration:
         from council.calibrate import run_calibration
 
         with patch("council.calibrate.assemble_council_features", return_value=mock_features), \
-             patch("council.debate.assemble_council_features", return_value=mock_features), \
+             patch("council.debate.build_research_dossier", return_value=_mock_dossier(mock_features)), \
              patch("council.debate.call_llm", new_callable=AsyncMock) as mock_llm:
             # 校准测试会多次调用 run_debate，需要足够的 mock 响应
             # 简化处理：重复使用 mock_full_council
@@ -240,6 +256,6 @@ class TestInsufficientData:
             "missing_fields": ["name", "industry", "market_cap"],
         }
 
-        with patch("council.debate.assemble_council_features", return_value=error_features):
+        with patch("council.research_dossier.assemble_council_features", return_value=error_features):
             with pytest.raises(ValueError, match="insufficient_data"):
                 await run_debate("999999.SH")

@@ -253,7 +253,7 @@ async def test_run_debate_fail_fast_on_insufficient_features(tmp_path, monkeypat
         "guard_detail": "财务三件套缺失（financials TTL 24h 可能过期，先跑 batch 重采）",
     }
     monkeypatch.setattr(
-        "council.debate.assemble_council_features",
+        "council.research_dossier.assemble_council_features",
         lambda t: insufficient,
     )
     # LLM 绝不应被调用——fail-fast 必须在 R1 入口前
@@ -284,7 +284,7 @@ async def test_run_debate_fail_fast_message_mentions_ttl(tmp_path, monkeypatch):
         "guard_detail": "basic 维度缺失（basic TTL 2h 可能过期，先跑 batch 重采 basic 维度）",
     }
     monkeypatch.setattr(
-        "council.debate.assemble_council_features",
+        "council.research_dossier.assemble_council_features",
         lambda t: insufficient,
     )
     monkeypatch.setattr("council.debate.call_llm", AsyncMock())

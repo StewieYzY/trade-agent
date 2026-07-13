@@ -28,6 +28,118 @@ from council.schema import AgentOutput
 # spec debate-quality-gate: R1 输出引用真实特征校验（反向校验）+ 环形引用检测。
 
 
+def compute_citation_divergence(round1: list[AgentOutput]) -> dict:
+    """A/B 分化度量化判据——R1 四 agent 引用数据点集合的 Jaccard 距离（f3a §6，D6）.
+
+    对每对 agent (i,j)，算 R1 key_metrics 引用数据点集合的 Jaccard 距离 = 1 - |交集|/|并集|。
+    - f2 基线（600009.SH 现有产出）：四 agent 引用全同源，Jaccard 距离 ≈ 0
+    - f3a 期望：显著 > 0（角色分发让 agent 看不同维度，引用数据点分化）
+
+    Args:
+        round1: R1 各 agent 的 AgentOutput 列表（非空）
+
+    Returns:
+        {"pairwise_distances": {"agent_i|agent_j": float, ...}, "mean_distance": float}
+        pairwise_distances 的 key 用 agent.name 拼接（按字母序规范化，去序敏感）。
+        空 round1 抛 ValueError（与 compute_divergence 同模式）。
+
+    纯 Python，无 LLM 调用。阈值「显著 >0」的具体值待 A/B 实测定（f3a 标「待校准」）。
+    """
+    if not round1:
+        raise ValueError("compute_citation_divergence: empty round1 list")
+
+    pairwise: dict[str, float] = {}
+
+    def _pair_key(a: str, b: str) -> str:
+        """规范化 pair key：按字母序排，使 (a,b) 与 (b,a) 同 key."""
+        return "|".join(sorted((a, b)))
+
+    def _metrics_set(agent: AgentOutput) -> set:
+        """提取 agent key_metrics 的数据点数字集合（f3a §6 D6 修订）.
+
+        用数字点而非字符串：f2 四 agent 都引 PE 25.71 但措辞不同，按字符串算
+        Jaccard≈1（误判分化），按数字点算 Jaccard≈0（正确反映同源）。复用
+        _extract_metric_numbers（跳过时间窗/单位标签数字）。
+        """
+        return _extract_metric_numbers(getattr(agent, "key_metrics", None))
+
+    n = len(round1)
+    for i in range(n):
+        for j in range(i + 1, n):
+            a, b = round1[i], round1[j]
+            set_a, set_b = _metrics_set(a), _metrics_set(b)
+            union = set_a | set_b
+            if not union:
+                # 两空集：无数据可分化，约定距离 0（与 f2 同源基线一致）
+                dist = 0.0
+            else:
+                inter = set_a & set_b
+                dist = 1.0 - len(inter) / len(union)
+            pairwise[_pair_key(a.name, b.name)] = dist
+
+    mean_distance = sum(pairwise.values()) / len(pairwise) if pairwise else 0.0
+    return {"pairwise_distances": pairwise, "mean_distance": mean_distance}
+
+
+def _collect_feature_numbers(features) -> list[float]:
+    """递归遍历 dict/list 收集所有数值（f3a §5，D7）.
+
+    f3 dossier 的 research_dossier 是嵌套 dict（peers.peer_avg_pe /
+    research.consensus_eps 等定性维度数字），需递归展开才能进 feature_numbers，
+    否则 R1/R2 引用这些数字会被误判「凭空编造」。
+
+    旧扁平 features（21 字段，顶层标量 + 顶层 list 标量）也兼容——递归自然覆盖。
+
+    Returns:
+        绝对值后的数值列表（与原 verify 逻辑一致：跌幅 -17.84 写成 17.84 模糊匹配）。
+    """
+    if not features:
+        return []
+    numbers: list[float] = []
+
+    def _walk(node):
+        if isinstance(node, bool):
+            return  # bool 是 int 子类，跳过（True/False 不是数据点）
+        if isinstance(node, (int, float)):
+            numbers.append(abs(float(node)))
+        elif isinstance(node, dict):
+            for v in node.values():
+                _walk(v)
+        elif isinstance(node, (list, tuple)):
+            for item in node:
+                _walk(item)
+        # str/None/其他类型 → 跳过
+
+    _walk(features)
+    return numbers
+
+
+def _extract_metric_numbers(metrics) -> set[float]:
+    """从 key_metrics/new_evidence 文本列表提取数据点数字集合（f3a §6 D6 修订）.
+
+    Jaccard 分化度判据用「数字点集合」而非「字符串集合」——f2 四 agent 都引 PE 25.71
+    但措辞不同（"PE(TTM) 25.71" vs "PE TTM 25.71"），按字符串算 Jaccard≈1（误判完全分化），
+    按数字点算 Jaccard≈0（正确反映同源）。复用 verify_r1 的数字提取规则：
+    跳过紧跟 日/年/季/倍/期 的数字（时间窗/单位标签，非数据值）。
+
+    返回绝对值集合（跌幅 -15.86 与 15.86 视为同源）。
+    """
+    out: set[float] = set()
+    if not metrics:
+        return out
+    for metric in metrics:
+        if not isinstance(metric, str):
+            continue
+        for m in re.finditer(r"(\d+\.?\d*)", metric):
+            n = m.group(1)
+            end = m.end()
+            next_char = metric[end:end + 1]
+            if next_char in ("日", "年", "季", "倍", "期"):
+                continue  # 单位/时间窗标签，跳过
+            out.add(abs(float(n)))
+    return out
+
+
 def verify_r1_feature_grounding(output: AgentOutput, features: dict) -> tuple[bool, list[str]]:
     """R1 反向特征校验：key_metrics 里的数字必须在 features 任一字段值中出现.
 
@@ -37,46 +149,33 @@ def verify_r1_feature_grounding(output: AgentOutput, features: dict) -> tuple[bo
 
     Args:
         output: R1 AgentOutput（含 key_metrics）
-        features: assemble_council_features 返回的 features dict
+        features: assemble_council_features 返回的 features dict（f3a 起为分层 dossier）
 
     Returns:
         (ok, issues)：ok=True 通过，issues 为问题列表（空则通过）
     """
     issues: list[str] = []
-    # 收集 features 中所有数值（含 list 中的元素、标量），按绝对值 + 容差归一化
-    # 用于模糊匹配：R1 常把 -17.84 写成 "17.84"（跌幅取绝对值），或 2.22 写成 "2.2"（四舍五入）
-    feature_numbers: list[float] = []
-    for v in features.values():
-        if isinstance(v, (int, float)):
-            feature_numbers.append(abs(float(v)))
-        elif isinstance(v, list):
-            for item in v:
-                if isinstance(item, (int, float)):
-                    feature_numbers.append(abs(float(item)))
+    # f3a §5 D7：递归收集 features 中所有数值（含 dossier 嵌套 dict/list），
+    # 按绝对值 + 容差归一化。用于模糊匹配：R1 常把 -17.84 写成 "17.84"（跌幅取绝对值），
+    # 或 2.22 写成 "2.2"（四舍五入）。
+    feature_numbers: list[float] = _collect_feature_numbers(features)
 
     def _found_in_features(n: float) -> bool:
         """数字 n 是否在 features 任一字段值中（绝对值 + 0.5 容差，模糊匹配）."""
         target = abs(n)
         return any(abs(fv - target) <= 0.5 for fv in feature_numbers)
 
-    for metric in (output.key_metrics or []):
-        # 提取该 metric 里的数据点数字，跳过单位/标签语境的数字：
-        # - "60日"/"5年"/"3季" → 紧跟 日/年/季 的是时间窗标签，非数据值
-        # - "降至15-20倍" → 紧跟 倍 的是单位/预测，非历史数据值
-        for m in re.finditer(r"(\d+\.?\d*)", metric):
-            n = m.group(1)
-            end = m.end()
-            next_char = metric[end:end + 1]
-            if next_char in ("日", "年", "季", "倍", "期"):
-                continue  # 单位/时间窗标签，跳过
-            n_val = float(n)
-            if _found_in_features(n_val):
-                continue
-            # 该数字在 features 中找不到来源 → 凭空
-            issues.append(
-                f"key_metrics '{metric}' 含数字 {n}，但 features 中无对应字段值"
-                f"（疑似凭空编造/数据未注入）"
-            )
+    # f3a §6 D6：复用 _extract_metric_numbers 提取 key_metrics 数字点（跳过时间窗/单位标签），
+    # 与 compute_citation_divergence 共享数字提取规则。
+    metric_numbers = _extract_metric_numbers(output.key_metrics)
+    for n_val in metric_numbers:
+        if _found_in_features(n_val):
+            continue
+        # 该数字在 features 中找不到来源 → 凭空
+        issues.append(
+            f"key_metrics 含数字 {n_val}，但 features 中无对应字段值"
+            f"（疑似凭空编造/数据未注入）"
+        )
 
     return (len(issues) == 0), issues
 
@@ -106,33 +205,20 @@ def verify_r2_new_evidence(output: AgentOutput, features: dict) -> tuple[bool, l
     if not new_evidence:
         return True, ["soft: r2_no_new_evidence"]
 
-    # 数字反向校验（复用 verify_r1_feature_grounding 的数字提取逻辑）
-    feature_numbers: list[float] = []
-    for v in features.values():
-        if isinstance(v, (int, float)):
-            feature_numbers.append(abs(float(v)))
-        elif isinstance(v, list):
-            for item in v:
-                if isinstance(item, (int, float)):
-                    feature_numbers.append(abs(float(item)))
+    # 数字反向校验（f3a §5 D7：复用共享 _collect_feature_numbers 递归收集，含 dossier 嵌套数字）
+    feature_numbers: list[float] = _collect_feature_numbers(features)
 
     def _found_in_features(n: float) -> bool:
         target = abs(n)
         return any(abs(fv - target) <= 0.5 for fv in feature_numbers)
 
-    for metric in new_evidence:
-        for m in re.finditer(r"(\d+\.?\d*)", metric):
-            n = m.group(1)
-            end = m.end()
-            next_char = metric[end:end + 1]
-            if next_char in ("日", "年", "季", "倍", "期"):
-                continue
-            n_val = float(n)
-            if not _found_in_features(n_val):
-                warnings.append(
-                    f"soft: suspected_fabricated_evidence — new_evidence '{metric}' "
-                    f"含数字 {n}，但 features 中无对应字段值"
-                )
+    # 数字反向校验（f3a §5 D7 + §6 D6：复用 _extract_metric_numbers 提取数字点）
+    for n_val in _extract_metric_numbers(new_evidence):
+        if not _found_in_features(n_val):
+            warnings.append(
+                f"soft: suspected_fabricated_evidence — new_evidence "
+                f"含数字 {n_val}，但 features 中无对应字段值"
+            )
 
     return True, warnings
 

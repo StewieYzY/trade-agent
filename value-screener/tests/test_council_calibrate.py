@@ -34,6 +34,22 @@ def mock_features():
     }
 
 
+def _mock_dossier(mock_features):
+    """f3a：build_research_dossier 的 mock——扁平 mock_features 包为 core_snapshot，
+    定性维度全部降级（校准测试只测 LLM 校准流程，不测 dossier 组装）。"""
+    return {
+        "core_snapshot": mock_features,
+        "research_dossier": {
+            "main_business": {"code": "600519", "by_industry": []},
+            "peers": {"__error__": True, "reason": "mock"},
+            "capex_proxy": {"__error__": True, "reason": "mock"},
+            "research": {"coverage_count": 0},
+            "degraded_fields": ["peers", "capex_proxy"],
+        },
+        "pledge": None,
+    }
+
+
 @pytest.fixture
 def mock_agent_output():
     """Mock AgentOutput."""
@@ -130,7 +146,7 @@ class TestAgentCalibration:
         """段永平校准通过：signal == 'bullish'."""
         case = next(c for c in CALIBRATION_CASES if c.get("agent_id") == "duan")
 
-        with patch("council.debate.assemble_council_features", return_value=mock_features), \
+        with patch("council.debate.build_research_dossier", return_value=_mock_dossier(mock_features)), \
              patch("council.debate.call_llm", new_callable=AsyncMock) as mock_llm:
             mock_llm.return_value = (json.dumps(mock_agent_output.to_dict(), ensure_ascii=False), LLM_USAGE)
             passed = await run_agent_calibration(case)
@@ -155,7 +171,7 @@ class TestAgentCalibration:
             extra={},
         )
 
-        with patch("council.debate.assemble_council_features", return_value=mock_features), \
+        with patch("council.debate.build_research_dossier", return_value=_mock_dossier(mock_features)), \
              patch("council.debate.call_llm", new_callable=AsyncMock) as mock_llm:
             mock_llm.return_value = (json.dumps(bearish_output.to_dict(), ensure_ascii=False), LLM_USAGE)
             passed = await run_agent_calibration(case)
