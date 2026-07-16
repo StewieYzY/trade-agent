@@ -63,6 +63,7 @@ f3a 直击这个根因：把 L3 输入从 21 扁平字段升级为**结构化研
 
 **风险**：
 - **小票研报覆盖**（<50亿市值常返 0）+ **peers 依赖 industry 字段**（industry 没采到则 peers 降级）——f3a 分层 fail-fast 已设计降级路径（peers/research 缺失只降级不阻断），但若降级频繁，4 agent 角色侧重会塌缩（芒格/段永平缺竞品维度），A/B 分化度可能不显著。需 A/B 实测验证覆盖率，不显著则说明 (c) 方案的代理不足，需提前 f3b。
+- **Jaccard 0.944 疑为信息割裂非增量**（2026-07-16 回看，详见 `design/r1-crosstalk-root-cause-explore.md` §6.1）：design D6 自承 B=0.944 偏高主因 peers 降级 + research 只分发 feng_liu/duan，**core 之外共享维度少导致集合天然不交叠**。Jaccard 衡量的是集合不交叠程度，人为切窄维度会让它飙高——这不是信息增量，是信息割裂。peers 补齐后分化应回落中等区间，0.944 是假高分。A/B 验证结论的成立前提是「分化来自角色看到独特的真数据」而非「维度被切窄」，**待独立 change 用信息增量口径（而非纯 Jaccard 距离）复测**。
 - **D2 升 hard 时机**：若 f3a 落地后立刻升 hard，覆盖率不稳会重演 f2 死循环。本 change 明确保持 soft，升 hard 留独立 change。
 - **prompt 膨胀**：dossier 定性维度按角色分发（非全塞），但若分发不当仍可能 token 上升。靠 §4.3 角色表 + prompt 物理分区控制。
 - **agent 分发签名的连锁改动**：`_build_user_message` 加 `agent_id` 影响 R1/R2 两条路径，DA/Synthesizer 走全量需区分路径，实现时边界要清晰（agent 分发 vs DA/Synthesizer 全量），不互相污染。
