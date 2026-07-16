@@ -667,6 +667,33 @@ async def run_debate(
         else:
             round1.append(item)
 
+    # f3c §D2：R1 质量门主流程断路器。f1 把 detect_circular_reference /
+    # verify_r1_feature_grounding 放 verify_quality_gate.py 但没在 run_debate 调，
+    # 导致质量门只在人工检查时 print、watchlist 产出照常落盘（CLAUDE.md 悬案
+    # 6/7 watchlist null 闭环根因）。f3c 在此接入：显性环形引用 hard fail 阻断
+    # （R1 other_opinions=None 本该隔离，core_thesis 引用他人只能是模型编造，
+    # 铁证无歧义），凭空数字/隐性串台 soft warning（记入 r1_quality_warnings，
+    # 不阻断——凭空数字有 dossier 嵌套误判风险，隐性串台字符串匹配有逃逸面）。
+    # 在 error_rate/降级判断之前：降级豁免 R3 DA 跳过，不豁免串台铁证。
+    # 延迟 import 打破循环依赖（verify_quality_gate 顶部 import run_debate）。
+    from council.verify_quality_gate import detect_circular_reference, verify_r1_feature_grounding
+
+    r1_quality_warnings: list[str] = []
+    for agent in round1:
+        ok_circ, circ_issues = detect_circular_reference(agent)
+        if not ok_circ:
+            raise ValueError(
+                f"circular_reference: {agent.name} 的 R1 core_thesis 引用其他 agent"
+                f"（{circ_issues}）。R1 other_opinions=None 本该隔离，引用他人只能是"
+                f"模型编造/串台。不产出'成功'JSON 落盘。检查 system prompt 案例锚定"
+                f"是否诱导复读或模型幻觉后重跑。"
+            )
+        ok_ground, ground_issues = verify_r1_feature_grounding(agent, features)
+        if not ok_ground:
+            r1_quality_warnings.append(
+                f"{agent.name}: {ground_issues}"
+            )
+
     # f2 §3.5/3.6：error rate ≥ 0.4 触发运行时降级（动态比，spec review #4）
     active_count = len(agents)
     failed_count = len(r1_errors)

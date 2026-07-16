@@ -12,11 +12,11 @@
 
 ## 3. D2 接线——质量门接主流程断路器（TDD，最敏感步骤）
 
-- [ ] 3.1 先写测试 `tests/test_r1_crosstalk_breaker.py`：构造 R1 含显性环形引用（buffett core_thesis="munger 看好"）的 mock 产出，断言 `run_debate` 在 R1 后 hard fail 阻断（不进 R2，不写"成功"watchlist JSON，抛错或标记 `quality_gate_failed`）；构造无环形真实产出（复用 600009 真实 R1），断言通过断路器进入分流。**Verify**：测试 fail（`run_debate` 现 R1 后无断路器）✓
-- [ ] 3.2 先写测试：断言凭空数字 + 隐性串台只 soft warning 不阻断（构造含凭空 ROE 32% 的 R1，断言 `run_debate` 仍产出 JSON，quality 字段记 warning）；断言运行时降级（R1<4 agent）下显性环形仍 hard fail（降级豁免 R3 跳过不豁免串台铁证）。**Verify**：测试 fail ✓
-- [ ] 3.3 改 `council/debate.py::run_debate`：R1 所有 agent gather 完成后、分歧度分流前，插入断路器段——对每 agent 调 `detect_circular_reference` + `verify_r1_feature_grounding`；显性环形命中走 hard fail（参照 `insufficient_data` 的 fail-fast error 路径，不进 R2/R3/R4 省 LLM 成本 AD-03）；凭空数字/隐性走 soft warning 记入 CouncilResult/产出。核实 `run_debate` 现有 error 路径（`insufficient_data` 抛 ValueError 还是标记字段）保持一致。**Verify**：3.1 测试 pass（hard fail 阻断 + 真实产出通过）✓
-- [ ] 3.4 3.2 测试 pass（soft warning 不阻断 + 降级下仍拦显性）。**Verify**：soft/降级两条路径行为正确 ✓
-- [ ] 3.5 跑现有 council 测试套件确认无回归：`pytest tests/test_council_*.py tests/test_debate*.py`，f1/f2/f3a 已有测试仍 pass（断路器只在 R1 后触发，不影响 R2-R4 编排、缓存、降级、分流逻辑；600009 真实产出基线通过）。**Verify**：全套 pass，无回归（修复测试 patch 目标失效等接入点变更）✓
+- [x] 3.1 先写测试 `tests/test_r1_crosstalk_breaker.py`：构造 R1 含显性环形引用（buffett core_thesis="munger 看好"）的 mock 产出，断言 `run_debate` 在 R1 后 hard fail 阻断（不进 R2，不写"成功"watchlist JSON，抛错或标记 `quality_gate_failed`）；构造无环形真实产出（复用 600009 真实 R1），断言通过断路器进入分流。**Verify**：测试 fail（`run_debate` 现 R1 后无断路器）✓ 已完成（DID NOT RAISE 干净红灯）
+- [x] 3.2 先写测试：断言凭空数字 + 隐性串台只 soft warning 不阻断（构造含凭空 ROE 32% 的 R1，断言 `run_debate` 仍产出 JSON，quality 字段记 warning）；断言运行时降级（R1<4 agent）下显性环形仍 hard fail（降级豁免 R3 跳过不豁免串台铁证）。**Verify**：测试 fail ✓ 已完成（降级测试初版 mock 脆弱先 xfail，接线后重写为可控 call_agent mock 正式 pass）
+- [x] 3.3 改 `council/debate.py::run_debate`：R1 所有 agent gather 完成后、分歧度分流前，插入断路器段——对每 agent 调 `detect_circular_reference` + `verify_r1_feature_grounding`；显性环形命中走 hard fail（参照 `insufficient_data` 的 fail-fast error 路径，不进 R2/R3/R4 省 LLM 成本 AD-03）；凭空数字/隐性走 soft warning 记入 CouncilResult/产出。核实 `run_debate` 现有 error 路径（`insufficient_data` 抛 ValueError 还是标记字段）保持一致。**Verify**：3.1 测试 pass（hard fail 阻断 + 真实产出通过）✓ 已完成（断路器插 round1 分离后、error_rate 前；**延迟 import** `detect_circular_reference`/`verify_r1_feature_grounding` 打破 `debate↔verify_quality_gate` 循环依赖——f1 留的潜在陷阱，f1 没在 debate.py 用检测器没暴露，f3c 接线撞上；error 路径选 raise ValueError 与 insufficient_data 一致；r1_quality_warnings soft 暂记 list）
+- [x] 3.4 3.2 测试 pass（soft warning 不阻断 + 降级下仍拦显性）。**Verify**：soft/降级两条路径行为正确 ✓ 已完成（5/5 断路器测试 pass：显性环形阻断/无环形通过/凭空 soft/隐性 soft/降级下仍拦）
+- [x] 3.5 跑现有 council 测试套件确认无回归：`pytest tests/test_council_*.py tests/test_debate*.py`，f1/f2/f3a 已有测试仍 pass（断路器只在 R1 后触发，不影响 R2-R4 编排、缓存、降级、分流逻辑；600009 真实产出基线通过）。**Verify**：全套 pass，无回归（修复测试 patch 目标失效等接入点变更）✓ 已完成（council 核心 47 全绿；全套 324 passed + 1 xpassed；10 failed 全为预存 akshare 环境缺失，与接线无关——f3a fetcher 依赖 akshare 本地未装）
 
 ## 4. D3 隐性串台采样评估
 
