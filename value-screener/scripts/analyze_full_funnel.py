@@ -73,16 +73,30 @@ def record_l2_distribution() -> dict | None:
     if not raw:
         return None
 
-    # P1 修复后 cli.py 写入 {shortlist, usage_summary}；兼容旧格式（纯 list）
+    # g1-l2-full-result-contract：cli.py 写入 {full_results, shortlist, usage_summary, failure_summary}
+    # 兼容旧格式（纯 list 或缺 full_results/failure_summary 的旧 payload）
     if isinstance(raw, dict):
         l2 = raw.get("shortlist", [])
         usage_summary = raw.get("usage_summary", {}) or {}
+        full_results = raw.get("full_results", []) or []
+        failure_summary = raw.get("failure_summary", {}) or {}
     else:
         l2 = raw
         usage_summary = {}
+        full_results = []
+        failure_summary = {}
 
     n_deep_dive = len(l2)
     confidences = [r.get("confidence", 0) for r in l2]
+
+    # g1-l2-full-result-contract：从 failure_summary 读 watch/skip/error/degraded 分布
+    # （不只用 shortlist 掩盖——完整漏斗可见，spec「不允许用 shortlist 掩盖失败分布」）
+    n_watch = failure_summary.get("watches", 0)
+    n_skip = failure_summary.get("skips", 0)
+    n_degraded = failure_summary.get("degraded", 0)
+    errors = failure_summary.get("errors", []) or []
+    n_error = len(errors)
+    n_unhandled = failure_summary.get("unhandled_exceptions", 0)
 
     # token usage：优先用 usage_summary（全量调用，含 watch/skip/error），P1 修复
     call_count = usage_summary.get("call_count", 0)
@@ -97,19 +111,36 @@ def record_l2_distribution() -> dict | None:
         b = (c // 10) * 10
         bins[b] = bins.get(b, 0) + 1
 
+    n_input = len(full_results) if full_results else (n_deep_dive + n_watch + n_skip + n_error)
     lines = [
         "# L2 分布 + 成本（f1-deviation-fix §5.4，光通信模块板块）",
         "",
-        f"- 数据源：`{L2_FILE}`（L2 scout 输出，含 shortlist + usage_summary）",
-        f"- L1 candidates 输入：11 只（来自 l1_full.json）",
+        f"- 数据源：`{L2_FILE}`（L2 scout 输出，含 full_results/shortlist/usage_summary/failure_summary）",
+        f"- L1 candidates 输入：{n_input} 只",
         "",
-        "## 分布",
-        f"- deep_dive 输出: {n_deep_dive} 只（top-20 cap）",
-        f"- confidence 列表: {sorted(confidences, reverse=True)}",
-        f"- confidence 直方图（10 分一档）:",
+        "## 分布（full_results 全量，非仅 shortlist）",
+        f"- deep_dive（shortlist 派生）: {n_deep_dive} 只（top-20 cap）",
+        f"- watch: {n_watch} 只",
+        f"- skip: {n_skip} 只",
+        f"- error: {n_error} 只",
+        f"- degraded（watch 子集，单独计）: {n_degraded} 只",
+        f"- unhandled_exceptions: {n_unhandled}（MUST 为 0）",
+        f"- confidence 列表（deep_dive）: {sorted(confidences, reverse=True)}",
+        f"- confidence 直方图（10 分一档，deep_dive）:",
     ]
     for b in sorted(bins):
         lines.append(f"  - {b}-{b+9}: {bins[b]}")
+    # g1-l2-full-result-contract：error 明细（可定位 ticker/stage/reason/input_index）
+    if errors:
+        lines.append("")
+        lines.append("## error 明细（failure_summary.errors，可定位失败 ticker 与阶段）")
+        for e in errors:
+            tk = e.get("ticker")
+            idx = e.get("input_index")
+            stage = e.get("stage", "scout")
+            reason = e.get("reason", "unknown")
+            loc = f"ticker={tk}" if tk is not None else f"input_index={idx}"
+            lines.append(f"  - {loc} | stage={stage} | reason={reason}")
     lines += [
         "",
         "## Token Usage（f1-deviation-fix §7 / P1 修复，AD-03 成本实测）",

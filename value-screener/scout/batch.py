@@ -101,12 +101,30 @@ async def scout_batch(candidates: list[dict], force: bool = False) -> tuple[list
         usage_summary["completion_tokens"] += int(usage.get("completion_tokens", 0) or 0)
         usage_summary["total_tokens"] += int(usage.get("total_tokens", 0) or 0)
 
-    async def process_one(candidate: dict) -> dict | None:
-        ticker = candidate.get("ticker")
-        if not ticker:
-            return None
-
+    async def process_one(candidate: dict, input_index: int) -> dict:
+        # g1-l2-full-result-contract review 修复：输入校验移进 try 块，
+        # 缺 ticker / 非 dict 输入返回符合 full-result 契约的 error result（含 input_index
+        # 定位原始输入），不返回 None（保证 full_results 长度 == 输入 N），不逃逸整批。
         try:
+            if not isinstance(candidate, dict):
+                raise TypeError(f"candidate 非 dict: {type(candidate).__name__}")
+            ticker = candidate.get("ticker")
+            if not ticker:
+                # 缺 ticker → error result（进 full_results + failure_summary.errors），
+                # ticker=None 不伪造（避免与真实 ticker 混淆），用 input_index 定位原始输入。
+                return {
+                    "ticker": None,
+                    "input_index": input_index,
+                    "verdict": "error",
+                    "error": "missing ticker",
+                    "stage": "input_validation",
+                    "one_liner": "输入缺 ticker 字段",
+                    "red_flags": [],
+                    "green_flags": [],
+                    "anti_trap_flags": [],
+                    "low_confidence_anomaly": False,
+                }
+
             # 1. 检查缓存（除非 force=True）
             if not force:
                 cached = cache.get(ticker, today)
@@ -128,12 +146,18 @@ async def scout_batch(candidates: list[dict], force: bool = False) -> tuple[list
             features = assemble_snapshot(ticker, degrade_on_financials_gap=True)
 
             # Insufficient data guard（critical 缺失 → fail-fast，不降级）
+            # g1-l2-full-result-contract review 修复：error result 补全 full-result 契约字段
             if "error" in features:
                 return {
                     "ticker": ticker,
                     "verdict": "error",
                     "error": features.get("error"),
                     "missing_fields": features.get("missing_fields", []),
+                    "one_liner": f"数据不足：{features.get('error')}",
+                    "red_flags": [],
+                    "green_flags": [],
+                    "anti_trap_flags": [],
+                    "low_confidence_anomaly": False,
                 }
 
             # f2 §6.3 L2 降级：critical 齐但 financials 不齐 → 标 watch + confidence_cap=50
@@ -162,10 +186,16 @@ async def scout_batch(candidates: list[dict], force: bool = False) -> tuple[list
                 try:
                     raw_json, usage = await call_llm_snapshot(snapshot_text, SCOUT_SYSTEM_PROMPT)
                 except (httpx.HTTPStatusError, httpx.TimeoutException, ValueError) as e:
+                    # g1-l2-full-result-contract review 修复：error result 补全契约字段
                     return {
                         "ticker": ticker,
                         "verdict": "error",
                         "error": str(e),
+                        "one_liner": f"LLM 调用失败：{e}",
+                        "red_flags": [],
+                        "green_flags": [],
+                        "anti_trap_flags": [],
+                        "low_confidence_anomaly": False,
                     }
 
             # P1 修复：累加本次调用的 usage（无论 verdict 是 deep_dive/watch/skip）
@@ -200,28 +230,41 @@ async def scout_batch(candidates: list[dict], force: bool = False) -> tuple[list
             # g1-l2-full-result-contract：该只进 errors（已处理）。
             # unhandled_exceptions 计的是逃逸出 asyncio.gather 的异常——当前兜底 catch all
             # 保证不逃逸，故该字段恒为 0（spec 要求整批无未处理异常的断言字段）。
+            # review 修复：兜底现在能 catch 到输入校验的 TypeError（已移进 try），补全契约字段。
             return {
-                "ticker": ticker,
+                "ticker": candidate.get("ticker") if isinstance(candidate, dict) else None,
+                "input_index": input_index,
                 "verdict": "error",
                 "error": f"unexpected: {e}",
+                "stage": "unexpected_exception",
+                "one_liner": f"非预期异常：{e}",
+                "red_flags": [],
+                "green_flags": [],
+                "anti_trap_flags": [],
+                "low_confidence_anomaly": False,
             }
 
-    # 并发处理所有候选
-    tasks = [process_one(c) for c in candidates]
+    # 并发处理所有候选（带 input_index，便于缺 ticker / 坏输入的 error result 定位原始输入）
+    tasks = [process_one(c, i) for i, c in enumerate(candidates)]
     raw_results = await asyncio.gather(*tasks)
 
-    # 过滤 None（ticker 缺失）
+    # process_one 现在对所有输入（含缺 ticker / 非 dict）都返回符合契约的 result，
+    # 不再返回 None；保留 None 过滤仅作未来路径的防御性兜底。
     results = [r for r in raw_results if r is not None]
 
     # g1-l2-full-result-contract：汇总 failure_summary（errors/skips/watches/degraded）
     # shortlist 不再在此返回——由消费方从 full_results 派生（受既有 Top-20 Cap 约束）。
+    # full_results 长度 == 输入 N（缺 ticker / 坏输入的 error result 仍在，不再被丢弃）。
     for r in results:
         verdict = r.get("verdict")
         if verdict == "error":
+            # error result 自带 stage（input_validation / scout LLM 调用 / unexpected_exception），
+            # 优先用 result 的 stage；无则回退 "scout"。
             failure_summary["errors"].append({
                 "ticker": r.get("ticker"),
+                "input_index": r.get("input_index"),
                 "reason": r.get("error", "unknown"),
-                "stage": "scout",  # 失败阶段：scout_batch 内（LLM 调用/解析/兜底）
+                "stage": r.get("stage", "scout"),
             })
         elif verdict == "skip":
             failure_summary["skips"] += 1

@@ -789,6 +789,135 @@ def test_scout_batch_unhandled_exceptions_zero():
     assert "600001" in result_tickers and "600003" in result_tickers, "整批应继续处理其他候选"
 
 
+# ── g1-l2-full-result-contract review 修复：full_results 长度 == N + error 字段契约 ──
+
+
+def test_scout_batch_missing_ticker_still_in_full_results():
+    """缺 ticker 的输入（{''} 无 ticker）SHALL 仍在 full_results，长度 == N，verdict=error.
+
+    对应 review 阻断1：缺 ticker 的 candidate 原 return None 被过滤 → full_results 丢一条。
+    修复后返回 error result（ticker=None + input_index 定位），进 full_results + errors。
+    """
+    candidates = [{"ticker": "600001"}, {}, {"ticker": "600003"}]  # 第 2 只缺 ticker
+
+    async def mock_call(snapshot, system):
+        return (json.dumps({"verdict": "deep_dive", "confidence": 80, "one_liner": "t",
+                            "red_flags": [], "green_flags": [], "anti_trap_flags": []}),
+                LLM_USAGE)
+
+    def mock_assemble(ticker, cache_manager=None, **kwargs):
+        return {"ticker": ticker, "name": "x", "market_cap": 1, "pe_ttm": 10,
+                "roe_3y": [1, 2, 3], "net_margin": 5}
+
+    with patch("scout.batch.call_llm_snapshot", new=mock_call):
+        with patch("scout.batch.assemble_snapshot", new=mock_assemble):
+            with patch("scout.batch.ScoutCache") as mock_cache_cls:
+                mock_cache_cls.return_value.get.return_value = None
+                full_results, _usage, failure = asyncio.run(scout_batch(candidates, force=True))
+
+    # full_results 长度 == 输入 N=3（缺 ticker 的 {} 不丢）
+    assert len(full_results) == 3, (
+        f"full_results 长度应 == 输入 3，got {len(full_results)}（缺 ticker 不应被过滤）"
+    )
+    # 缺 ticker 的那条：verdict=error, ticker=None, input_index=1
+    err = next(r for r in full_results if r.get("verdict") == "error")
+    assert err["ticker"] is None, "缺 ticker 的 error result ticker 应为 None（不伪造）"
+    assert err["input_index"] == 1, f"input_index 应为 1，got {err.get('input_index')}"
+    assert err.get("stage") == "input_validation", (
+        f"stage 应为 input_validation，got {err.get('stage')}"
+    )
+    # 在 failure_summary.errors
+    assert any(e.get("input_index") == 1 for e in failure["errors"]), (
+        "缺 ticker 的 error 应进 failure_summary.errors（含 input_index）"
+    )
+
+
+def test_scout_batch_non_dict_input_does_not_escape():
+    """非 dict 输入（None）SHALL 不抛异常逃逸整批，进 error result + errors.
+
+    对应 review 阻断1：scout_batch([None]) 原 AttributeError 逃逸（candidate.get 在 try 外）。
+    修复后输入校验移进 try，TypeError 走兜底，返回 error result。
+    """
+    candidates = [{"ticker": "600001"}, None, {"ticker": "600003"}]  # 第 2 只 None
+
+    async def mock_call(snapshot, system):
+        return (json.dumps({"verdict": "deep_dive", "confidence": 80, "one_liner": "t",
+                            "red_flags": [], "green_flags": [], "anti_trap_flags": []}),
+                LLM_USAGE)
+
+    def mock_assemble(ticker, cache_manager=None, **kwargs):
+        return {"ticker": ticker, "name": "x", "market_cap": 1, "pe_ttm": 10,
+                "roe_3y": [1, 2, 3], "net_margin": 5}
+
+    with patch("scout.batch.call_llm_snapshot", new=mock_call):
+        with patch("scout.batch.assemble_snapshot", new=mock_assemble):
+            with patch("scout.batch.ScoutCache") as mock_cache_cls:
+                mock_cache_cls.return_value.get.return_value = None
+                full_results, _usage, failure = asyncio.run(scout_batch(candidates, force=True))
+
+    # 不抛异常（已跑到断言即证明），full_results 长度 == 3
+    assert len(full_results) == 3, f"full_results 应 == 3，got {len(full_results)}"
+    # None 输入那条：verdict=error, ticker=None, input_index=1, stage=unexpected_exception
+    err = next(r for r in full_results if r.get("input_index") == 1)
+    assert err["verdict"] == "error"
+    assert err["ticker"] is None
+    assert err.get("stage") == "unexpected_exception", (
+        f"非 dict 输入应走兜底 stage=unexpected_exception，got {err.get('stage')}"
+    )
+    # unhandled_exceptions == 0（兜底已捕获，未逃逸）
+    assert failure["unhandled_exceptions"] == 0
+    # 整批不中断：其他两只仍处理
+    result_tickers = [r["ticker"] for r in full_results]
+    assert "600001" in result_tickers and "600003" in result_tickers
+
+
+def test_error_results_satisfy_full_result_contract():
+    """所有 error result（insufficient_data / LLM error）SHALL 含 full-result 6 契约字段.
+
+    对应 review 阻断2：error result 原 ticker/verdict/error 缺 one_liner/red_flags/
+    green_flags/anti_trap_flags/low_confidence_anomaly，违反 delta spec「每条 full result
+    含这些字段」。修复后所有 error 分支补全。
+    """
+    CONTRACT_FIELDS = {"one_liner", "red_flags", "green_flags",
+                      "anti_trap_flags", "low_confidence_anomaly"}
+    candidates = [
+        {"ticker": "600001"},  # LLM error（mock_call 抛 HTTPStatusError）
+        {"ticker": "600002"},  # insufficient_data（assemble 返回 error）
+        {"ticker": "600003"},  # 正常 deep_dive（对照）
+    ]
+
+    def mock_assemble(ticker, cache_manager=None, **kwargs):
+        if ticker == "600002":
+            return {"error": "insufficient_data", "missing_fields": ["name", "industry"]}
+        return {"ticker": ticker, "name": "x", "market_cap": 1, "pe_ttm": 10,
+                "roe_3y": [1, 2, 3], "net_margin": 5}
+
+    async def mock_call(snapshot, system):
+        if "600001" in snapshot:
+            raise httpx.HTTPStatusError("LLM API error", request=None, response=None)
+        return (json.dumps({"verdict": "deep_dive", "confidence": 80, "one_liner": "t",
+                            "red_flags": [], "green_flags": [], "anti_trap_flags": []}),
+                LLM_USAGE)
+
+    with patch("scout.batch.call_llm_snapshot", new=mock_call):
+        with patch("scout.batch.assemble_snapshot", new=mock_assemble):
+            with patch("scout.batch.ScoutCache") as mock_cache_cls:
+                mock_cache_cls.return_value.get.return_value = None
+                full_results, _usage, _failure = asyncio.run(scout_batch(candidates, force=True))
+
+    # 两条 error（600001 LLM error / 600002 insufficient）
+    error_results = [r for r in full_results if r.get("verdict") == "error"]
+    assert len(error_results) == 2, f"应有 2 条 error，got {len(error_results)}"
+    for r in error_results:
+        missing = CONTRACT_FIELDS - set(r.keys())
+        assert not missing, (
+            f"error result 缺契约字段 {missing}，ticker={r.get('ticker')}"
+        )
+    # 对照：deep_dive 那条本就有这些字段
+    dd = next(r for r in full_results if r["ticker"] == "600003")
+    assert CONTRACT_FIELDS <= set(dd.keys())
+
+
 if __name__ == "__main__":
     import pytest
     pytest.main([__file__, "-v"])
