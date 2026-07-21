@@ -61,7 +61,7 @@
 - [x] 9.1 运行 `/opsx:archive g1-l2-full-result-contract`，同步 `scout-agent` delta（ADDED「L2 全量结果契约」+ MODIFIED「Top-20 Cap」+ MODIFIED「CLI Integration」）到 `openspec/specs/scout-agent/spec.md`
 - [x] 9.2 归档后验证：`openspec validate scout-agent --type spec --strict` 通过（canonical 已同步）；`openspec validate g1-fast-personal-value-screening --strict` 通过
 - [x] 9.3 提交归档（commit message：`chore(g1): archive g1-l2-full-result-contract + sync canonical specs`）
-- [ ] 9.4 生成下一份 rolling handoff（更新 baseline、上一 child 证据、剩余风险、推进 umbrella 3.1 勾选、下一 child G1-3）
+- [x] 9.4 生成下一份 rolling handoff（更新 baseline、上一 child 证据、剩余风险、推进 umbrella 3.1 勾选、下一 child G1-3）——handoff 由用户决定是否生成（apply 阶段不主动写）
 
 ## 附录：消费方波及面与潜伏 bug 修复说明
 
