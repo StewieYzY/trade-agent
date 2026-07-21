@@ -3,9 +3,7 @@
 ## Purpose
 
 定义 L1 量化筛选的安全边际评分与结果契约，确保未经验证的 DCF 不参与排序，并向调用方返回可解释的 DCF 状态。
-
 ## Requirements
-
 ### Requirement: 安全边际因子权重分配
 安全边际子项（占综合分 20%）的内部权重 SHALL 调整为：DCF 安全边际 0%（non-decision），质押率反向 100%。当 DCF 量纲未通过验证时，安全边际子项 MUST 仅由质押率构成。
 
@@ -38,3 +36,17 @@
 #### Scenario: 非预期异常向上传播
 - **WHEN** DCF 计算抛出 AttributeError、KeyError 或其他非预期异常
 - **THEN** 异常 SHALL 向上传播，MUST NOT 被静默捕获
+
+### Requirement: L1 主入口的采集维度边界
+
+`screen_a_shares()` 调用 `BatchFetcher.fetch_all()` 时 SHALL 显式传入 G1 量化维度白名单 `("basic", "financials", "kline", "valuation", "risk")`，MUST NOT 依赖 `dimensions=None` 的全采兜底，从而避免全市场路径默认采集属于 G2/L3 的 dossier 维度（`main_business`/`peers`/`research`）。
+
+#### Scenario: screen_a_shares 显式传入量化维度白名单
+
+- **WHEN** `screen_a_shares(tickers)` 被调用
+- **THEN** 传给 `BatchFetcher.fetch_all` 的 `dimensions` 参数 SHALL 恰为 `("basic", "financials", "kline", "valuation", "risk")`，MUST NOT 包含 `"main_business"`、`"peers"`、`"research"`
+
+#### Scenario: L1 维度白名单为模块级常量
+
+- **WHEN** `screen_a_shares` 构造对 `fetch_all` 的调用
+- **THEN** 维度白名单 SHALL 来自 `screener/main.py` 模块级常量 `G1_QUANT_DIMENSIONS`，而非内联字面量，便于测试与未来调用方引用
