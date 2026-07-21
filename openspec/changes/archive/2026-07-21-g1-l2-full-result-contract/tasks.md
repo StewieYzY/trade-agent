@@ -58,9 +58,9 @@
 
 ## 9. 归档与 canonical 同步
 
-- [ ] 9.1 运行 `/opsx:archive g1-l2-full-result-contract`，同步 `scout-agent` delta（ADDED「L2 全量结果契约」requirement）到 `openspec/specs/scout-agent/spec.md`
-- [ ] 9.2 归档后验证：`openspec validate scout-agent --type spec --strict` 通过（canonical 已同步）；`openspec validate g1-fast-personal-value-screening --strict` 通过
-- [ ] 9.3 提交归档（commit message：`chore(g1): archive g1-l2-full-result-contract + sync canonical specs`）
+- [x] 9.1 运行 `/opsx:archive g1-l2-full-result-contract`，同步 `scout-agent` delta（ADDED「L2 全量结果契约」+ MODIFIED「Top-20 Cap」+ MODIFIED「CLI Integration」）到 `openspec/specs/scout-agent/spec.md`
+- [x] 9.2 归档后验证：`openspec validate scout-agent --type spec --strict` 通过（canonical 已同步）；`openspec validate g1-fast-personal-value-screening --strict` 通过
+- [x] 9.3 提交归档（commit message：`chore(g1): archive g1-l2-full-result-contract + sync canonical specs`）
 - [ ] 9.4 生成下一份 rolling handoff（更新 baseline、上一 child 证据、剩余风险、推进 umbrella 3.1 勾选、下一 child G1-3）
 
 ## 附录：消费方波及面与潜伏 bug 修复说明
@@ -77,6 +77,16 @@
 | test_screener_stats | 1 处 (`:178`) | mock 二元组 → 三元组 | 无（只读 ticker） |
 
 **潜伏 bug 根因**：`weekly.py:109-117` 当前逻辑为 `for result in l2_results: if result.get("error"): l2_failed.append(ticker)`，但 `l2_results` 是 deep_dive 列表（`scout_batch` 返回点已过滤非 deep_dive），error 票 verdict 为 `error` 不可能出现在 deep_dive 列表里 → `l2_failed` 永远为空。这不是本 child 引入的 bug，是上一轮二元组契约的潜伏缺陷，随三元组契约闭合一并修复（task 5.3 守护）。
+
+## 附录：review 修复记录（closure/repair）
+
+独立 review 发现 4 个阻断项 + 1 个 P2 + 1 个建议，逐项修复：
+
+- **阻断1（full_results 不保证长度 == N + 坏输入逃逸）**：`process_one` 输入校验移进 try 块；缺 ticker 返回符合契约的 error result（`ticker:None, input_index, stage:"input_validation"` + 全字段）而非 `return None`；非 dict 输入走兜底 `except Exception` 返回 error result（`stage:"unexpected_exception"`），不逃逸 `asyncio.gather`。新增 `test_scout_batch_missing_ticker_still_in_full_results` + `test_scout_batch_non_dict_input_does_not_escape`。`full_results` 长度现保证 == 输入 N。
+- **阻断2（error result 缺契约字段）**：insufficient_data / LLM error / 兜底三分支补全 `one_liner`/`red_flags`/`green_flags`/`anti_trap_flags`/`low_confidence_anomaly`。新增 `test_error_results_satisfy_full_result_contract`。
+- **阻断3（canonical 与新契约矛盾）**：delta spec 从纯 ADDED 改为 ADDED「L2 全量结果契约」+ MODIFIED「Top-20 Cap」+ MODIFIED「CLI Integration」，消除 canonical「return only top 20」与新「scout_batch 返回 full_results、shortlist 由消费方派生」的矛盾。归档时同步进 canonical。
+- **P2（analyze_full_funnel 只读 shortlist 掩盖失败分布）**：`record_l2_distribution` 扩展读 `full_results` + `failure_summary`，输出 deep_dive/watch/skip/error/degraded 分布 + error ticker/stage/reason/input_index 明细；保留 shortlist confidence + usage；兼容旧格式（纯 list / 无 failure_summary）。新增 `tests/test_analyze_full_funnel.py`（2 测试）。
+- **建议（scout-agent canonical Purpose TBD）**：归档时补齐 Purpose。
 
 ## 附录：Non-Goals 边界
 
