@@ -102,18 +102,21 @@ async def run_weekly(
         candidates_to_rerun = [c for c in watchlist["candidates"] if c["ticker"] in l2_triggers]
 
         try:
-            # 调用 scout_batch，force=True 绕过 24h 缓存（返回 (shortlist, usage_summary)，P1 修复）
-            l2_results, _usage = await scout_batch(candidates_to_rerun, force=True)
+            # 调用 scout_batch，force=True 绕过 24h 缓存
+            # g1-l2-full-result-contract：返回三元组 (full_results, usage_summary, failure_summary)
+            l2_results, _usage, l2_failures = await scout_batch(candidates_to_rerun, force=True)
 
-            # 记录成功和失败的 ticker
+            # g1-l2-full-result-contract：l2_failed 从 failure_summary["errors"] 取
+            # （修复潜伏 bug：旧逻辑从 deep_dive 列表反推 error，但 error 票已被返回点过滤 → l2_failed 永远空）
+            l2_failed = [e["ticker"] for e in l2_failures.get("errors", [])]
+
+            # l2_new_verdicts 从 full_results 全量遍历（含 watch/skip/error，非只 deep_dive）
             for result in l2_results:
                 ticker = result.get("ticker")
-                if result.get("error"):
-                    print(f"  ⚠️  {ticker}: L2 评估失败 - {result['error']}")
-                    l2_failed.append(ticker)
+                if ticker in l2_failed:
+                    print(f"  ⚠️  {ticker}: L2 评估失败 - {result.get('error', 'unknown')}")
                 else:
                     l2_triggered.append(ticker)
-                    # 记录新 verdict（scout_batch 返回的 deep_dive 列表，verdict 固定为 "deep_dive"）
                     l2_new_verdicts[ticker] = result.get("verdict", "deep_dive")
 
             print(f"  ✓ L2 完成：成功 {len(l2_triggered)} 只，失败 {len(l2_failed)} 只")

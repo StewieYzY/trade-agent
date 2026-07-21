@@ -14,7 +14,7 @@
 
 ## 3. 完整输出与运行身份
 
-- [ ] 3.1 建立并归档 L2 full-result contract child change，输出 deep_dive/watch/skip/error、usage 和 failure summary
+- [x] 3.1 建立并归档 L2 full-result contract child change，输出 deep_dive/watch/skip/error、usage 和 failure summary
 - [ ] 3.2 建立并归档 canonical ticker/run identity child change，确保结果可定位到 run、规则版本和输入快照
 
 ## 4. 规模预检

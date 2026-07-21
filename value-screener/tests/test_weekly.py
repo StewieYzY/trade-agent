@@ -134,10 +134,11 @@ class TestWeekly:
                 "l2_triggers": ["600519.SH"],
                 "l3_triggers": [],  # Old diff says no L3 trigger
             }
-            # L2 rerun returns deep_dive
+            # L2 rerun returns deep_dive（g1-l2-full-result-contract：三元组）
             mock_scout.return_value = (
                 [{"ticker": "600519.SH", "verdict": "deep_dive", "confidence": 85}],
                 {"call_count": 1, "cache_hits": 0, "prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+                {"errors": [], "skips": 0, "watches": 0, "degraded": 0, "unhandled_exceptions": 0},
             )
             mock_cat.return_value = []
             mock_alert.return_value = {
@@ -186,10 +187,11 @@ class TestWeekly:
                 "l2_triggers": ["600519.SH"],
                 "l3_triggers": [],
             }
-            # L2 rerun still returns pass (no flip)
+            # L2 rerun still returns pass (no flip)（g1-l2-full-result-contract：三元组）
             mock_scout.return_value = (
                 [{"ticker": "600519.SH", "verdict": "pass", "confidence": 55}],
                 {"call_count": 1, "cache_hits": 0, "prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+                {"errors": [], "skips": 0, "watches": 0, "degraded": 0, "unhandled_exceptions": 0},
             )
             mock_cat.return_value = []
             mock_alert.return_value = {
@@ -234,10 +236,14 @@ class TestWeekly:
                 "l2_triggers": ["600519.SH"],
                 "l3_triggers": [],
             }
-            # L2 returns error
+            # L2 returns error（g1-l2-full-result-contract：error 票在 full_results 里 verdict=error，
+            # 定位信息在 failure_summary["errors"]——修复潜伏 bug：旧 mock 把 error 票伪造在
+            # shortlist 列表里让 weekly 能反推，但真实 scout_batch 的 shortlist 不含 error 票）
             mock_scout.return_value = (
-                [{"ticker": "600519.SH", "error": "LLM API failure"}],
+                [{"ticker": "600519.SH", "verdict": "error", "error": "LLM API failure"}],
                 {"call_count": 0, "cache_hits": 0, "prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+                {"errors": [{"ticker": "600519.SH", "reason": "LLM API failure", "stage": "scout"}],
+                 "skips": 0, "watches": 0, "degraded": 0, "unhandled_exceptions": 0},
             )
             mock_cat.return_value = []
             mock_alert.return_value = {
@@ -292,13 +298,14 @@ class TestWeekly:
                 "l2_triggers": ["600519.SH", "000858.SZ"],
                 "l3_triggers": [],
             }
-            # Both L2 reruns return deep_dive → 2 L3 triggers
+            # Both L2 reruns return deep_dive → 2 L3 triggers（g1-l2-full-result-contract：三元组）
             mock_scout.return_value = (
                 [
                     {"ticker": "600519.SH", "verdict": "deep_dive", "confidence": 85},
                     {"ticker": "000858.SZ", "verdict": "deep_dive", "confidence": 72},
                 ],
                 {"call_count": 2, "cache_hits": 0, "prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+                {"errors": [], "skips": 0, "watches": 0, "degraded": 0, "unhandled_exceptions": 0},
             )
             mock_cat.return_value = []
             mock_alert.return_value = {

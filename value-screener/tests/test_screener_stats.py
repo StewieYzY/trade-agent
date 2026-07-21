@@ -175,9 +175,9 @@ def test_scout_batch_only_reads_ticker_unchanged_by_new_stats():
             }
             with patch("scout.batch.ScoutCache") as mock_cache_cls:
                 mock_cache_cls.return_value.get.return_value = None
-                result, _usage = asyncio.run(scout_batch(tracking_candidates, force=True))
+                result, _usage, _failure = asyncio.run(scout_batch(tracking_candidates, force=True))
 
-    # 只返回 deep_dive 的那只
+    # full_results 含该只（输入 1 只全 deep_dive）
     assert len(result) == 1
     assert result[0]["ticker"] == "600519"
     # 关键契约：scout_batch 仅访问 candidate 的 'ticker' 字段

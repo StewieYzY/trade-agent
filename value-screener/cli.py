@@ -303,12 +303,24 @@ def scout(
 
     typer.echo(f"读取 L1 输出：{len(candidates)} 只候选")
 
-    # 2. 调用 scout_batch（异步，返回 (shortlist, usage_summary)，P1 修复）
+    # 2. 调用 scout_batch（异步，返回三元组 (full_results, usage_summary, failure_summary)，g1-l2-full-result-contract）
     from scout.batch import scout_batch
-    shortlist, usage_summary = asyncio.run(scout_batch(candidates, force=force))
+    full_results, usage_summary, failure_summary = asyncio.run(scout_batch(candidates, force=force))
 
-    # 3. 输出结果（P1 修复：shortlist + usage_summary 一起写，供成本分析用全量调用数据）
-    output_payload = {"shortlist": shortlist, "usage_summary": usage_summary}
+    # shortlist 由 full_results 派生（deep_dive 按 confidence 降序取前 20，受既有 Top-20 Cap 约束）
+    shortlist = sorted(
+        [r for r in full_results if r.get("verdict") == "deep_dive"],
+        key=lambda x: x.get("confidence", 0), reverse=True
+    )[:20]
+
+    # 3. 输出结果（g1-l2-full-result-contract：四字段 payload——full_results 含全量 verdict 分类，
+    #    shortlist 派生视图供 L3 消费，usage_summary 供成本分析，failure_summary 供失败定位）
+    output_payload = {
+        "full_results": full_results,
+        "shortlist": shortlist,
+        "usage_summary": usage_summary,
+        "failure_summary": failure_summary,
+    }
     output_json = json.dumps(output_payload, ensure_ascii=False, indent=2)
 
     if output:

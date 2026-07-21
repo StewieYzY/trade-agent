@@ -30,13 +30,13 @@ def test_scout_command_basic():
 
         l2_path = Path(tmpdir) / "l2_shortlist.json"
 
-        # Mock scout_batch
+        # Mock scout_batch（g1-l2-full-result-contract：返回三元组）
         from unittest.mock import patch
         import asyncio
 
         async def mock_scout_batch(candidates, force=False):
-            # P1 修复：scout_batch 返回 (shortlist, usage_summary)
-            return [
+            # 三元组 (full_results, usage_summary, failure_summary)
+            full_results = [
                 {
                     "ticker": "600519",
                     "verdict": "deep_dive",
@@ -46,8 +46,21 @@ def test_scout_command_basic():
                     "green_flags": ["ROE > 25%"],
                     "anti_trap_flags": [],
                 },
-            ], {"call_count": 1, "cache_hits": 0, "prompt_tokens": 10,
-                "completion_tokens": 5, "total_tokens": 15}
+                {
+                    "ticker": "000858",
+                    "verdict": "watch",
+                    "confidence": 55,
+                    "one_liner": "观察",
+                    "red_flags": [],
+                    "green_flags": [],
+                    "anti_trap_flags": [],
+                },
+            ]
+            usage = {"call_count": 2, "cache_hits": 0, "prompt_tokens": 20,
+                     "completion_tokens": 10, "total_tokens": 30}
+            failure = {"errors": [], "skips": 0, "watches": 1, "degraded": 0,
+                       "unhandled_exceptions": 0}
+            return full_results, usage, failure
 
         with patch("scout.batch.scout_batch", new=mock_scout_batch):
             result = runner.invoke(app, [
@@ -60,15 +73,22 @@ def test_scout_command_basic():
             assert result.exit_code == 0
             assert "L2 筛选完成" in result.stdout
 
-            # 验证输出文件（P1 修复后格式为 {shortlist, usage_summary}）
+            # 验证输出文件（g1-l2-full-result-contract：四字段 payload）
             assert l2_path.exists()
             l2_data = json.loads(l2_path.read_text(encoding="utf-8"))
+            # full_results 含全量（deep_dive + watch）
+            assert len(l2_data["full_results"]) == 2
+            assert l2_data["full_results"][0]["ticker"] == "600519"
+            # shortlist 由 full_results 派生（只 deep_dive）
             shortlist = l2_data["shortlist"]
             assert len(shortlist) == 1
             assert shortlist[0]["ticker"] == "600519"
             assert shortlist[0]["verdict"] == "deep_dive"
             # usage_summary 存在
-            assert l2_data["usage_summary"]["call_count"] == 1
+            assert l2_data["usage_summary"]["call_count"] == 2
+            # failure_summary 存在且结构完整
+            assert l2_data["failure_summary"]["watches"] == 1
+            assert l2_data["failure_summary"]["unhandled_exceptions"] == 0
 
 
 def test_scout_command_missing_input():

@@ -10,9 +10,10 @@ OpenAI 兼容 httpx 直连，temperature=0，20 并发/批。
 - 失败重试 1 次（退避 2s）
 - 异常不阻塞整批（跳过该 ticker，标记为 error）
 
-输出过滤（design.md §4 输出过滤）：
-- 只返回 verdict == "deep_dive" 的候选（供 L3 消费）
-- top-20 cap（按 confidence 降序取前 20，AD-03 成本闸门 200→20）
+输出契约（g1-l2-full-result-contract）：
+- 返回三元组 (full_results, usage_summary, failure_summary)，full_results 含每只输入
+  的 verdict 分类（deep_dive/watch/skip/error），不再只留 deep_dive
+- shortlist 由消费方从 full_results 派生（deep_dive 按 confidence 降序取前 20，AD-03 成本闸门 200→20）
 """
 from __future__ import annotations
 
@@ -34,21 +35,30 @@ from .quality import ScoutCache
 call_llm_snapshot = call_llm_light
 
 
-async def scout_batch(candidates: list[dict], force: bool = False) -> tuple[list[dict], dict]:
-    """并发对 ~200 只股票做 LLM 初筛，返回 (deep_dive 短名单, usage_summary).
+async def scout_batch(candidates: list[dict], force: bool = False) -> tuple[list[dict], dict, dict]:
+    """并发对 ~200 只股票做 LLM 初筛，返回 (full_results, usage_summary, failure_summary).
 
     Args:
         candidates: L1 输出的 candidates 列表（S5 schema），每项含 ticker 字段
         force: 是否跳过缓存（缺省 False）
 
     Returns:
-        (shortlist, usage_summary)：
-        - shortlist: deep_dive 候选列表（按 confidence 降序，top-20 cap），每项含 ticker/verdict/confidence/...
+        (full_results, usage_summary, failure_summary)：
+        - full_results: 每只输入一条结果（长度 == N，含 watch/skip/error/degraded，
+          不再只留 deep_dive），每项含 ticker/verdict/confidence/one_liner/red_flags/
+          green_flags/anti_trap_flags/low_confidence_anomaly，degraded 票含 degraded/
+          degraded_reason，error 票含 error/missing_fields。
+          shortlist 由消费方派生为 [r for r in full_results if verdict=="deep_dive"]
+          按 confidence 降序取前 20（受既有 Top-20 Cap requirement 约束）。
         - usage_summary: 本次实跑的 token usage 汇总（f1-deviation-fix §7 / P1 修复），
           累加**所有** LLM 调用（含 deep_dive/watch/skip/error 路径，非仅 deep_dive），
           结构 {call_count, cache_hits, prompt_tokens, completion_tokens, total_tokens}。
           cache hit 不产生新调用（不计入 call_count），单独计 cache_hits。
           AD-03 成本验证用 call_count × 单只 token + cache_hits 推算全量成本。
+        - failure_summary: 失败与分布汇总（g1-l2-full-result-contract），结构
+          {errors:[{ticker,reason,stage}], skips, watches, degraded, unhandled_exceptions}。
+          errors 可定位失败 ticker 与原因；degraded 单独计不进 errors；
+          unhandled_exceptions == 0（兜底异常计入 errors 而非中断整批）。
 
     处理流程：
     1. 检查缓存（ScoutCache.get，TTL=24h）
@@ -56,7 +66,7 @@ async def scout_batch(candidates: list[dict], force: bool = False) -> tuple[list
     3. 并发调用 LLM（Semaphore(20)）
     4. 解析输出 + 应用缓冲带
     5. 写入缓存（ScoutCache.set）
-    6. 过滤 deep_dive + top-20 cap
+    6. 汇总 failure_summary（errors/skips/watches/degraded/unhandled_exceptions）
     """
     cache = ScoutCache()
     today = date.today().isoformat()
@@ -69,6 +79,17 @@ async def scout_batch(candidates: list[dict], force: bool = False) -> tuple[list
         "prompt_tokens": 0,
         "completion_tokens": 0,
         "total_tokens": 0,
+    }
+
+    # g1-l2-full-result-contract：failure_summary 汇总失败与分布
+    # errors 可定位 ticker/reason/stage；degraded 单独计不进 errors；
+    # unhandled_exceptions 计兜底异常（MUST 为 0，因兜底已捕获并计入 errors）。
+    failure_summary = {
+        "errors": [],            # [{ticker, reason, stage}, ...]
+        "skips": 0,              # verdict=="skip" 计数
+        "watches": 0,            # verdict=="watch" 计数（含 degraded→watch 的票）
+        "degraded": 0,           # degraded==True 计数（不进 errors，单独计）
+        "unhandled_exceptions": 0,  # 兜底异常计数，MUST 为 0
     }
 
     def _accumulate(usage: dict | None) -> None:
@@ -176,6 +197,9 @@ async def scout_batch(candidates: list[dict], force: bool = False) -> tuple[list
 
         except Exception as e:
             # 兜底：非预期异常（脏数据/类型错位等）不静默丢弃
+            # g1-l2-full-result-contract：该只进 errors（已处理）。
+            # unhandled_exceptions 计的是逃逸出 asyncio.gather 的异常——当前兜底 catch all
+            # 保证不逃逸，故该字段恒为 0（spec 要求整批无未处理异常的断言字段）。
             return {
                 "ticker": ticker,
                 "verdict": "error",
@@ -186,10 +210,25 @@ async def scout_batch(candidates: list[dict], force: bool = False) -> tuple[list
     tasks = [process_one(c) for c in candidates]
     raw_results = await asyncio.gather(*tasks)
 
-    # 过滤 None（ticker 缺失或 insufficient data 等）
+    # 过滤 None（ticker 缺失）
     results = [r for r in raw_results if r is not None]
 
-    # 6. 过滤 deep_dive + top-20 cap
-    deep_dive = [r for r in results if r.get("verdict") == "deep_dive"]
-    deep_dive.sort(key=lambda x: x.get("confidence", 0), reverse=True)
-    return deep_dive[:20], usage_summary
+    # g1-l2-full-result-contract：汇总 failure_summary（errors/skips/watches/degraded）
+    # shortlist 不再在此返回——由消费方从 full_results 派生（受既有 Top-20 Cap 约束）。
+    for r in results:
+        verdict = r.get("verdict")
+        if verdict == "error":
+            failure_summary["errors"].append({
+                "ticker": r.get("ticker"),
+                "reason": r.get("error", "unknown"),
+                "stage": "scout",  # 失败阶段：scout_batch 内（LLM 调用/解析/兜底）
+            })
+        elif verdict == "skip":
+            failure_summary["skips"] += 1
+        elif verdict == "watch":
+            failure_summary["watches"] += 1
+        # degraded 票 verdict==watch（已计 watches），单独计 degraded 子集
+        if r.get("degraded") is True:
+            failure_summary["degraded"] += 1
+
+    return results, usage_summary, failure_summary
