@@ -3,6 +3,8 @@
 > 基于 UZI-Skill v3.x 代码分析 + 第一性原理需求拆解 + 两份独立方案融合
 > 原稿来自 Claude 方案，采纳 Codex 的三层漏斗/成本模型/反陷阱因子/校准方法/监控层，分歧按 Claude 观点决议
 
+> **2026-07-21 产品能力治理补充**：项目现正式按 G1「快：个人价值风格筛选」→ G2「深：可信 Investment Thesis」→ G3「拿得住：持仓纪律副驾驶」三个串行能力 Gate 推进。本文继续作为各层原始设计参考；产品能力定义、验收门和后续 OpenSpec 拆分以 `three-goal-capability-roadmap.md` 与 architecture-decisions AD-10 为准。
+
 ---
 
 ## 一、第一性原理：需求拆解与伪冲突

@@ -1,6 +1,6 @@
 # L3.5 持有纪律层：把“拿得住的勇气”结构化
 
-> 状态：设计探索稿（未进入 OpenSpec change）
+> 状态：设计探索稿（已纳入 `g3-holding-discipline` umbrella change；运行时代码未开发）
 > 创建：2026-07-15
 > 定位：承接 L3 深研输出，生成可执行的持有协议；供 L4 监控触发复核，不做自动交易。
 
@@ -415,24 +415,30 @@ required_action = position_review
 message = 可因组合风险再平衡，不代表看空公司
 ```
 
-## 十、后续 OpenSpec 拆分建议
+## 十、OpenSpec 归属与后续拆分
 
-建议拆成一个独立 change：
+本探索稿已纳入 `g3-holding-discipline` umbrella change。该 umbrella 只定义能力边界和总体验收 Gate，不直接执行运行时代码；后续按以下 child changes 逐步推进：
 
-```text
-l3-5-holding-discipline
-```
+1. `InvestmentThesis` → HoldingContract 输入契约。
+2. HoldingContract schema 与生命周期。
+3. HoldingsRepository 与候选池分离。
+4. MonitorSignal 标准化。
+5. 确定性状态机。
+6. `pre_trade_check`。
+7. 历史回放测试。
+8. 3-5 只持仓至少四周 shadow mode。
+9. 后续前端状态灯与复核界面。
 
-优先级建议在 f3a 之后、完整 L4 强化之前：
+实施依赖遵循 AD-10：
 
-1. f3a 先补 L3 信息基础。
-2. L3.5 把 L3 结论转译为持有协议。
-3. L4 再负责监控 HoldingContract 的关键变量。
+1. G2 先证明 Investment Thesis 可信。
+2. G2 Gate 通过后，才实现 G3 运行时代码。
+3. L4 负责提供信号，不越权直接决定持仓状态或交易动作。
 
 原因：
 
-- 没有 f3a，L3 thesis 质量不足，L3.5 合同容易空泛。
-- 没有 L3.5，L4 触发信号只能提示“重跑 L3”，不能帮助用户抵抗情绪化交易。
+- 没有可信 Investment Thesis，HoldingContract 只会把空泛结论结构化。
+- 没有独立持仓纪律层，L4 信号只能提示“重跑 L3”，不能帮助用户抵抗情绪化交易。
 
 ## 十一、设计边界
 
@@ -445,4 +451,3 @@ L3.5 的价值不是让系统更像“交易机器人”，而是让系统更像
 把冲动交易，拦截成复核任务；
 把长期主义，约束在可证伪的 thesis 上。
 ```
-

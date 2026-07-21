@@ -312,6 +312,62 @@ L3 为什么拆成两个 change（foundation + full council），而不是合并
 
 ---
 
+## AD-10 · 三大产品能力采用串行 Gate 与 umbrella/child change 治理
+
+**状态**：已确认
+
+**来源**：`three-goal-capability-roadmap.md`
+
+**确认日期**：2026-07-21
+
+### 问题
+
+项目已形成 L0-L4 工程骨架，但“模块实现完成”曾先于“核心产品能力得到真实验证”。后续应继续按技术层横向扩展，还是按用户价值重新组织开发与验收顺序？G3“拿得住”是否属于现有监控的自然延伸，还是一次需要显式确认的产品边界扩展？
+
+### 决策
+
+项目正式按以下三个产品能力串行推进：
+
+```text
+G1 快：个人价值风格筛选
+    ↓ Capability Gate
+G2 深：可信 Investment Thesis
+    ↓ Capability Gate
+G3 拿得住：持仓纪律副驾驶
+```
+
+采用两级 OpenSpec 治理：
+
+1. 每个 Goal 建立一个 umbrella change，定义能力目标、总体验收 Gate、架构边界、依赖关系和 child change 拆分规则。
+2. Umbrella change 是能力宪章，不作为巨型实现 change 直接执行。
+3. 每个可独立开发、验证和归档的小里程碑建立独立 child change。
+4. 每个 child change 必须引用所属 umbrella，并明确推进哪一项可度量 Gate。
+5. Umbrella Goal 只有在必要 child changes 已归档且真实能力证据满足 Gate 后才算通过；OpenSpec artifacts 完整或自动化测试全绿本身不构成能力通过。
+
+串行停止规则：
+
+- G1 未通过时，不以扩展 G2/G3、前端或自动化部署掩盖筛选能力缺口。
+- G2 必须用相同模型、相同 dossier 做强单 Agent 与 Council 对照验证；若 Council 未证明稳定信息增量，产品形态回退为“强单 Agent + 独立 DA/事实检查器 + Synthesizer”。
+- G2 Gate 通过前，只允许继续完善 G3 设计，不实现 G3 运行时代码。
+- G3 是明确的产品边界扩展：系统将保存用户主动输入的持仓与纪律参数，但不连接券商、不自动下单，最终交易决定仍由用户作出。
+
+### 理由
+
+1. 产品价值按因果链成立：错误候选无法被更深的分析补救，不可信 Thesis 也无法生成可信持仓纪律。
+2. Capability Gate 可防止工程骨架、测试覆盖或复杂技术形态制造“能力已经成立”的假象。
+3. Umbrella/child 分离保留总体方向稳定性，同时让每个实现里程碑保持 scope 小、证据清楚、可独立回退。
+4. 将 Multi-Agent 和状态机降为候选实现形态，可以在技术形态不产生价值时主动简化。
+
+### 对各 Goal 的约束
+
+| Goal | Umbrella change | 放行条件 |
+|------|-----------------|----------|
+| G1 快 | `g1-fast-personal-value-screening` | 数值与分层采集正确，完成 300+ 样本及全市场运行，Top 20 人工复核达到风格 Gate |
+| G2 深 | `g2-deep-investment-thesis` | 事实与审计 Gate 通过，Council 相对强单 Agent 达到信息增量与盲评 Gate |
+| G3 拿得住 | `g3-holding-discipline` | 历史场景回放通过，并完成 3-5 只持仓至少四周 shadow mode |
+
+---
+
 ## 附：Change 拆分总览
 
 | # | Change | 依赖 | 预估工期 |

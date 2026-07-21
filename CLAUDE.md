@@ -4,16 +4,17 @@ A 股价值投资选股 + 多 agent 研判系统。
 
 ## 当前状态
 
-L0→L4 全流程骨架已落地（`value-screener/`），6 个 OpenSpec change 全部 archived（`openspec/changes/archive/`），有真实数据缓存与 2 份 debate/watchlist 产出文件，但**端到端全天团实跑尚未验证**——现有 `debate/` 记录要么是单 agent 模式（巴菲特，R2-R4 跳过），要么四 agent 输出高度同质化（疑为测试桩或廉价模型输出），`watchlist/*.json` 7 份中 6 份的 `consensus_summary/conviction/dissent_points` 为 `null`（R4 未跑到或 L3 R1 串台/同质化 bug），1 份（600009.SH）真实完整。两个核心需求的语义已稳定（需求 B 语义澄清见 `design/deviation-analysis-2026-07-01.md` §2.5），动手前必读 `design/total-design.md`，设计未稳定的部分先讨论再动手，不要自行假设填空。
+L0→L4 全流程骨架已落地（`value-screener/`），6 个 OpenSpec change 全部 archived（`openspec/changes/archive/`），有真实数据缓存与 2 份 debate/watchlist 产出文件，但**端到端全天团实跑尚未验证**——现有 `debate/` 记录要么是单 agent 模式（巴菲特，R2-R4 跳过），要么四 agent 输出高度同质化（疑为测试桩或廉价模型输出），`watchlist/*.json` 7 份中 6 份的 `consensus_summary/conviction/dissent_points` 为 `null`（R4 未跑到或 L3 R1 串台/同质化 bug），1 份（600009.SH）真实完整。项目现按 G1「快」→ G2「深」→ G3「拿得住」三个串行能力 Gate 推进，产品能力定义和验证顺序以 `design/three-goal-capability-roadmap.md` 为准；动手前必读 `design/total-design.md`，设计未稳定的部分先讨论再动手，不要自行假设填空。
 
-**动手前必读**：`design/total-design.md`（第一参考源）、`design/architecture-decisions.md`（AD-01 ~ AD-09）。
+**动手前必读**：`design/three-goal-capability-roadmap.md`（产品能力与 Gate 第一参考源）、`design/total-design.md`（原始总体设计）、`design/architecture-decisions.md`（AD-01 ~ AD-10）。
 
 ## Workspace 结构
 
 | 目录 | 角色 | 状态 |
 |---|---|---|
-| `design/total-design.md` | **当前设计稿**（第一参考源）——第一性原理、借鉴与砍掉的范围、目标架构、分阶段实施路径、技术决策 | 持续更新 |
-| `design/architecture-decisions.md` | **架构决策记录**（AD-01 ~ AD-09）——跨 change 的架构级决策，change 拆分依据，各 change 的 proposal/design 必须引用而非重复搬运 | 持续更新 |
+| `design/three-goal-capability-roadmap.md` | **产品能力与 Gate 第一参考源**——G1 快 / G2 深 / G3 拿得住、串行放行规则、umbrella/child change 治理 | 已确认 |
+| `design/total-design.md` | **原始总体设计**——第一性原理、借鉴与砍掉的范围、目标架构、分阶段实施路径、技术决策 | 持续更新 |
+| `design/architecture-decisions.md` | **架构决策记录**（AD-01 ~ AD-10）——跨 change 的架构级决策，change 拆分依据，各 change 的 proposal/design 必须引用而非重复搬运 | 持续更新 |
 | `design/prd-rule&case.md` | **补充 PRD**——RULE.md 分层体系 + 历史案例库设计 | 设计稿 |
 | `design/deviation-analysis-2026-07-01.md` | **偏移分析**——基于文件系统实证的开发偏移记录 + 纠偏优先级（P0/P1） | 活跃（纠偏中） |
 | `design/kimi-worldcup-learnings.md` | **外部借鉴分析**——Kimi 2026 世界杯报告的辩论协议设计（6 要点）+ 校准降级机制（4 要点），含渐进式原文参照 | 参考文档 |
