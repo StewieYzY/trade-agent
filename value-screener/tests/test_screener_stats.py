@@ -367,6 +367,43 @@ def test_funnel_counts_monotonically_non_increasing():
     assert after_heat_filter <= after_hard_gates - 1
 
 
+def test_top300_truncation_activates():
+    """超过 300 只全过 hard_gates 时，after_factors SHALL == 300，激活 [:300] 截断.
+
+    对应 spec `staged-fetch-boundary` 的漏斗缩小 requirement（top-300 阶段集合缩小）。
+    补 item 4：6 只样本无法激活截断，本测试用 305 只全过 hard_gates 样本证明
+    top-300 阶段把 after_hard_gates(305) 缩小到 after_factors(300)。
+    """
+    n = 305
+    tickers = [f"600{i:03d}" for i in range(n)]
+    fake_all_data = {}
+    for i, t in enumerate(tickers):
+        td = _make_ticker_data()
+        td["basic"]["code"] = t
+        # 给每只不同的 pe 让 composite 有区分度，避免并列排序影响截断边界断言
+        td["basic"]["pe"] = 20.0 + i
+        td["valuation"]["pe_ttm"] = 20.0 + i
+        fake_all_data[t] = td
+
+    with patch("screener.main.BatchFetcher") as MockBF:
+        MockBF.return_value.fetch_all.return_value = fake_all_data
+        result = screen_a_shares(tickers)
+
+    stats = result["stats"]
+    assert stats["total"] == n
+    assert stats["after_hard_gates"] == n, (
+        f"305 只全过 hard_gates，expected after_hard_gates={n}，got {stats['after_hard_gates']}"
+    )
+    # top-300 截断激活：after_factors 恰为 300
+    assert stats["after_factors"] == 300, (
+        f"[:300] 截断应激活，expected after_factors=300，got {stats['after_factors']}"
+    )
+    # 截断证明 top-300 阶段集合缩小：305 → 300
+    assert stats["after_factors"] < stats["after_hard_gates"]
+    # 候选输出 = heat_filter 后，不超 300
+    assert stats["after_heat_filter"] <= stats["after_factors"] <= 300
+
+
 # ==================== g1-staged-fetch-boundary：单股失败隔离不回归 ====================
 
 

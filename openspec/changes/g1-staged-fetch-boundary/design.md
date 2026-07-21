@@ -60,11 +60,11 @@ G2/L3 路径（`council/research_dossier.py::build_research_dossier`）是独立
 **为什么选 B 不选 A**：
 - A 触碰 L1 编排顺序与 `fetch_all` 契约，违反 child Non-Goal「不做全市场性能」「不把 G2 dossier fetcher 逻辑整体重构」。
 - handoff step 5 的证明语「hard gate/factor/heat 等漏斗阶段后，**后续 fetch 调用**的 ticker 集合真实缩小」——"后续 fetch 调用" 指下游 L2/L3 阶段的 fetch，不是 L1 内部的 `fetch_all`。L1 的 `fetch_all` 在漏斗前一次性采完，本身不随漏斗缩小，这是当前架构事实。
-- B 的证据形态贴合现状：L1 漏斗输出 `after_hard_gates/after_factors/after_heat_filter` 三级计数天然单调缩小；L2 只对 L1 `final_candidates` 调 LLM；L3 只对 L2 shortlist 调 dossier fetcher。这些缩小关系**已经成立**，只需被显式证明/测试，不需要新编排。
+- B 的证据形态贴合现状：L1 漏斗输出 `after_hard_gates/after_factors/after_heat_filter` 三级计数天然单调缩小；L2 `scout_batch` 只对 L1 `candidates` 调 LLM；L3 dossier fetch 在 `council/debate.py::run_debate(ticker)` 单票入口（CLI `council --ticker`）内部经 `build_research_dossier(ticker)` 触发，批量 L3 触发发生在 `monitor/weekly.py` 的 `for ticker in l3_triggers` 循环（触发源是基于 L2 重跑后新 verdict 的 ticker 集合，非直接等于 L2 shortlist）。这些缩小关系**已经成立**，只需被显式证明/测试，不需要新编排。
 
 **证据要求**：
-- L1 内部：`screen_a_shares` 输出的 `stats` 含 `total ≥ after_hard_gates ≥ after_factors ≥ after_heat_filter` 的反向单调断言（构造能过/不能过各 gate 的样本）。
-- 下游 fetch：L2 `scout_batch` 实际处理的 ticker 集合 = L1 `candidates`（≤ `after_heat_filter`）；L3 `build_research_dossier` 实际 fetch 的 ticker 集合 = L2 shortlist（≤ 20）。本 change 用单元测试断言 L1 漏斗单调性作为主证据，L2/L3 下游缩小用现有行为（已成立）+ 在 design/tasks 记录为等价证据说明，不新增 L2/L3 集成测试（属各自 child scope）。
+- L1 内部：`screen_a_shares` 输出的 `stats` 含 `total ≥ after_hard_gates ≥ after_factors ≥ after_heat_filter` 的反向单调断言（构造能过/不能过各 gate 的样本，且需 >300 只过 hard_gates 才能激活 `[:300]` 截断证明 top-300 阶段缩小）。
+- 下游 fetch：L2 `scout_batch` 实际处理的 ticker 集合 = L1 `candidates`（≤ `after_heat_filter`）；L3 dossier fetch 的 ticker 集合来自 `monitor/weekly.py` 的 `l3_triggers` 循环（基于 L2 重跑新 verdict，≤ L2 处理集合），单票 dossier fetch 在 `run_debate(ticker)`→`build_research_dossier(ticker)` 内发生。本 change 用单元测试断言 L1 漏斗单调性 + top-300 截断作为主证据，L2/L3 下游缩小用现有行为（已成立）+ 在 design/tasks 记录为等价证据说明，不新增 L2/L3 集成测试（属各自 child scope）。
 
 ### D2：只改 L1 调用点，不改 `fetch_all` 的 `dimensions=None` 兜底契约
 
