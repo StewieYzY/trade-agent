@@ -1,7 +1,9 @@
 # staged-fetch-boundary Specification
 
 ## Purpose
-TBD - created by archiving change g1-staged-fetch-boundary. Update Purpose after archive.
+
+定义 G1 快速筛选与 G2/L3 深研之间的采集边界：L1 全市场路径只采集量化筛选所需维度，避免默认采集 dossier 数据，并用漏斗计数与失败隔离证据证明候选 ticker 集合可控缩小。
+
 ## Requirements
 ### Requirement: L1 全市场路径的采集维度白名单
 
