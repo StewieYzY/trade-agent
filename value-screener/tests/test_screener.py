@@ -414,3 +414,166 @@ def test_compute_industry_median_pe_min_samples():
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+# ==================== G1 L1 数值口径与 DCF 纠偏测试 ====================
+
+
+def test_dcf_dimension_mismatch_excluded():
+    """验证 DCF 量纲错误时被排除，不参与排序.
+
+    构造公司级 FCF 数据（亿元量级），验证当前实现：
+    1. 将 DCF 标记为量纲不一致
+    2. 不让 DCF 参与排序，安全边际只使用质押率
+    """
+    ticker_data = {
+        "basic": {"price": 50.0},  # 每股价格 50 元
+        "financials": {
+            "years": ["2021", "2022", "2023"],
+            "income": {"net_profit": [5e8, 5.5e8, 6e8], "revenue": [100e8, 110e8, 120e8]},
+            "balance_sheet": {
+                "TOTAL_ASSETS": [200e8, 220e8, 240e8],
+                "TOTAL_CURRENT_LIAB": [50e8, 55e8, 60e8],
+                "TOTAL_NONCURRENT_LIAB": [30e8, 33e8, 36e8],
+            },
+            "cash_flow": {
+                "NETCASH_OPERATE": [15e8, 16e8, 17e8],
+                "CONSTRUCT_LONG_ASSET": [5e8, 5e8, 5e8],  # FCF = 10亿、11亿、12亿
+            },
+        },
+        "valuation": {"pe_percentile_5y": 40, "pb": 2.0, "pe_ttm": 15},
+        "risk": {"pledge_ratio": 30},
+    }
+
+    scores = compute_factor_scores(ticker_data)
+
+    # 新实现：DCF 因量纲不一致被排除，dcf_note 应标记原因
+    assert "dcf_note" in scores, "返回结构应包含 dcf_note 字段"
+    assert scores["dcf_note"] == "dcf_dimension_mismatch", \
+        f"DCF 量纲错误时应标记为 dcf_dimension_mismatch，实际为 {scores['dcf_note']}"
+
+    # 安全边际应 100% 由质押率构成（质押率 30% → (60-30)/40*100 = 75.0）
+    assert scores["safety_margin"] == pytest.approx(75.0), \
+        f"DCF 被排除后，安全边际应 100% 由质押率构成（75.0），实际为 {scores['safety_margin']}"
+
+
+def test_safety_margin_only_pledge_when_dcf_excluded():
+    """验证 DCF 被排除后，安全边际 100% 由质押率构成.
+
+    质押率 30% → (60-30)/40*100 = 75.0
+    """
+    ticker_data = {
+        "basic": {"price": 10.0},
+        "financials": {
+            "years": ["2021", "2022", "2023"],
+            "income": {"net_profit": [100, 120, 150], "revenue": [500, 600, 700]},
+            "balance_sheet": {
+                "TOTAL_ASSETS": [1000, 1100, 1200],
+                "TOTAL_CURRENT_LIAB": [300, 330, 360],
+                "TOTAL_NONCURRENT_LIAB": [200, 220, 240],
+            },
+            "cash_flow": {
+                "NETCASH_OPERATE": [80, 90, 100],
+                "CONSTRUCT_LONG_ASSET": [30, 30, 30],
+            },
+        },
+        "valuation": {"pe_percentile_5y": 40, "pb": 2.0, "pe_ttm": 15},
+        "risk": {"pledge_ratio": 30},
+    }
+
+    scores = compute_factor_scores(ticker_data)
+
+    # DCF 被排除后，安全边际 = 质押率得分 = (60-30)/(60-20)*100 = 75.0
+    assert scores["safety_margin"] == pytest.approx(75.0), \
+        f"安全边际应 100% 由质押率构成（75.0），实际为 {scores['safety_margin']}"
+
+
+def test_dcf_note_insufficient_data():
+    """验证 FCF 不足 2 期时，dcf_note 为 insufficient_data."""
+    ticker_data = {
+        "basic": {"price": 10.0},
+        "financials": {
+            "years": ["2023"],
+            "income": {"net_profit": [100], "revenue": [500]},
+            "balance_sheet": {
+                "TOTAL_ASSETS": [1000],
+                "TOTAL_CURRENT_LIAB": [300],
+                "TOTAL_NONCURRENT_LIAB": [200],
+            },
+            "cash_flow": {
+                "NETCASH_OPERATE": [80],
+                "CONSTRUCT_LONG_ASSET": [30],
+            },
+        },
+        "valuation": {"pe_percentile_5y": 40, "pb": 2.0, "pe_ttm": 15},
+        "risk": {"pledge_ratio": 30},
+    }
+
+    scores = compute_factor_scores(ticker_data)
+
+    # FCF 只有 1 期，不足以计算 DCF
+    assert "dcf_note" in scores, "返回结构应包含 dcf_note 字段"
+    assert scores["dcf_note"] == "insufficient_data", \
+        f"FCF 不足 2 期时应标记为 insufficient_data，实际为 {scores['dcf_note']}"
+
+
+def test_dcf_note_calculation_error():
+    """验证 DCF 计算抛出 ValueError 时，dcf_note 为 calculation_error，排序继续."""
+    from unittest.mock import patch
+
+    ticker_data = {
+        "basic": {"price": 10.0},
+        "financials": {
+            "years": ["2021", "2022", "2023"],
+            "income": {"net_profit": [100, 120, 150], "revenue": [500, 600, 700]},
+            "balance_sheet": {
+                "TOTAL_ASSETS": [1000, 1100, 1200],
+                "TOTAL_CURRENT_LIAB": [300, 330, 360],
+                "TOTAL_NONCURRENT_LIAB": [200, 220, 240],
+            },
+            "cash_flow": {
+                "NETCASH_OPERATE": [80, 90, 100],
+                "CONSTRUCT_LONG_ASSET": [30, 30, 30],
+            },
+        },
+        "valuation": {"pe_percentile_5y": 40, "pb": 2.0, "pe_ttm": 15},
+        "risk": {"pledge_ratio": 30},
+    }
+
+    with patch("screener.factor_scores.compute_simple_dcf", side_effect=ValueError("mock error")):
+        scores = compute_factor_scores(ticker_data)
+
+    # ValueError 应被捕获，dcf_note 标记为 calculation_error
+    assert "dcf_note" in scores, "返回结构应包含 dcf_note 字段"
+    assert scores["dcf_note"] == "calculation_error", \
+        f"ValueError 时应标记为 calculation_error，实际为 {scores['dcf_note']}"
+    # 排序应继续，安全边际由质押率构成
+    assert scores["safety_margin"] == pytest.approx(75.0)
+
+
+def test_unexpected_exception_propagates():
+    """验证 DCF 计算抛出 AttributeError 时，异常向上传播不被静默捕获."""
+    from unittest.mock import patch
+
+    ticker_data = {
+        "basic": {"price": 10.0},
+        "financials": {
+            "years": ["2021", "2022", "2023"],
+            "income": {"net_profit": [100, 120, 150], "revenue": [500, 600, 700]},
+            "balance_sheet": {
+                "TOTAL_ASSETS": [1000, 1100, 1200],
+                "TOTAL_CURRENT_LIAB": [300, 330, 360],
+                "TOTAL_NONCURRENT_LIAB": [200, 220, 240],
+            },
+            "cash_flow": {
+                "NETCASH_OPERATE": [80, 90, 100],
+                "CONSTRUCT_LONG_ASSET": [30, 30, 30],
+            },
+        },
+        "valuation": {"pe_percentile_5y": 40, "pb": 2.0, "pe_ttm": 15},
+        "risk": {"pledge_ratio": 30},
+    }
+
+    with patch("screener.factor_scores.compute_simple_dcf", side_effect=AttributeError("mock bug")):
+        with pytest.raises(AttributeError, match="mock bug"):
+            compute_factor_scores(ticker_data)

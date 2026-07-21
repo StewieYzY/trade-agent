@@ -16,8 +16,8 @@ S2 规格：~800 → ~300
 - PE×PB < 22.5 (30%)
 
 安全边际（20%）：
-- DCF 安全边际 (60%)
-- 质押率反向 (40%)
+- DCF 安全边际: non-decision（量纲未验证，不参与排序）
+- 质押率反向 (100%): < 20% 得满分，20-60% 线性衰减，> 60% 得 0
 """
 
 from __future__ import annotations
@@ -199,28 +199,51 @@ def _compute_value_score(ticker_data: dict, industry_pe_map: dict | None = None)
     return sum(s * w / total_weight for _, s, w in scores)
 
 
-def _compute_safety_margin_score(ticker_data: dict) -> float:
+def _compute_safety_margin_score(ticker_data: dict) -> tuple[float, str | None]:
     """计算安全边际因子（20% 权重）.
 
     子项：
-    - DCF 安全边际 (60%): > 30% 得满分
-    - 质押率反向 (40%): < 20% 得满分，20-60% 线性衰减，> 60% 得 0
+    - DCF 安全边际: non-decision（量纲未验证，不参与排序）
+    - 质押率反向 (100%): < 20% 得满分，20-60% 线性衰减，> 60% 得 0
+
+    Returns:
+        (score, dcf_note): 安全边际分数和 DCF 状态说明
     """
     financials = ticker_data.get("financials", {})
     basic = ticker_data.get("basic", {})
     risk = ticker_data.get("risk", {})
 
-    scores = []
+    # DCF 诊断：尝试计算但不参与排序
+    dcf_note = _diagnose_dcf(financials, basic)
 
-    # 子项 1: DCF 安全边际 (60%)
-    # FCF = 经营现金流 - 资本开支 = NETCASH_OPERATE - CONSTRUCT_LONG_ASSET
+    # 安全边际 100% 由质押率构成
+    pledge_ratio = risk.get("pledge_ratio")
+    if pledge_ratio is not None:
+        # < 20% 得满分，20-60% 线性衰减，> 60% 得 0
+        if pledge_ratio <= 20.0:
+            pledge_score = 100.0
+        elif pledge_ratio >= 60.0:
+            pledge_score = 0.0
+        else:
+            pledge_score = (60.0 - pledge_ratio) / (60.0 - 20.0) * 100.0
+        return (pledge_score, dcf_note)
+
+    # 质押率缺失时安全边际为 0
+    return (0.0, dcf_note)
+
+
+def _diagnose_dcf(financials: dict, basic: dict) -> str | None:
+    """诊断 DCF 状态，返回原因说明.
+
+    尝试计算 DCF 但不用于排序，仅用于诊断和解释。
+    """
     cash_flow = financials.get("cash_flow", {})
     income = financials.get("income", {})
 
     netcash_operate = cash_flow.get("NETCASH_OPERATE", [])
     construct_long_asset = cash_flow.get("CONSTRUCT_LONG_ASSET", [])
 
-    # 计算 FCF 序列：逐期相减
+    # 计算 FCF 序列
     fcf_series = []
     if netcash_operate and construct_long_asset and len(netcash_operate) == len(construct_long_asset):
         for nco, cla in zip(netcash_operate, construct_long_asset):
@@ -232,55 +255,26 @@ def _compute_safety_margin_score(ticker_data: dict) -> float:
     revenue_series = income.get("revenue", [])
     current_price = basic.get("price")
 
-    # 过滤掉 None 值，只保留有效的 FCF
+    # 过滤 None
     valid_fcf = [fcf for fcf in fcf_series if fcf is not None]
 
-    # 至少需要 2 期有效 FCF 才能计算 DCF
-    if len(valid_fcf) >= 2 and revenue_series and current_price is not None:
-        try:
-            dcf_result = compute_simple_dcf(
-                fcf_series=valid_fcf,
-                revenue_series=revenue_series,
-                current_price=current_price,
-                assumptions={"discount_rate": 0.10, "terminal_growth": 0.03}
-            )
+    # 数据不足
+    if len(valid_fcf) < 2 or not revenue_series or current_price is None:
+        return "insufficient_data"
 
-            safety_margin_pct = dcf_result.get("safety_margin_pct", 0.0)
-
-            # > 30% 得满分，0-30% 线性衰减，< 0% 得 0
-            if safety_margin_pct >= 30.0:
-                dcf_score = 100.0
-            elif safety_margin_pct >= 0.0:
-                dcf_score = safety_margin_pct / 30.0 * 100.0
-            else:
-                dcf_score = 0.0
-
-            scores.append(("dcf", dcf_score, 0.60))
-        except Exception:
-            # DCF 计算失败，跳过
-            pass
-
-    # 子项 2: 质押率反向 (40%)
-    pledge_ratio = risk.get("pledge_ratio")
-    if pledge_ratio is not None:
-        # < 20% 得满分，20-60% 线性衰减，> 60% 得 0
-        if pledge_ratio <= 20.0:
-            pledge_score = 100.0
-        elif pledge_ratio >= 60.0:
-            pledge_score = 0.0
-        else:
-            pledge_score = (60.0 - pledge_ratio) / (60.0 - 20.0) * 100.0
-
-        scores.append(("pledge", pledge_score, 0.40))
-
-    if not scores:
-        return 0.0
-
-    total_weight = sum(w for _, _, w in scores)
-    if total_weight == 0:
-        return 0.0
-
-    return sum(s * w / total_weight for _, s, w in scores)
+    # 尝试计算 DCF（仅用于诊断）
+    try:
+        compute_simple_dcf(
+            fcf_series=valid_fcf,
+            revenue_series=revenue_series,
+            current_price=current_price,
+            assumptions={"discount_rate": 0.10, "terminal_growth": 0.03}
+        )
+        # DCF 计算成功，但量纲未验证（企业价值 vs 每股价格）
+        return "dcf_dimension_mismatch"
+    except (ValueError, ZeroDivisionError, TypeError):
+        # 已知异常类型，记录但不传播
+        return "calculation_error"
 
 
 def compute_factor_scores(ticker_data: dict, industry_pe_map: dict | None = None) -> dict:
@@ -296,14 +290,15 @@ def compute_factor_scores(ticker_data: dict, industry_pe_map: dict | None = None
         industry_pe_map: {industry: median_pe} 行业 PE 中位数映射（可选，R2 增强）
 
     Returns:
-        {"quality": float, "value": float, "safety_margin": float, "composite": float, "f_score": int}
+        {"quality": float, "value": float, "safety_margin": float, "composite": float,
+         "f_score": int, "dcf_note": str | None}
     """
     financials = ticker_data.get("financials", {})
     f_score = compute_f_score(financials) if financials else 0
 
     quality = _compute_quality_score(ticker_data)
     value = _compute_value_score(ticker_data, industry_pe_map)
-    safety_margin = _compute_safety_margin_score(ticker_data)
+    safety_margin, dcf_note = _compute_safety_margin_score(ticker_data)
 
     composite = quality * 0.50 + value * 0.30 + safety_margin * 0.20
 
@@ -312,5 +307,6 @@ def compute_factor_scores(ticker_data: dict, industry_pe_map: dict | None = None
         "value": round(value, 2),
         "safety_margin": round(safety_margin, 2),
         "composite": round(composite, 2),
-        "f_score": f_score
+        "f_score": f_score,
+        "dcf_note": dcf_note
     }
