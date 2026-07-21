@@ -9,8 +9,8 @@
 
 ## 2. 分层采集边界
 
-- [ ] 2.1 建立并归档 G1/G2 fetcher boundary child change，证明全市场路径不采集 dossier 维度
-- [ ] 2.2 用采集调用计数或等价证据证明 ticker 集合随漏斗逐层缩小
+- [x] 2.1 建立并归档 G1/G2 fetcher boundary child change，证明全市场路径不采集 dossier 维度
+- [x] 2.2 用采集调用计数或等价证据证明 ticker 集合随漏斗逐层缩小
 
 ## 3. 完整输出与运行身份
 

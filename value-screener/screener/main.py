@@ -20,6 +20,13 @@ from .factor_scores import compute_factor_scores
 from .anti_trap import compute_anti_trap
 from .heat_filter import check_heat_filter
 
+# g1-staged-fetch-boundary：G1 量化筛选的采集维度白名单。
+# L1/L2 漏斗只消费这 5 个量化维度；dossier 三维（main_business/peers/research）
+# 属 G2/L3 深研路径（council/research_dossier.py 显式调），不进 L1 全市场采集。
+# screen_a_shares 调 fetch_all 时显式传此白名单，避免 dimensions=None 的全采兜底
+# 默认采集 dossier 三维。
+G1_QUANT_DIMENSIONS = ("basic", "financials", "kline", "valuation", "risk")
+
 
 def screen_a_shares(tickers: list[str], exclude_cyclicals: bool = False) -> dict[str, Any]:
     """全市场 A 股量化筛选.
@@ -43,8 +50,11 @@ def screen_a_shares(tickers: list[str], exclude_cyclicals: bool = False) -> dict
         }
     """
     # Layer 1: 批量采集
+    # g1-staged-fetch-boundary：显式传 G1 量化五维白名单，不依赖 fetch_all 的
+    # dimensions=None 全采兜底（会默认采 dossier 三维 main_business/peers/research，
+    # 这三维属 G2/L3 深研路径，L1/L2 漏斗从不读取，全市场路径下是纯浪费 + 反爬风险）。
     fetcher = BatchFetcher()
-    all_data = fetcher.fetch_all(tickers)
+    all_data = fetcher.fetch_all(tickers, dimensions=G1_QUANT_DIMENSIONS)
 
     # R2: 计算行业 PE 中位数（用于 PE 行业折价估值锚）
     industry_pe_map = compute_industry_median_pe(all_data)

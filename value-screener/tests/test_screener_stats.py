@@ -254,5 +254,153 @@ def test_aggregate_watchlist_unchanged_by_new_stats(tmp_path):
     assert "000858.SZ" in tickers
 
 
+# ==================== g1-staged-fetch-boundary：L1 采集维度白名单 ====================
+
+
+def test_screen_a_shares_passes_g1_quant_dimensions_excluding_dossier():
+    """screen_a_shares 调 fetch_all 时 MUST 显式传 G1 量化五维白名单，不含 dossier 三维.
+
+    对应 spec `staged-fetch-boundary` / `quantitative-screener` 的 fetch 边界 requirement。
+    红测：当前 screen_a_shares 调 fetch_all 不传 dimensions（等价全采 8 维），
+    断言 fetch_all 收到的 dimensions 恰为五维白名单 → 当前会失败（红）。
+    """
+    from screener.main import G1_QUANT_DIMENSIONS
+
+    tickers = ["600519"]
+    fake_all_data = {"600519": _make_ticker_data()}
+
+    with patch("screener.main.BatchFetcher") as MockBF:
+        MockBF.return_value.fetch_all.return_value = fake_all_data
+        screen_a_shares(tickers)
+
+    # 断言 fetch_all 收到的 dimensions 参数恰为 G1_QUANT_DIMENSIONS
+    fetch_all_call = MockBF.return_value.fetch_all
+    assert fetch_all_call.called, "fetch_all 未被调用"
+    # call_args: (tickers, dimensions) 位置参数；dimensions 是第二位置参
+    call_args = fetch_all_call.call_args
+    # 优先按位置参数取（screen_a_shares 应以位置参传 dimensions）
+    if call_args.args and len(call_args.args) >= 2:
+        passed_dims = call_args.args[1]
+    else:
+        passed_dims = call_args.kwargs.get("dimensions")
+
+    assert passed_dims == G1_QUANT_DIMENSIONS, (
+        f"screen_a_shares 应传 G1_QUANT_DIMENSIONS={G1_QUANT_DIMENSIONS}，"
+        f"实际传了 {passed_dims!r}"
+    )
+    # 显式排除 dossier 三维（防止未来白名单被误改）
+    dossier_dims = ("main_business", "peers", "research")
+    for d in dossier_dims:
+        assert d not in passed_dims, (
+            f"dossier 维度 {d!r} 不应出现在 L1 采集白名单中"
+        )
+
+
+def test_g1_quant_dimensions_constant_exposed_and_ordered():
+    """G1_QUANT_DIMENSIONS SHALL 为 screener.main 模块级常量，且值为 G1 量化五维有序集合.
+
+    红测：当前 main.py 无 G1_QUANT_DIMENSIONS 常量 → ImportError（红）。
+    """
+    from screener.main import G1_QUANT_DIMENSIONS
+
+    assert G1_QUANT_DIMENSIONS == ("basic", "financials", "kline", "valuation", "risk")
+
+
+# ==================== g1-staged-fetch-boundary：漏斗 ticker 集合逐层缩小 ====================
+
+
+def test_funnel_counts_monotonically_non_increasing():
+    """漏斗计数 SHALL 反向单调：total >= after_hard_gates >= after_factors >= after_heat_filter.
+
+    构造混合样本：部分不过 hard_gates（market_cap<50亿）、部分不过 heat_filter（涨幅>20%）。
+    对应 spec `staged-fetch-boundary` 的漏斗缩小 requirement。
+    """
+
+    def _passing_ticker(code):
+        """能过 hard_gates 且能过 heat_filter 的样本。"""
+        return _make_ticker_data()
+
+    def _failing_hard_gate_ticker(code):
+        """不过 hard_gates：市值 < 50 亿（H3）。"""
+        td = _make_ticker_data()
+        td["basic"]["market_cap"] = 1e8  # 1 亿 < 50 亿
+        td["basic"]["code"] = code
+        return td
+
+    def _failing_heat_filter_ticker(code):
+        """能过 hard_gates 但不过 heat_filter：近 60 日涨幅 >20%（HF2）。"""
+        td = _make_ticker_data()
+        td["basic"]["code"] = code
+        # close[-60]=10, close[-1]=15 → 涨幅 50% > 20%
+        td["kline"]["close"] = [10.0] * 59 + [15.0]
+        return td
+
+    tickers = ["600001", "600002", "600003", "600004", "600005", "600006"]
+    fake_all_data = {
+        "600001": _passing_ticker("600001"),
+        "600002": _passing_ticker("600002"),
+        "600003": _failing_hard_gate_ticker("600003"),  # 不过 hard_gates
+        "600004": _failing_hard_gate_ticker("600004"),  # 不过 hard_gates
+        "600005": _failing_heat_filter_ticker("600005"),  # 过 hard_gates 不过 heat
+        "600006": _passing_ticker("600006"),
+    }
+
+    with patch("screener.main.BatchFetcher") as MockBF:
+        MockBF.return_value.fetch_all.return_value = fake_all_data
+        result = screen_a_shares(tickers)
+
+    stats = result["stats"]
+    total = stats["total"]
+    after_hard_gates = stats["after_hard_gates"]
+    after_factors = stats["after_factors"]
+    after_heat_filter = stats["after_heat_filter"]
+
+    # 6 只输入，2 只不过 hard_gates → after_hard_gates = 4
+    assert total == 6
+    assert after_hard_gates == 4, f"expected 4 pass hard_gates, got {after_hard_gates}"
+    # 反向单调
+    assert total >= after_hard_gates >= after_factors >= after_heat_filter, (
+        f"漏斗计数非反向单调: total={total} >= after_hard_gates={after_hard_gates} "
+        f">= after_factors={after_factors} >= after_heat_filter={after_heat_filter}"
+    )
+    # 600005 过 hard_gates 但不过 heat_filter → after_heat_filter 至少比 after_hard_gates 少 1
+    assert after_heat_filter <= after_hard_gates - 1
+
+
+# ==================== g1-staged-fetch-boundary：单股失败隔离不回归 ====================
+
+
+def test_single_ticker_dim_error_does_not_break_batch():
+    """单只股票某量化维度采集失败（__error__）SHALL 不阻断整批 screen_a_shares.
+
+    对应 spec `staged-fetch-boundary` 的失败隔离不回归 requirement。
+    构造两只：一只 basic 维度返回 __error__（整体仍可被 hard_gates 处理，只是缺字段），
+    另一只正常。断言 screen_a_shares 不抛异常、正常 ticker 仍进漏斗。
+    """
+    tickers = ["600519", "600520"]
+    good = _make_ticker_data()
+    good["basic"]["code"] = "600519"
+
+    bad = _make_ticker_data()
+    bad["basic"]["code"] = "600520"
+    # 模拟该 ticker 的 basic 维度采集失败（BatchFetcher._fetch_one 返回 __error__ 结构）
+    bad["basic"] = {"__error__": True, "reason": "fetch failed"}
+
+    fake_all_data = {"600519": good, "600520": bad}
+
+    with patch("screener.main.BatchFetcher") as MockBF:
+        MockBF.return_value.fetch_all.return_value = fake_all_data
+        # 不应抛异常
+        result = screen_a_shares(tickers)
+
+    stats = result["stats"]
+    # 600519 正常 → 应进入漏斗；600520 basic 失败（market_cap=None）不误触 gate
+    # 但 hard_gates 容错：market_cap 为 None 时跳过 H3，可能仍 pass
+    # 关键断言：整批不抛异常 + 至少 600519 进入 candidates
+    assert stats["total"] == 2
+    candidate_tickers = [c["ticker"] for c in result["candidates"]]
+    assert "600519" in candidate_tickers, "正常 ticker 应进入最终候选池"
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
