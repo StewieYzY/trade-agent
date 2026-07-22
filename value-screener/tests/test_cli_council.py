@@ -121,6 +121,12 @@ class TestCouncilCommand:
 
         result = runner.invoke(app, ["council", "--ticker", "600519"])
         assert result.exit_code == 0
+        # g1-canonical-run-identity-repair D4: 路径提示用 canonical（带 .SH 后缀），
+        # 与 _debate_path 实际写入路径一致，MUST NOT 显示纯数字旧路径。
+        assert "debate/600519.SH/" in result.stdout, \
+            "路径提示 SHALL 显示 canonical debate/600519.SH/，MUST NOT 显示纯数字 debate/600519/"
+        assert "debate/600519/" not in result.stdout.replace("debate/600519.SH/", ""), \
+            "MUST NOT 出现纯数字 debate/600519/ 路径提示"
 
     @patch("council.debate.run_debate", new_callable=AsyncMock)
     def test_council_force_flag(self, mock_run_debate, tmp_path, monkeypatch):

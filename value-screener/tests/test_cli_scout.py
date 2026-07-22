@@ -268,6 +268,52 @@ def test_scout_output_run_scoped_same_day_not_overwrite():
         assert second_data["run_id"] != first_rid, "两次运行 run_id SHALL 不同"
 
 
+def test_scout_output_preserves_legacy_no_run_id_file():
+    """g1-canonical-run-identity-repair: --output 目标已有无 run_id 旧文件 SHALL 不覆盖.
+
+    对应 run-identity MODIFIED: #### Scenario: legacy CLI output 无 run_id 不覆盖。
+    """
+    with tempfile.TemporaryDirectory() as tmpdir:
+        l2_path = Path(tmpdir) / "l2_shortlist.json"
+        # 预放一个 G1-3 前的旧 L2 文件（无 run_id）
+        legacy_content = json.dumps({"full_results": [], "shortlist": []}, ensure_ascii=False)
+        l2_path.write_text(legacy_content, encoding="utf-8")
+
+        l1_output = {
+            "run_id": "rid_new_002", "run_date": "2026-07-21",
+            "profile_version": "g1-2026-07-21",
+            "input_ticker_set_hash": "h",
+            "candidates": [{"ticker": "600519", "adjusted_composite": 85.0}],
+            "stats": {"total": 1},
+        }
+        l1_path = Path(tmpdir) / "l1.json"
+        l1_path.write_text(json.dumps(l1_output, ensure_ascii=False), encoding="utf-8")
+
+        from unittest.mock import patch
+        async def mock_scout_batch(candidates, force=False, run_identity=None):
+            full_results = [{
+                "ticker": "600519", "verdict": "deep_dive", "confidence": 90,
+                "one_liner": "x", "red_flags": [], "green_flags": [], "anti_trap_flags": [],
+                "run_id": run_identity["run_id"],
+                "profile_version": run_identity["profile_version"],
+                "input_ticker_set_hash": run_identity["input_ticker_set_hash"],
+            }]
+            usage = {"call_count": 1, "cache_hits": 0, "prompt_tokens": 10,
+                     "completion_tokens": 5, "total_tokens": 15}
+            failure = {"errors": [], "skips": 0, "degraded": 0, "unhandled_exceptions": 0}
+            return full_results, usage, failure
+
+        with patch("scout.batch.scout_batch", new=mock_scout_batch):
+            result = runner.invoke(app, ["scout", "--input", str(l1_path), "--output", str(l2_path)])
+            assert result.exit_code == 0, result.stdout
+
+        # 旧文件 SHALL 不被覆盖
+        assert l2_path.read_text(encoding="utf-8") == legacy_content, "旧无 run_id 文件 SHALL 不被覆盖"
+        # 新结果 SHALL 写入 run-scoped 分流文件
+        scoped = list(l2_path.parent.glob("l2_shortlist.*.json"))
+        assert len(scoped) >= 1, "SHALL 产生 run-scoped 分流文件"
+
+
 if __name__ == "__main__":
     import pytest
     pytest.main([__file__, "-v"])

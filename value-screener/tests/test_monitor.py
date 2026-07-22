@@ -547,21 +547,93 @@ class TestWatchlistRunScoped:
     def test_get_latest_watchlist_reads_run_scoped(self, temp_watchlist_dir):
         """get_latest_watchlist SHALL 读 run-scoped 聚合文件（非 per-ticker L3）."""
         from monitor.diff import get_latest_watchlist
-        # run-scoped 聚合（应读）
+        # run-scoped 聚合（应读，generated_at 最新）
         (temp_watchlist_dir / "2026-07-13_aaaaaaaa.json").write_text(
-            json.dumps({"l1_candidates": 10}), encoding="utf-8")
+            json.dumps({"l1_candidates": 10, "generated_at": "2026-07-13T18:00:00+08:00"}),
+            encoding="utf-8")
         # per-ticker L3（应跳过）
         (temp_watchlist_dir / "2026-07-13_600519.SH.json").write_text(
             json.dumps({"final_verdict": "bullish"}), encoding="utf-8")
-        # 旧纯日期聚合（应读，回退）
+        # 旧纯日期聚合（应读，generated_at 较早）
         (temp_watchlist_dir / "2026-07-12.json").write_text(
-            json.dumps({"l1_candidates": 8}), encoding="utf-8")
+            json.dumps({"l1_candidates": 8, "generated_at": "2026-07-12T08:00:00+08:00"}),
+            encoding="utf-8")
 
         result = get_latest_watchlist(temp_watchlist_dir)
         assert result is not None
         date_str, data = result
         assert date_str == "2026-07-13", "SHALL 优先读最新 run-scoped 聚合（2026-07-13）"
         assert data.get("l1_candidates") == 10
+
+
+    def test_get_latest_watchlist_uses_generated_at_not_uuid_lexorder(self, temp_watchlist_dir):
+        """g1-canonical-run-identity-repair: latest 按 generated_at 选，非 UUID 字典序.
+
+        对应 watchlist-diff MODIFIED: #### Scenario: latest/previous 按 generated_at 选定。
+        字典序小的 run_id（aaaaaaaa）但 generated_at 更晚（后生成）SHALL 被选为 latest；
+        字典序大的 run_id（zzzzzzzz 是非 hex，改用 ffffffff）generated_at 更早 SHALL 不被选。
+        """
+        import os
+        from monitor.diff import get_latest_watchlist
+        # 两个 run-scoped 文件，同日（2026-07-13）
+        # aaaaaaaa：字典序小，但 generated_at 更晚（后生成）
+        (temp_watchlist_dir / "2026-07-13_aaaaaaaa.json").write_text(json.dumps({
+            "l1_candidates": 10, "generated_at": "2026-07-13T18:00:00+08:00",
+        }), encoding="utf-8")
+        # ffffffff：字典序大，但 generated_at 更早（先生成）
+        (temp_watchlist_dir / "2026-07-13_ffffffff.json").write_text(json.dumps({
+            "l1_candidates": 8, "generated_at": "2026-07-13T09:00:00+08:00",
+        }), encoding="utf-8")
+        # 控制 mtime 相反（避免 mtime 干扰）：让 ffffffff mtime 更晚
+        f_late = temp_watchlist_dir / "2026-07-13_aaaaaaaa.json"
+        f_early = temp_watchlist_dir / "2026-07-13_ffffffff.json"
+        os.utime(f_late, (1_700_000_000, 1_700_000_000))   # 较早 mtime
+        os.utime(f_early, (1_700_000_100, 1_700_000_100))  # 较晚 mtime（与 generated_at 相反）
+
+        result = get_latest_watchlist(temp_watchlist_dir)
+        assert result is not None
+        date_str, data = result
+        assert date_str == "2026-07-13"
+        assert data.get("l1_candidates") == 10, \
+            "SHALL 按 generated_at 选 aaaaaaaa（晚），MUST NOT 按字典序/mtime 选 ffffffff"
+
+    def test_get_previous_watchlist_returns_second_latest_by_generated_at(self, temp_watchlist_dir):
+        """g1-canonical-run-identity-repair: previous 按 generated_at 取次新."""
+        import os
+        from monitor.diff import get_previous_watchlist
+        # 3 个文件 generated_at 依次递增
+        (temp_watchlist_dir / "2026-07-10_aaaaaaaa.json").write_text(json.dumps({
+            "generated_at": "2026-07-10T08:00:00+08:00", "l1_candidates": 1}), encoding="utf-8")
+        (temp_watchlist_dir / "2026-07-11_bbbbbbbb.json").write_text(json.dumps({
+            "generated_at": "2026-07-11T08:00:00+08:00", "l1_candidates": 2}), encoding="utf-8")
+        (temp_watchlist_dir / "2026-07-12_cccccccc.json").write_text(json.dumps({
+            "generated_at": "2026-07-12T08:00:00+08:00", "l1_candidates": 3}), encoding="utf-8")
+
+        # current = 2026-07-13，previous SHALL 是 07-12（次新，最新是 07-13 不存在所以取 07-12）
+        result = get_previous_watchlist("2026-07-13", watchlist_dir=temp_watchlist_dir)
+        assert result is not None
+        assert result.get("l1_candidates") == 3, "previous SHALL 取 generated_at 次新（07-12）"
+
+        # 只剩 0 个历史（current 早于所有）→ None
+        assert get_previous_watchlist("2026-07-09", watchlist_dir=temp_watchlist_dir) is None
+
+    def test_get_latest_watchlist_falls_back_to_mtime_when_no_generated_at(self, temp_watchlist_dir):
+        """g1-canonical-run-identity-repair: 旧文件无 generated_at → fallback mtime."""
+        import os
+        from monitor.diff import get_latest_watchlist
+        # 旧纯日期聚合文件无 generated_at（G1-3 前格式）
+        f_old = temp_watchlist_dir / "2026-07-12.json"
+        f_new = temp_watchlist_dir / "2026-07-13.json"
+        f_old.write_text(json.dumps({"l1_candidates": 8}), encoding="utf-8")
+        f_new.write_text(json.dumps({"l1_candidates": 10}), encoding="utf-8")
+        # 控制 mtime：07-13 更晚
+        os.utime(f_old, (1_700_000_000, 1_700_000_000))
+        os.utime(f_new, (1_700_000_100, 1_700_000_100))
+
+        result = get_latest_watchlist(temp_watchlist_dir)
+        assert result is not None
+        _, data = result
+        assert data.get("l1_candidates") == 10, "无 generated_at 时 SHALL fallback mtime 选最新（07-13）"
 
 
 class TestHistoryRunScoped:

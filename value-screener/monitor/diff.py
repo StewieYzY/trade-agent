@@ -152,50 +152,98 @@ def compute_diff(current: dict[str, Any], previous: dict[str, Any] | None) -> di
     }
 
 
+def _select_watchlist_by_generated_at(
+    watchlist_dir: Path,
+    predicate=None,
+) -> list[tuple[float, Path, str, dict]]:
+    """g1-canonical-run-identity-repair (D3): 按真实生成时间排序聚合 watchlist 文件.
+
+    读取候选聚合文件（run-scoped {date}_{run_id[:8]}.json 或旧 {date}.json，跳过 per-ticker L3），
+    按 generated_at（带时区 ISO 8601）排序；缺 generated_at 的旧文件 fallback mtime。
+    MUST NOT 按文件名字典序排序（run_id 是 UUID4 无时间序）。
+
+    Args:
+        watchlist_dir: watchlist 目录
+        predicate: 可选 (date_str, file) -> bool 过滤函数（如 get_previous 只取 < current_date）
+
+    Returns:
+        [(sort_key, file_path, date_str, data), ...] 按 sort_key 降序（最新在前）。
+        sort_key 是 generated_at 的 epoch 秒或 mtime 的 epoch 秒。
+    """
+    import re
+    run_scoped_re = re.compile(r"^(\d{4}-\d{2}-\d{2})_[0-9a-f]{8}$")
+    date_only_re = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+    candidates = []
+    for f in watchlist_dir.glob("*.json"):
+        stem = f.stem
+        m = run_scoped_re.match(stem)
+        if m:
+            date_str = m.group(1)
+        elif date_only_re.match(stem):
+            date_str = stem
+        else:
+            continue  # per-ticker L3，跳过
+        if predicate and not predicate(date_str, f):
+            continue
+        try:
+            with f.open(encoding="utf-8") as fp:
+                data = json.load(fp)
+        except (json.JSONDecodeError, OSError):
+            continue
+        # sort_key: 优先 generated_at（带时区 ISO 8601），缺失/非法 fallback mtime
+        sort_key = _parse_generated_at_epoch(data.get("generated_at"))
+        if sort_key is None:
+            sort_key = f.stat().st_mtime
+        candidates.append((sort_key, f, date_str, data))
+
+    # 降序：最新（sort_key 最大）在前
+    candidates.sort(key=lambda x: x[0], reverse=True)
+    return candidates
+
+
+def _parse_generated_at_epoch(generated_at: str | None) -> float | None:
+    """解析 generated_at（带时区 ISO 8601）为 epoch 秒；naive 或非法返回 None（由调用方 fallback mtime）."""
+    if not generated_at or not isinstance(generated_at, str):
+        return None
+    try:
+        from datetime import datetime
+        # Python 3.11+ fromisoformat 支持带时区 ISO 8601；naive datetime 也解析但调用方应区分
+        dt = datetime.fromisoformat(generated_at)
+        if dt.tzinfo is None:
+            return None  # naive datetime，fallback mtime（reviewer 要求带时区）
+        return dt.timestamp()
+    except (ValueError, TypeError):
+        return None
+
+
 def get_latest_watchlist(watchlist_dir: str | Path = "watchlist") -> tuple[str, dict[str, Any]] | None:
-    """获取最新的 watchlist 快照（g1-canonical-run-identity D6: 兼容 run-scoped 命名）.
+    """获取最新的 watchlist 快照（g1-canonical-run-identity-repair D3: 按 generated_at 选最新）.
 
     支持三种 watchlist 文件命名：
-    - run-scoped 聚合：{date}_{run_id[:8]}.json（run_id 前 8 hex，D6 新命名，优先）
+    - run-scoped 聚合：{date}_{run_id[:8]}.json（run_id 前 8 hex，D6 新命名）
     - 旧聚合：{date}.json（G1-3 前格式，回退）
     - per-ticker L3：{date}_{ticker}.json（ticker 含字母/`.`，跳过，非聚合 watchlist）
 
-    区分 run-scoped（第二段 8 hex 小写）vs per-ticker（第二段含 `.` 或大写字母或纯 6 位数字）。
+    按文件 generated_at（带时区 ISO 8601）排序取最新；缺 generated_at fallback mtime。
+    MUST NOT 按文件名字典序排序（run_id 无时间序）。
     """
-    import re
     watchlist_dir = Path(watchlist_dir)
     if not watchlist_dir.exists():
         return None
 
-    # run_id 前 8 hex（uuid4 hex 全小写），per-ticker ticker 含 . 或大写字母
-    run_scoped_re = re.compile(r"^\d{4}-\d{2}-\d{2}_[0-9a-f]{8}$")
-    date_only_re = re.compile(r"^\d{4}-\d{2}-\d{2}$")
-
-    files = sorted(watchlist_dir.glob("*.json"), reverse=True)
-    for f in files:
-        stem = f.stem
-        # 优先 run-scoped 聚合 + 旧纯日期聚合；跳过 per-ticker L3（{date}_{ticker}，ticker 含 . 或字母）
-        is_run_scoped = bool(run_scoped_re.match(stem))
-        is_date_only = bool(date_only_re.match(stem))
-        if not (is_run_scoped or is_date_only):
-            continue  # per-ticker L3 文件，跳过
-        try:
-            with f.open(encoding="utf-8") as fp:
-                data = json.load(fp)
-            # 返回 date 部分（run-scoped 取前 10 字符日期，纯日期即 stem）
-            date_str = stem[:10] if is_run_scoped else stem
-            return (date_str, data)
-        except (json.JSONDecodeError, OSError):
-            continue
-
-    return None
+    candidates = _select_watchlist_by_generated_at(watchlist_dir)
+    if not candidates:
+        return None
+    _, _, date_str, data = candidates[0]
+    return (date_str, data)
 
 
 def get_previous_watchlist(
     current_date: str,
     watchlist_dir: str | Path = "watchlist",
 ) -> dict[str, Any] | None:
-    """获取 current_date 之前的最新快照.
+    """获取 current_date 之前的最新快照（g1-canonical-run-identity-repair D3: 按 generated_at 选次新）.
 
     Args:
         current_date: 当前日期（YYYY-MM-DD）
@@ -210,42 +258,18 @@ def get_previous_watchlist(
 
     current_dt = datetime.strptime(current_date, "%Y-%m-%d").date()
 
-    # g1-canonical-run-identity D6: 兼容 run-scoped {date}_{run_id[:8]}.json 命名
-    import re
-    run_scoped_re = re.compile(r"^(\d{4}-\d{2}-\d{2})_[0-9a-f]{8}$")
-    date_only_re = re.compile(r"^\d{4}-\d{2}-\d{2}$")
-
-    # 收集所有日期文件（run-scoped 或纯日期聚合，跳过 per-ticker L3）
-    date_files = []
-    for f in watchlist_dir.glob("*.json"):
-        stem = f.stem
-        # run-scoped 聚合：提取 date 部分
-        m = run_scoped_re.match(stem)
-        if m:
-            file_date_str = m.group(1)
-        elif date_only_re.match(stem):
-            file_date_str = stem
-        else:
-            continue  # per-ticker L3（{date}_{ticker}），跳过
+    # 只取 date < current_date 的聚合文件
+    def _before_current(date_str: str, _f: Path) -> bool:
         try:
-            file_date = datetime.strptime(file_date_str, "%Y-%m-%d").date()
-            if file_date < current_dt:
-                date_files.append((file_date, f))
+            return datetime.strptime(date_str, "%Y-%m-%d").date() < current_dt
         except ValueError:
-            continue
+            return False
 
-    if not date_files:
+    candidates = _select_watchlist_by_generated_at(watchlist_dir, predicate=_before_current)
+    if not candidates:
         return None
-
-    # 取最新的一个
-    date_files.sort(reverse=True)
-    _, latest_file = date_files[0]
-
-    try:
-        with latest_file.open(encoding="utf-8") as fp:
-            return json.load(fp)
-    except (json.JSONDecodeError, OSError):
-        return None
+    _, _, _, data = candidates[0]
+    return data
 
 
 def history(

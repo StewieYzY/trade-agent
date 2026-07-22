@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import json
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -284,7 +284,10 @@ def aggregate_watchlist(
     profile_version = l1_data.get("profile_version")
     input_ticker_set_hash = l1_data.get("input_ticker_set_hash")
     watchlist = {
-        "generated_at": datetime.now().isoformat(),
+        # g1-canonical-run-identity-repair D3: generated_at 带时区 ISO 8601（+08:00 A 股本地），
+        # 供 get_latest/previous_watchlist 按真实生成时间排序（非 UUID 字典序）。
+        # 用固定偏移而非系统本地时区，跨机器一致。
+        "generated_at": datetime.now(timezone(timedelta(hours=8))).isoformat(),
         "run_id": run_id,  # 从 L1 继承（可能 None，旧 L1）
         "profile_version": profile_version,
         "input_ticker_set_hash": input_ticker_set_hash,

@@ -239,51 +239,89 @@ def test_scout_cache_clear_uses_canonical_code():
             "clear 后文件 SHALL 被删除"
 
 
-def test_scout_cache_get_rejects_mismatched_run_identity():
-    """get() 校验缓存 identity——run_id 不匹配当前 run SHALL 返回 None（视为 miss，不混用跨 run 缓存）.
+def test_scout_cache_hit_across_different_runs_same_profile():
+    """不同 run_id 同 profile_version 同 ticker 同日 SHALL cache hit（run_id 不参与 hit 判定）.
 
-    对应 scout-agent MODIFIED: Same ticker different run's cache does not mix up。
-    同 ticker 不同 run 的 cache entry SHALL 通过 run_id 区分，MUST NOT 互相覆盖混淆。
-    向后兼容：不传 run_id/profile_version 时维持原 TTL-only 行为。
+    对应 scout-agent MODIFIED 24h Cache: #### Scenario: Cross-run cache hit when profile_version unchanged。
+    G1-3 误把 run_id 用作 hit 判定（不同 run_id → miss）破坏 24h 复用，本测试验证修复后语义：
+    run_id 降级为 provenance，cache hit 只校验 TTL + profile_version。
     """
     with tempfile.TemporaryDirectory() as tmpdir:
         cache = ScoutCache(base_dir=tmpdir)
-        # run A 写入
+        # run A 写入（run_id=run_a_rid, profile_version=V）
         cache.set("600519", "2026-07-21", _basic_result(), _basic_snapshot(),
                   run_id="run_a_rid", profile_version="g1-2026-07-21",
                   input_ticker_set_hash="ih_a")
 
-        # run B（不同 run_id）调 get 传 run B identity → SHALL 返回 None（不混用 run A 缓存）
+        # run B（不同 run_id）同 profile_version 调 get → SHALL cache hit（不传 run_id）
         cached_b = cache.get("600519", "2026-07-21",
-                             run_id="run_b_rid", profile_version="g1-2026-07-21")
-        assert cached_b is None, "run_id 不匹配 SHALL 视为 cache miss（不混用跨 run 缓存）"
-
-        # run A（同 run_id）调 get → SHALL 命中
-        cached_a = cache.get("600519", "2026-07-21",
-                             run_id="run_a_rid", profile_version="g1-2026-07-21")
-        assert cached_a is not None, "run_id 匹配 SHALL 命中缓存"
-        assert cached_a.get("run_id") == "run_a_rid"
-
-        # 不传 identity 参数 → 维持原 TTL-only 行为（向后兼容，仍命中）
-        cached_legacy = cache.get("600519", "2026-07-21")
-        assert cached_legacy is not None, "不传 identity 参数 SHALL 维持原行为（向后兼容）"
+                            profile_version="g1-2026-07-21")
+        assert cached_b is not None, "不同 run_id 同 profile_version SHALL cache hit（run_id 不参与判定）"
+        assert cached_b.get("run_id") == "run_a_rid", "hit 返回的 entry 保留 source run_id（provenance）"
 
 
-def test_scout_cache_get_rejects_mismatched_profile_version():
-    """profile_version 不匹配（规则变了）SHALL 视为 cache miss.
+def test_scout_cache_miss_when_profile_version_changed():
+    """profile_version 不同（规则 bump）SHALL cache miss，不复用旧规则 verdict.
 
-    对应 scout-agent MODIFIED + run-identity: 规则变化 run_id/profile_version 可区分。
-    规则 bump 后旧 cache SHALL 不被新规则 run 复用（避免拿旧规则 verdict 误判）。
+    对应 scout-agent MODIFIED: #### Scenario: Cache miss when profile_version changed。
     """
     with tempfile.TemporaryDirectory() as tmpdir:
         cache = ScoutCache(base_dir=tmpdir)
         cache.set("600519", "2026-07-21", _basic_result(), _basic_snapshot(),
-                  run_id="same_rid", profile_version="g1-2026-07-21",
+                  run_id="rid", profile_version="g1-2026-07-21",
                   input_ticker_set_hash="ih")
-        # 同 run_id 但 profile_version 不同（规则 bump）
+        # profile_version 不同（规则 bump）
         cached = cache.get("600519", "2026-07-21",
-                           run_id="same_rid", profile_version="g1-2026-08-01")
-        assert cached is None, "profile_version 不匹配 SHALL 视为 miss（规则变了不复用旧 cache）"
+                           profile_version="g1-2026-08-01")
+        assert cached is None, "profile_version 不匹配 SHALL miss（规则变了不复用旧 verdict）"
+
+
+def test_scout_cache_legacy_without_profile_version_misses():
+    """legacy cache 无 profile_version 字段，当前 run 传 profile_version → SHALL miss.
+
+    对应 scout-agent MODIFIED: #### Scenario: Legacy cache without profile_version misses。
+    无法证明规则版本兼容，避免新规则 run 静默复用规则版本不明的旧 verdict。
+    """
+    with tempfile.TemporaryDirectory() as tmpdir:
+        cache = ScoutCache(base_dir=tmpdir)
+        # 手写一个 legacy cache entry（无 profile_version 字段，模拟 G1-3 前的 cache）
+        legacy_p = cache._path("600519", "2026-07-21")
+        legacy_p.parent.mkdir(parents=True, exist_ok=True)
+        legacy_p.write_text(json.dumps({
+            **_basic_result(), "input_snapshot": _basic_snapshot(),
+            "timestamp": "2026-07-21T10:00:00",
+            # 无 profile_version 字段（legacy）
+        }), encoding="utf-8")
+
+        # 当前 run 传 profile_version → SHALL miss（无法证明兼容）
+        cached = cache.get("600519", "2026-07-21",
+                           profile_version="g1-2026-07-21")
+        assert cached is None, "legacy cache 无 profile_version SHALL miss（无法证明规则版本兼容）"
+
+
+def test_scout_cache_hit_preserves_source_run_id():
+    """cache hit 返回 run A 的 entry（run_id=rid_a），cache 文件 SHALL NOT 被改写.
+
+    对应 scout-agent MODIFIED: #### Scenario: Cache hit preserves source run_id。
+    source run_id 保留作 provenance，cache hit 不改写 cache 文件。
+    """
+    with tempfile.TemporaryDirectory() as tmpdir:
+        cache = ScoutCache(base_dir=tmpdir)
+        cache.set("600519", "2026-07-21", _basic_result(), _basic_snapshot(),
+                  run_id="run_a_rid", profile_version="g1-2026-07-21",
+                  input_ticker_set_hash="ih_a")
+        cache_p = cache._path("600519", "2026-07-21")
+        content_before = cache_p.read_text(encoding="utf-8")
+
+        # run B cache hit（不同 run_id，同 profile_version）
+        cached_b = cache.get("600519", "2026-07-21",
+                            profile_version="g1-2026-07-21")
+        assert cached_b is not None
+        assert cached_b.get("run_id") == "run_a_rid", "source run_id 保留不改写"
+
+        # cache 文件内容 SHALL NOT 被改写（hit 不重写文件）
+        content_after = cache_p.read_text(encoding="utf-8")
+        assert content_before == content_after, "cache hit SHALL NOT 改写 cache 文件（保留 source provenance）"
 
 
 if __name__ == "__main__":

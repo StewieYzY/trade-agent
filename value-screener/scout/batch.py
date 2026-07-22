@@ -157,10 +157,10 @@ async def scout_batch(
 
             # 1. 检查缓存（除非 force=True）
             if not force:
-                # g1-canonical-run-identity: 传 run_id/profile_version 校验缓存 identity，
-                # run_id 或 profile_version 不匹配（跨 run / 规则 bump）→ 视为 miss 不复用旧 cache。
-                cached = cache.get(ticker, today,
-                                   run_id=run_id, profile_version=profile_version)
+                # g1-canonical-run-identity-repair (D1): cache hit 只校验 profile_version，
+                # 不传 run_id（run_id 降级 provenance，不参与 hit 判定）。不同 run_id 同
+                # profile_version 同日 → cache hit（恢复 24h 复用，AD-03 成本闸门）。
+                cached = cache.get(ticker, today, profile_version=profile_version)
                 if cached is not None:
                     usage_summary["cache_hits"] += 1  # cache 命中，不产生新调用
                     return {

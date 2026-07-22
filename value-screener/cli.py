@@ -18,13 +18,14 @@ app = typer.Typer(help="value-screener 数据采集 CLI")
 
 
 def _run_scoped_output_path(output_path: Path, run_id: str) -> Path:
-    """g1-canonical-run-identity (D6): 同日多次运行 SHALL 不互相覆盖.
+    """g1-canonical-run-identity (D6) + repair (D2): 同日多次运行 SHALL 不互相覆盖.
 
-    若目标 --output 路径不存在 / 无可读 run_id → 原路径写（首次运行）；
+    若目标 --output 路径不存在 → 原路径写（首次运行）；
     若已存在且 run_id 相同 → 原路径覆盖（同 run 重跑，合理）；
-    若已存在且 run_id 不同 → 改写 {stem}.{run_id[:8]}.json 分流，旧 run 文件保留。
-    满足 scout-agent MODIFIED CLI Integration / 运行隔离:
-    #### Scenario: Same-day multiple runs do not overwrite.
+    若已存在且 run_id 不同 / 旧文件无 run_id / 损坏非 JSON → 改写 {stem}.{run_id[:8]}.json 分流，
+    旧文件保留不被覆盖（legacy 无 identity 文件、损坏文件均保留作排查证据）。
+    满足 scout-agent MODIFIED CLI Integration / run-identity 运行隔离:
+    #### Scenario: Same-day multiple runs do not overwrite / legacy CLI output 无 run_id 不覆盖。
     """
     if not output_path.exists():
         return output_path
@@ -33,8 +34,8 @@ def _run_scoped_output_path(output_path: Path, run_id: str) -> Path:
         existing_rid = existing.get("run_id")
     except (json.JSONDecodeError, OSError):
         existing_rid = None
-    if existing_rid and existing_rid != run_id:
-        # run_id 不同 → 分流文件名，旧文件保留不被覆盖
+    # repair D2: 旧文件无 run_id（None）或 run_id 不同 → 都分流（去 existing_rid and）
+    if existing_rid != run_id:
         return output_path.with_name(f"{output_path.stem}.{run_id[:8]}.json")
     return output_path
 
@@ -459,7 +460,7 @@ def council(
     result = asyncio.run(run_debate(normalized, force=force))
 
     typer.echo(result.to_json())
-    typer.echo(f"\n辩论记录已写入 debate/{normalized.split('.')[0]}/{date.today().isoformat()}.md")
+    typer.echo(f"\n辩论记录已写入 debate/{normalized}/{date.today().isoformat()}.md")
 
 
 if __name__ == "__main__":

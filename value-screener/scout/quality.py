@@ -61,21 +61,23 @@ class ScoutCache:
         return d / "l2_scout.json"
 
     def get(self, ticker: str, date_str: str,
-            run_id: str | None = None, profile_version: str | None = None) -> dict | None:
+            profile_version: str | None = None) -> dict | None:
         """读缓存；过期（>24h）/缺失/损坏返回 None.
 
-        g1-canonical-run-identity: 可选校验缓存 identity——若调用方传入 run_id/
-        profile_version，且缓存 entry 含这些字段但不匹配当前 run，视为 cache miss
-        返回 None（不混用跨 run/跨规则的缓存）。不传则维持原 TTL-only 行为（向后兼容）。
+        g1-canonical-run-identity-repair (D1): cache hit 只校验 TTL + profile_version，
+        MUST NOT 校验 run_id。run_id 降级为 cache entry 的 provenance 元数据（只写只读不判）。
+        - profile_version 不同（规则 bump）→ miss（不复用旧规则 verdict）
+        - legacy cache 无 profile_version 字段且调用方传入 profile_version → miss
+          （无法证明规则版本兼容，避免新规则 run 静默复用规则版本不明的旧 verdict）
+        - 不传 profile_version → 维持原 TTL-only 行为（向后兼容）
 
         Args:
             ticker: 股票代码
             date_str: 日期字符串（ISO 格式，如 "2026-06-29"）
-            run_id: g1-canonical-run-identity 当前 run 的 run_id（可选，传入则校验匹配）
-            profile_version: g1-canonical-run-identity 当前规则版本（可选，传入则校验匹配）
+            profile_version: g1-canonical-run-identity 当前规则版本（可选，传入则校验兼容）
 
         Returns:
-            缓存 dict（含 verdict/confidence/input_snapshot/run_id 等），或 None
+            缓存 dict（含 verdict/confidence/input_snapshot/run_id provenance 等），或 None
         """
         p = self._path(ticker, date_str)
         if not p.exists():
@@ -92,14 +94,14 @@ class ScoutCache:
         except (json.JSONDecodeError, OSError):
             return None
 
-        # g1-canonical-run-identity: identity 校验——缓存 entry 绑定的 run_id/
-        # profile_version 若与当前 run 不匹配，视为 miss（不混用跨 run/跨规则缓存）。
-        # 仅当调用方传入对应参数且缓存 entry 含该字段时才校验（向后兼容不传=不校验）。
-        if run_id is not None and cached.get("run_id") and cached.get("run_id") != run_id:
-            return None
-        if profile_version is not None and cached.get("profile_version") \
-                and cached.get("profile_version") != profile_version:
-            return None
+        # g1-canonical-run-identity-repair (D1): 只校验 profile_version（cache compatibility guard）。
+        # run_id 不参与 hit 判定（降级 provenance）。
+        # 调用方传 profile_version 时：
+        #   - cache entry 的 profile_version 与之不同 → miss（规则变了）
+        #   - cache entry 无 profile_version（legacy）→ miss（无法证明兼容）
+        if profile_version is not None:
+            if cached.get("profile_version") != profile_version:
+                return None
         return cached
 
     def set(self, ticker: str, date_str: str, result: dict, input_snapshot: dict,

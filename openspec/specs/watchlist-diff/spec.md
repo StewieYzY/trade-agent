@@ -1,4 +1,9 @@
-## ADDED Requirements
+# watchlist-diff Specification
+
+## Purpose
+定义 L4 监控层的 watchlist 增量 diff 与历史轨迹能力：对比当前聚合 watchlist 与上一快照检测变化（candidate 增减 / l1_score 显著变化 / stage 升降级 / l3_verdict 变化 / 估值触及低位阈值），并按 `generated_at`（带时区 ISO 8601）排序选定 latest/previous 快照（非文件名字典序，run_id 无时间序）。供 weekly 主循环判断是否触发 L2/L3 重评估、history 子命令查询单票历史轨迹。
+
+## Requirements
 
 ### Requirement: 增量 diff 检测
 系统 SHALL 对比当前 `watchlist/{date}.json` 与上一快照，检测变化。

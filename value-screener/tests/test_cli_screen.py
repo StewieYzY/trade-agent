@@ -117,6 +117,58 @@ def test_cli_screen_output_run_scoped_same_day_not_overwrite():
         assert second_data["run_id"] != first_run_id, "两次运行 run_id SHALL 不同（uuid4）"
 
 
+def test_cli_screen_output_preserves_legacy_no_run_id_file():
+    """g1-canonical-run-identity-repair: --output 目标已有无 run_id 的旧文件（G1-3 前遗留）SHALL 不覆盖.
+
+    对应 run-identity MODIFIED 运行隔离: #### Scenario: legacy CLI output 无 run_id 不覆盖。
+    旧文件无 run_id（existing_rid=None）SHALL 同样分流，旧无 identity 文件保留可读。
+    """
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tickers_path = Path(tmpdir) / "tickers.txt"
+        tickers_path.write_text("600519\n", encoding="utf-8")
+        output_path = Path(tmpdir) / "l1_output.json"
+        # 预放一个 G1-3 前的旧文件（无 run_id 字段）
+        legacy_content = json.dumps({"candidates": [], "stats": {"total": 0}}, ensure_ascii=False)
+        output_path.write_text(legacy_content, encoding="utf-8")
+
+        fake_all_data = {"600519": _make_ticker_data()}
+        from unittest.mock import MagicMock
+        with patch("screener.main.BatchFetcher") as MockBF, \
+             patch("screener.main.date") as mock_d:
+            MockBF.return_value.fetch_all.return_value = fake_all_data
+            mock_d.today.return_value.isoformat.return_value = "2026-07-21"
+            result = runner.invoke(app, [
+                "screen", "--tickers", str(tickers_path), "--output", str(output_path),
+            ])
+            assert result.exit_code == 0, result.stdout
+
+        # 旧文件 SHALL 不被覆盖（内容不变）
+        legacy_after = output_path.read_text(encoding="utf-8")
+        assert legacy_after == legacy_content, "旧无 run_id 文件 SHALL 不被覆盖"
+
+        # 新结果 SHALL 写入 run-scoped 分流文件
+        scoped = list(output_path.parent.glob("l1_output.*.json"))
+        assert len(scoped) >= 1, "SHALL 产生 run-scoped 分流文件"
+        new_data = json.loads(scoped[0].read_text(encoding="utf-8"))
+        assert new_data.get("run_id"), "分流文件 SHALL 含 run_id"
+
+
+def test_run_scoped_output_path_legacy_corrupted():
+    """目标路径是损坏的非 JSON 文件，SHALL 分流（不静默覆盖，保留排查证据）.
+
+    对应 run-identity MODIFIED: legacy CLI output 无 run_id 不覆盖（损坏文件同分流）。
+    """
+    from cli import _run_scoped_output_path
+    with tempfile.TemporaryDirectory() as tmpdir:
+        output_path = Path(tmpdir) / "l1.json"
+        output_path.write_text("not json {{{", encoding="utf-8")  # 损坏文件
+        result = _run_scoped_output_path(output_path, "rid12345678")
+        assert result != output_path, "损坏文件 SHALL 分流（不静默覆盖）"
+        assert "rid12345" in result.name, "分流文件名含 run_id 前 8 字符"
+        # 损坏文件保留
+        assert output_path.read_text(encoding="utf-8") == "not json {{{"
+
+
 if __name__ == "__main__":
     import pytest
     pytest.main([__file__, "-v"])
