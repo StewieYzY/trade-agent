@@ -369,5 +369,41 @@ class TestWeekly:
             assert saved_report["run_date"] == today
 
 
+    def test_run_weekly_inherits_run_id_from_l1(self, sample_l1_output, temp_watchlist_dir):
+        """g1-canonical-run-identity D2+D6: weekly 从 watchlist（L1 经 aggregate）继承 run_id."""
+        l1_file = temp_watchlist_dir / "l1_output.json"
+        l1_file.write_text(json.dumps(sample_l1_output))
+
+        with patch("monitor.weekly.aggregate_watchlist") as mock_agg, \
+             patch("monitor.weekly.get_previous_watchlist") as mock_prev, \
+             patch("monitor.weekly.compute_diff") as mock_diff, \
+             patch("monitor.weekly.detect_catalysts_batch") as mock_cat, \
+             patch("monitor.weekly.generate_alerts") as mock_alert:
+            # watchlist 含 run_id（aggregate_watchlist 从 L1 继承）
+            mock_agg.return_value = {
+                "run_id": "l1-runid-1234",
+                "profile_version": "g1-2026-07-21",
+                "input_ticker_set_hash": "ihash",
+                "candidates": [{"ticker": "600519.SH", "stage": "l1", "l1_score": 85.5}],
+                "l1_candidates": 1, "l2_shortlist": 0,
+            }
+            mock_prev.return_value = None
+            mock_diff.return_value = {"first_run": True, "added": [], "removed": [],
+                "l1_score_changed": [], "stage_upgraded": [], "stage_downgraded": [],
+                "verdict_changed": [], "valuation_low": [], "l2_triggers": [], "l3_triggers": []}
+            mock_cat.return_value = []
+            mock_alert.return_value = {
+                "valuation_alerts": {"status": "paused", "alerts": []},
+                "risk_alerts": {"alerts": []}, "key_variable_alerts": {"alerts": []}}
+
+            report = asyncio.run(run_weekly(
+                l1_output_file=str(l1_file), watchlist_dir=temp_watchlist_dir))
+
+        # 周报顶层继承 run_id
+        assert report["run_id"] == "l1-runid-1234", "周报 SHALL 从 watchlist 继承 run_id"
+        assert report["profile_version"] == "g1-2026-07-21"
+        assert report["input_ticker_set_hash"] == "ihash"
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

@@ -20,8 +20,11 @@ def assemble_council_features(ticker: str, history_years: int = 3) -> dict:
     实现：直接复用 scout.input_assembly.assemble_snapshot，
     L3 特有逻辑（如更长历史）在此扩展。
     """
-    # 标准化 ticker：移除后缀（如 .SH / .SZ），保留 6 位数字
-    normalized_ticker = ticker.split(".")[0]
+    # g1-canonical-run-identity D5：标准化 ticker 用 canonical_code（纯数字，cache key SoT），
+    # 收敛到 data.lib.identity（与 CacheManager._normalize_ticker D3 行为一致），
+    # 替代旧 ticker.split(".")[0] 裸 split（避免未归一输入分裂）。
+    from data.lib.identity import canonical_code
+    normalized_ticker = canonical_code(ticker)
 
     features = assemble_snapshot(normalized_ticker)
 

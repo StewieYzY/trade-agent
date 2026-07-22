@@ -184,8 +184,12 @@ async def run_weekly(
     print(f"  - key_variable 提醒：{key_var_count} 个")
 
     # 构造 weekly 报告
+    # g1-canonical-run-identity D2+D6: 周报顶层带 run_id（从 watchlist/L1 继承）
     report = {
         "run_date": run_date,
+        "run_id": watchlist.get("run_id"),  # 从 L1 经 aggregate_watchlist 继承
+        "profile_version": watchlist.get("profile_version"),
+        "input_ticker_set_hash": watchlist.get("input_ticker_set_hash"),
         "watchlist": watchlist,
         "diff": diff_report,
         "l2_triggered": l2_triggered,

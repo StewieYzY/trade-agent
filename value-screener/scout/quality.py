@@ -32,29 +32,50 @@ import time
 from datetime import datetime
 from pathlib import Path
 
+from data.lib.identity import canonical_code
+
 
 class ScoutCache:
-    """Scout 结果缓存（24h TTL，含输入特征快照，按日隔离）."""
+    """Scout 结果缓存（24h TTL，含输入特征快照，按日隔离）.
+
+    g1-canonical-run-identity: cache 路径用 canonical_code（纯数字）建目录，
+    消除 600519/600519.SH 双目录分裂；cache entry 绑定 run_id/profile_version/
+    input_ticker_set_hash（继承自 L1，纯 L2 单跑用 fallback run_id）。
+    身份与 cache key 分离：canonical_ticker 带后缀作身份/输出 key，
+    canonical_code 纯数字作 cache 目录（与 CacheManager._normalize_ticker D3 对齐）。
+    """
 
     def __init__(self, base_dir: str | Path = "data/cache"):
         self.base = Path(base_dir)
         self.base.mkdir(parents=True, exist_ok=True)
 
     def _path(self, ticker: str, date_str: str) -> Path:
-        """缓存路径：data/cache/{ticker}/{date}/l2_scout.json."""
-        d = self.base / ticker / date_str
+        """缓存路径：data/cache/{canonical.code}/{date}/l2_scout.json.
+
+        g1-canonical-run-identity: 用 canonical_code（纯数字）建目录，
+        使 600519.SH / 600519 / 600519.sh 都命中同一目录（消除分裂）。
+        """
+        code = canonical_code(ticker)
+        d = self.base / code / date_str
         d.mkdir(parents=True, exist_ok=True)
         return d / "l2_scout.json"
 
-    def get(self, ticker: str, date_str: str) -> dict | None:
+    def get(self, ticker: str, date_str: str,
+            run_id: str | None = None, profile_version: str | None = None) -> dict | None:
         """读缓存；过期（>24h）/缺失/损坏返回 None.
+
+        g1-canonical-run-identity: 可选校验缓存 identity——若调用方传入 run_id/
+        profile_version，且缓存 entry 含这些字段但不匹配当前 run，视为 cache miss
+        返回 None（不混用跨 run/跨规则的缓存）。不传则维持原 TTL-only 行为（向后兼容）。
 
         Args:
             ticker: 股票代码
             date_str: 日期字符串（ISO 格式，如 "2026-06-29"）
+            run_id: g1-canonical-run-identity 当前 run 的 run_id（可选，传入则校验匹配）
+            profile_version: g1-canonical-run-identity 当前规则版本（可选，传入则校验匹配）
 
         Returns:
-            缓存 dict（含 verdict/confidence/input_snapshot 等），或 None
+            缓存 dict（含 verdict/confidence/input_snapshot/run_id 等），或 None
         """
         p = self._path(ticker, date_str)
         if not p.exists():
@@ -67,18 +88,34 @@ class ScoutCache:
 
         try:
             with p.open("r", encoding="utf-8") as f:
-                return json.load(f)
+                cached = json.load(f)
         except (json.JSONDecodeError, OSError):
             return None
 
-    def set(self, ticker: str, date_str: str, result: dict, input_snapshot: dict) -> None:
-        """原子写缓存（含输入特征快照）.
+        # g1-canonical-run-identity: identity 校验——缓存 entry 绑定的 run_id/
+        # profile_version 若与当前 run 不匹配，视为 miss（不混用跨 run/跨规则缓存）。
+        # 仅当调用方传入对应参数且缓存 entry 含该字段时才校验（向后兼容不传=不校验）。
+        if run_id is not None and cached.get("run_id") and cached.get("run_id") != run_id:
+            return None
+        if profile_version is not None and cached.get("profile_version") \
+                and cached.get("profile_version") != profile_version:
+            return None
+        return cached
+
+    def set(self, ticker: str, date_str: str, result: dict, input_snapshot: dict,
+            run_id: str | None = None,
+            profile_version: str | None = None,
+            input_ticker_set_hash: str | None = None) -> None:
+        """原子写缓存（含输入特征快照 + run identity 绑定）.
 
         Args:
-            ticker: 股票代码
+            ticker: 股票代码（canonical_ticker 或纯数字，内部用 canonical_code 归一建目录）
             date_str: 日期字符串（ISO 格式）
             result: LLM 输出结果（verdict/confidence/flags 等）
-            input_snapshot: 输入特征快照（pe_ttm/pb/roe_3y 等）
+            input_snapshot: 输入特征快照（pe_ttm/pb/roe_3y 等，既有诊断用途保留）
+            run_id: g1-canonical-run-identity 继承自 L1 的 run_id（可选，纯 L2 单跑用 fallback）
+            profile_version: g1-canonical-run-identity 继承的规则版本
+            input_ticker_set_hash: g1-canonical-run-identity 输入集合 hash
 
         缓存结构：
         {
@@ -89,7 +126,10 @@ class ScoutCache:
             "green_flags": [...],
             "anti_trap_flags": [...],
             "input_snapshot": {...},
-            "timestamp": "2026-06-29T10:30:00"
+            "timestamp": "2026-06-29T10:30:00",
+            "run_id": ...,          # g1-canonical-run-identity
+            "profile_version": ...,
+            "input_ticker_set_hash": ...
         }
         """
         p = self._path(ticker, date_str)
@@ -100,6 +140,14 @@ class ScoutCache:
             "input_snapshot": input_snapshot,
             "timestamp": datetime.now().isoformat(),
         }
+        # g1-canonical-run-identity: 绑定 run identity（仅在调用方传入时写入，
+        # 不传则不写该字段——向后兼容既有调用方，task 6 起 scout_batch 会显式传）
+        if run_id is not None:
+            cache_data["run_id"] = run_id
+        if profile_version is not None:
+            cache_data["profile_version"] = profile_version
+        if input_ticker_set_hash is not None:
+            cache_data["input_ticker_set_hash"] = input_ticker_set_hash
 
         try:
             with tmp.open("w", encoding="utf-8") as f:
@@ -137,7 +185,9 @@ class ScoutCache:
                     except OSError:
                         pass
         else:
-            ticker_dir = self.base / ticker
+            # g1-canonical-run-identity: 用 canonical_code 定位目录（与 _path 对齐），
+            # 传 600519.SH / 600519 / 600519.sh SHALL 都命中 600519/ 目录。
+            ticker_dir = self.base / canonical_code(ticker)
             if not ticker_dir.exists():
                 return 0
             if date_str:

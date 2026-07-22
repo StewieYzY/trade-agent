@@ -180,9 +180,59 @@ class TestRunDebateWritesWatchlist:
             result = await run_debate("600519", agents=["buffett"], features={"name": "test"})
 
         today = date.today().isoformat()
-        output_path = watchlist_dir / "watchlist" / f"{today}_600519.json"
+        # g1-canonical-run-identity D5 A+：watchlist 文件名 + ticker 字段统一 canonical（600519.SH）
+        output_path = watchlist_dir / "watchlist" / f"{today}_600519.SH.json"
         assert output_path.exists()
 
         data = json.loads(output_path.read_text(encoding="utf-8"))
-        assert data["ticker"] == "600519"
+        assert data["ticker"] == "600519.SH"
         assert data["final_verdict"] == "bullish"
+
+
+class TestWriteCouncilOutputCanonical:
+    """g1-canonical-run-identity D5 A+: _write_council_output 只写 canonical 文件."""
+
+    def test_pure_digit_ticker_writes_canonical_file(self, watchlist_dir):
+        """result.ticker 纯数字 600519 → watchlist 文件名 + 字段 SHALL canonical 化为 600519.SH.
+
+        无论 result.ticker 是纯数字还是带后缀，_write_council_output 只写 canonical 文件，
+        消除 600009.json（空壳）/600009.SH.json（真数据）分裂。
+        """
+        agent = AgentOutput.from_dict("buffett", VALID_AGENT_DATA)
+        result = CouncilResult(
+            ticker="600519",  # 纯数字（非 canonical）
+            round1=[agent], round2=[], round3=None, round4=None,
+            final_verdict="bullish", key_variables=[], consensus_summary="",
+            dissent_points=[], pending_verification=[],
+            da_skipped_reason=None, council_degraded=False, degraded_reason=None,
+        )
+        debate_path = Path("debate/600519.SH/2026-06-30.md")
+
+        _write_council_output(result, debate_path)
+
+        # 文件名 SHALL canonical（600519.SH），非纯数字 600519
+        canonical_file = Path("watchlist/2026-06-30_600519.SH.json")
+        pure_digit_file = Path("watchlist/2026-06-30_600519.json")
+        assert canonical_file.exists(), "SHALL 写 canonical 文件名（带后缀）"
+        assert not pure_digit_file.exists(), "MUST NOT 写纯数字文件名（消除分裂）"
+        data = json.loads(canonical_file.read_text(encoding="utf-8"))
+        assert data["ticker"] == "600519.SH", "ticker 字段 SHALL canonical"
+
+    def test_suffixed_ticker_writes_same_canonical_file(self, watchlist_dir):
+        """result.ticker 带后缀 600519.SH → 同一 canonical 文件（与纯数字一致）."""
+        agent = AgentOutput.from_dict("buffett", VALID_AGENT_DATA)
+        result = CouncilResult(
+            ticker="600519.SH",  # 已 canonical
+            round1=[agent], round2=[], round3=None, round4=None,
+            final_verdict="bullish", key_variables=[], consensus_summary="",
+            dissent_points=[], pending_verification=[],
+            da_skipped_reason=None, council_degraded=False, degraded_reason=None,
+        )
+        debate_path = Path("debate/600519.SH/2026-06-30.md")
+
+        _write_council_output(result, debate_path)
+
+        canonical_file = Path("watchlist/2026-06-30_600519.SH.json")
+        assert canonical_file.exists(), "带后缀输入 SHALL 写同一 canonical 文件"
+        data = json.loads(canonical_file.read_text(encoding="utf-8"))
+        assert data["ticker"] == "600519.SH"

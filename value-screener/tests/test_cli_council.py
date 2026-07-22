@@ -44,26 +44,58 @@ class TestNormalizeTicker:
         assert _normalize_ticker("600519.SH") == "600519.SH"
         assert _normalize_ticker("000519.SZ") == "000519.SZ"
 
+    def test_bj_not_misjudged_as_sh(self):
+        """g1-canonical-run-identity: 920xxx BJ 不误判为 SH（修 cli 旧 9→SH bug）.
+
+        _normalize_ticker 改调 canonical_ticker（复用 market_router._a_share_suffix，
+        BJ 前缀 43/83/87/88/92 优先判定）。
+        """
+        from cli import _normalize_ticker
+        assert _normalize_ticker("920060") == "920060.BJ", \
+            "920xxx BJ MUST NOT 误判为 SH（修 cli 旧逻辑首字符 9 → SH 的 bug）"
+
+    def test_lowercase_suffix_uppercased(self):
+        """g1-canonical-run-identity: 小写后缀统一大写."""
+        from cli import _normalize_ticker
+        assert _normalize_ticker("600519.sh") == "600519.SH"
+        assert _normalize_ticker("920060.bj") == "920060.BJ"
+
     def test_invalid_length(self):
-        """非 6 位数字报错."""
+        """非法 ticker 报错（g1-canonical-run-identity: canonical SoT 语义）.
+
+        旧 _normalize_ticker 对 5 位 60051 报错（非 6 位 A 股）；
+        新 canonical_ticker 复用 market_router，5 位数字被识别为 HK（00700.HK 形式）。
+        故改用真正非法的 case：7 位数字（非 6 位 A 股、非 3-5 位 HK）。
+        """
         from cli import _normalize_ticker
         import typer
         with pytest.raises(typer.BadParameter):
-            _normalize_ticker("60051")
+            _normalize_ticker("1234567")  # 7 位，非 6 位 A 股也非 3-5 位 HK
 
     def test_invalid_chars(self):
-        """非数字报错."""
-        from cli import _normalize_ticker
-        import typer
-        with pytest.raises(typer.BadParameter):
-            _normalize_ticker("ABCDEF")
+        """非法 ticker 报错（g1-canonical-run-identity: 纯字母被识别为 US，中文才是真非法）.
 
-    def test_unknown_prefix(self):
-        """非 0/3/6/9 开头报错."""
+        旧 _normalize_ticker 对 ABCDEF 报错（非数字）；
+        新 canonical_ticker 复用 market_router，纯字母 1-6 位被识别为 US ticker（AAPL 形式）。
+        故改用真正非法的 case：中文名（本层不解析名称→代码，需调用方先 resolve）。
+        """
         from cli import _normalize_ticker
         import typer
         with pytest.raises(typer.BadParameter):
-            _normalize_ticker("123456")
+            _normalize_ticker("水晶光电")  # 中文名，canonical SoT 不解析
+
+    def test_unknown_suffix(self):
+        """未知后缀报错（g1-canonical-run-identity: canonical SoT 校验后缀合法性）.
+
+        旧 test_unknown_prefix 测 123456 报错（非 0/3/6/9 开头）；
+        新 canonical_ticker 把 123456 识别为 SZ（6 位数字默认深交所），不再报错。
+        该测试的语义前提（严格前缀校验）被 canonical SoT 复用 market_router 决策推翻。
+        改测真正非法的未知后缀 case。
+        """
+        from cli import _normalize_ticker
+        import typer
+        with pytest.raises(typer.BadParameter):
+            _normalize_ticker("600519.XX")  # 未知后缀（.XX 非 .SH/.SZ/.BJ）
 
 
 class TestCouncilCommand:

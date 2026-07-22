@@ -15,10 +15,12 @@ from typing import Any
 
 from data.lib.batch_fetcher import BatchFetcher
 from data.lib.industry_mapper import compute_industry_median_pe
+from data.lib.identity import generate_run_id, compute_input_ticker_set_hash, canonical_ticker
 from .hard_gates import check_hard_gates
 from .factor_scores import compute_factor_scores
 from .anti_trap import compute_anti_trap
 from .heat_filter import check_heat_filter
+from .profile import PROFILE_VERSION
 
 # g1-staged-fetch-boundary：G1 量化筛选的采集维度白名单。
 # L1/L2 漏斗只消费这 5 个量化维度；dossier 三维（main_business/peers/research）
@@ -38,7 +40,10 @@ def screen_a_shares(tickers: list[str], exclude_cyclicals: bool = False) -> dict
     Returns:
         S5 Output Schema:
         {
+            "run_id": str,          # g1-canonical-run-identity: L1 唯一生成的稳定 run_id
             "run_date": str,
+            "profile_version": str, # g1-canonical-run-identity: 显式规则版本
+            "input_ticker_set_hash": str,  # g1-canonical-run-identity: 输入集合 hash
             "candidates": [...],
             "stats": {
                 "total": int,
@@ -130,7 +135,7 @@ def screen_a_shares(tickers: list[str], exclude_cyclicals: bool = False) -> dict
         risk = ticker_data.get("risk", {})
 
         output_candidates.append({
-            "ticker": ticker,
+            "ticker": canonical_ticker(ticker),  # g1-canonical-run-identity 问题2: candidate ticker canonical 化
             "name": basic.get("name", ""),
             "industry": basic.get("industry", ""),
             "factor_scores": candidate["factor_scores"],
@@ -143,8 +148,18 @@ def screen_a_shares(tickers: list[str], exclude_cyclicals: bool = False) -> dict
             "pledge_ratio": risk.get("pledge_ratio")
         })
 
+    # g1-canonical-run-identity: L1 唯一生成 run_id（uuid4 每次唯一，D2 纠正）+
+    # 输入集合 hash（确定性）+ 绑定 profile_version。
+    # run_date 提前算（input_hash 不依赖 run_date，run_id 是 uuid4 也不依赖）。
+    run_date = date.today().isoformat()
+    input_ticker_set_hash = compute_input_ticker_set_hash(tickers)
+    run_id = generate_run_id()  # uuid4，每次唯一
+
     return {
-        "run_date": date.today().isoformat(),
+        "run_id": run_id,
+        "run_date": run_date,
+        "profile_version": PROFILE_VERSION,
+        "input_ticker_set_hash": input_ticker_set_hash,
         "candidates": output_candidates,
         "stats": {
             "total": total,

@@ -16,6 +16,29 @@ import typer
 
 app = typer.Typer(help="value-screener 数据采集 CLI")
 
+
+def _run_scoped_output_path(output_path: Path, run_id: str) -> Path:
+    """g1-canonical-run-identity (D6): 同日多次运行 SHALL 不互相覆盖.
+
+    若目标 --output 路径不存在 / 无可读 run_id → 原路径写（首次运行）；
+    若已存在且 run_id 相同 → 原路径覆盖（同 run 重跑，合理）；
+    若已存在且 run_id 不同 → 改写 {stem}.{run_id[:8]}.json 分流，旧 run 文件保留。
+    满足 scout-agent MODIFIED CLI Integration / 运行隔离:
+    #### Scenario: Same-day multiple runs do not overwrite.
+    """
+    if not output_path.exists():
+        return output_path
+    try:
+        existing = json.loads(output_path.read_text(encoding="utf-8"))
+        existing_rid = existing.get("run_id")
+    except (json.JSONDecodeError, OSError):
+        existing_rid = None
+    if existing_rid and existing_rid != run_id:
+        # run_id 不同 → 分流文件名，旧文件保留不被覆盖
+        return output_path.with_name(f"{output_path.stem}.{run_id[:8]}.json")
+    return output_path
+
+
 # L4 监控层子命令组（tasks 1.2 占位，后续 task 7.x 实现）
 monitor_app = typer.Typer(name="monitor", help="L4 监控层：weekly 主循环、watchlist 聚合、diff、历史轨迹")
 app.add_typer(monitor_app)
@@ -250,8 +273,12 @@ def screen(
     output_json = json.dumps(result, ensure_ascii=False, default=str, indent=2)
 
     if output:
-        Path(output).write_text(output_json, encoding="utf-8")
-        typer.echo(f"结果已写入到 {output}")
+        # g1-canonical-run-identity (D6): run-scoped 分流——同 --output 路径若已有不同 run_id
+        # 的产物，改写 {stem}.{run_id[:8]}.json，旧 run 保留不被覆盖。
+        run_id = result.get("run_id")
+        out_p = _run_scoped_output_path(Path(output), run_id) if run_id else Path(output)
+        out_p.write_text(output_json, encoding="utf-8")
+        typer.echo(f"结果已写入到 {out_p}")
     else:
         typer.echo(output_json)
 
@@ -303,9 +330,25 @@ def scout(
 
     typer.echo(f"读取 L1 输出：{len(candidates)} 只候选")
 
+    # g1-canonical-run-identity: 从 L1 文件顶层读 run identity（继承，MUST NOT 重新生成）。
+    # 旧 L1 文件（G1-3 前）可能不含这些字段 → run_identity=None，scout_batch fallback 生成。
+    l1_run_id = l1_data.get("run_id")
+    l1_profile_version = l1_data.get("profile_version")
+    l1_input_hash = l1_data.get("input_ticker_set_hash")
+    run_identity = None
+    if l1_run_id:
+        run_identity = {
+            "run_id": l1_run_id,
+            "profile_version": l1_profile_version,
+            "input_ticker_set_hash": l1_input_hash,
+        }
+
     # 2. 调用 scout_batch（异步，返回三元组 (full_results, usage_summary, failure_summary)，g1-l2-full-result-contract）
+    # g1-canonical-run-identity: 传 run_identity 让 scout_batch 继承 L1 的 run_id（或 fallback 生成）
     from scout.batch import scout_batch
-    full_results, usage_summary, failure_summary = asyncio.run(scout_batch(candidates, force=force))
+    full_results, usage_summary, failure_summary = asyncio.run(
+        scout_batch(candidates, force=force, run_identity=run_identity)
+    )
 
     # shortlist 由 full_results 派生（deep_dive 按 confidence 降序取前 20，受既有 Top-20 Cap 约束）
     shortlist = sorted(
@@ -315,17 +358,35 @@ def scout(
 
     # 3. 输出结果（g1-l2-full-result-contract：四字段 payload——full_results 含全量 verdict 分类，
     #    shortlist 派生视图供 L3 消费，usage_summary 供成本分析，failure_summary 供失败定位）
+    # g1-canonical-run-identity: payload 顶层带 run identity（从 full_results[0] 取，同 run 共享；
+    #    继承自 L1 或 scout_batch fallback 生成）。
     output_payload = {
         "full_results": full_results,
         "shortlist": shortlist,
         "usage_summary": usage_summary,
         "failure_summary": failure_summary,
     }
+    if full_results:
+        rid = full_results[0].get("run_id")
+        if rid:
+            output_payload["run_id"] = rid
+        pv = full_results[0].get("profile_version")
+        if pv:
+            output_payload["profile_version"] = pv
+        ih = full_results[0].get("input_ticker_set_hash")
+        if ih:
+            output_payload["input_ticker_set_hash"] = ih
+        if full_results[0].get("run_id_source"):
+            output_payload["run_id_source"] = full_results[0]["run_id_source"]
     output_json = json.dumps(output_payload, ensure_ascii=False, indent=2)
 
     if output:
-        Path(output).write_text(output_json, encoding="utf-8")
-        typer.echo(f"结果已写入到 {output}")
+        # g1-canonical-run-identity (D6): run-scoped 分流——同 --output 路径若已有不同 run_id
+        # 的产物，改写 {stem}.{run_id[:8]}.json，旧 run 保留不被覆盖。
+        rid = output_payload.get("run_id")
+        out_p = _run_scoped_output_path(Path(output), rid) if rid else Path(output)
+        out_p.write_text(output_json, encoding="utf-8")
+        typer.echo(f"结果已写入到 {out_p}")
     else:
         typer.echo(output_json)
 
@@ -348,27 +409,20 @@ def scout(
 
 
 def _normalize_ticker(ticker: str) -> str:
-    """规范化 ticker：6 位数字自动补后缀.
+    """规范化 ticker：canonical 带后缀形式（g1-canonical-run-identity SoT）.
 
-    规则（A 股惯例）：
-    - 6/9 开头 → .SH（上交所）
-    - 0/3 开头 → .SZ（深交所）
-    - 已有后缀 → 保持不变
+    改调 data.lib.identity.canonical_ticker（复用 market_router.parse_ticker），
+    修旧逻辑首字符 9 → SH 的 bug（920xxx BJ 误判为 SH）。canonical_ticker 输出
+    大写带后缀（600519.SH / 920060.BJ / 00700.HK / AAPL），非法抛 ValueError。
+
+    旧逻辑（6/9→SH, 0/3→SZ, 已有后缀保持）被 canonical SoT 取代——方向一致（带后缀）
+    但修了 BJ 推断与大小写处理。
     """
-    ticker = ticker.strip().upper()
-    if "." in ticker:
-        return ticker
-    if len(ticker) != 6 or not ticker.isdigit():
-        raise typer.BadParameter(
-            f"invalid ticker: {ticker!r}, expected 6-digit code (e.g., 600519)"
-        )
-    if ticker[0] in ("6", "9"):
-        return f"{ticker}.SH"
-    if ticker[0] in ("0", "3"):
-        return f"{ticker}.SZ"
-    raise typer.BadParameter(
-        f"unknown exchange for ticker: {ticker!r}, expected 6/9 → SH or 0/3 → SZ"
-    )
+    try:
+        from data.lib.identity import canonical_ticker
+        return canonical_ticker(ticker)
+    except ValueError as e:
+        raise typer.BadParameter(str(e))
 
 
 @app.command()

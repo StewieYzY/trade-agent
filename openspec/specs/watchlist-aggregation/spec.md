@@ -1,4 +1,9 @@
-## ADDED Requirements
+# watchlist-aggregation Specification
+
+## Purpose
+定义 L4 监控层的 watchlist 聚合能力：将 L1 candidates、L2 deep_dive 列表、L3 深研结果聚合为 `watchlist/{date}.json` 统一视图，按 `stage` 字段（l1/l2/l3）标识每只票的研判深度，供前端展示与 diff/历史轨迹消费。聚合层只读取上游产出（不自己跑 L1 筛选），对 L3 null 字段做防御（不填默认值，标记 `l3_incomplete`）。约束 AD-01 独立管线边界（L3 可手动单跑，聚合用 canonical ticker 双向回退匹配）。
+
+## Requirements
 
 ### Requirement: 聚合 L1/L2/L3 三路产出
 系统 SHALL 在 `watchlist/{date}.json` 中聚合 L1 candidates、L2 deep_dive 列表、L3 深研结果为统一视图。

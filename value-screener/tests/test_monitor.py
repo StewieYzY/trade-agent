@@ -451,5 +451,150 @@ class TestAlert:
         assert "💡" in result["alerts"][0]["hint"]
 
 
+# ============================================================
+# g1-canonical-run-identity D5+D6: _read_l3_output 双向回退 + watchlist run-scoped
+# ============================================================
+
+class TestReadL3OutputCanonicalFallback:
+    """_read_l3_output canonical 双向回退，优先读真数据非空壳."""
+
+    def test_canonical_ticker_reads_suffixed_real_data(self, temp_watchlist_dir):
+        """canonical ticker 600009.SH → 优先读 {date}_600009.SH.json（真数据）."""
+        from monitor.aggregation import _read_l3_output
+        # 真数据（带后缀）
+        real = {"final_verdict": "bullish", "conviction": 75,
+                "consensus_summary": "真数据", "key_variables": [],
+                "dissent_points": None, "pending_verification": None}
+        (temp_watchlist_dir / "2026-07-13_600009.SH.json").write_text(
+            json.dumps(real), encoding="utf-8")
+        # 空壳（纯数字，字段全 null）
+        shell = {"final_verdict": "unknown", "conviction": None,
+                 "consensus_summary": None, "key_variables": None,
+                 "dissent_points": None, "pending_verification": None}
+        (temp_watchlist_dir / "2026-07-13_600009.json").write_text(
+            json.dumps(shell), encoding="utf-8")
+
+        result = _read_l3_output("600009.SH", "2026-07-13", temp_watchlist_dir)
+        assert result is not None
+        assert result["l3_conviction"] == 75, "SHALL 读真数据（非空壳 conviction=None）"
+        assert result["consensus_summary"] == "真数据"
+
+    def test_pure_digit_ticker_falls_back_to_suffixed_real_data(self, temp_watchlist_dir):
+        """纯数字 ticker 600009 → 回退也读 {date}_600009.SH.json（真数据），非空壳."""
+        from monitor.aggregation import _read_l3_output
+        real = {"final_verdict": "bullish", "conviction": 80,
+                "consensus_summary": "真数据2", "key_variables": [],
+                "dissent_points": None, "pending_verification": None}
+        (temp_watchlist_dir / "2026-07-13_600009.SH.json").write_text(
+            json.dumps(real), encoding="utf-8")
+        shell = {"final_verdict": "unknown", "conviction": None,
+                 "consensus_summary": None, "key_variables": None,
+                 "dissent_points": None, "pending_verification": None}
+        (temp_watchlist_dir / "2026-07-13_600009.json").write_text(
+            json.dumps(shell), encoding="utf-8")
+
+        result = _read_l3_output("600009", "2026-07-13", temp_watchlist_dir)
+        assert result is not None
+        assert result["l3_conviction"] == 80, "纯数字输入 SHALL 回退读真数据（非空壳）"
+
+
+class TestWatchlistRunScoped:
+    """watchlist 输出 run-scoped 命名（D6：同日不同 run_id 不覆盖）."""
+
+    def test_aggregate_writes_run_scoped_when_l1_has_run_id(self, sample_l1_output, temp_watchlist_dir):
+        """L1 含 run_id → aggregate_watchlist 输出 {date}_{run_id[:8]}.json（run-scoped）."""
+        from monitor.aggregation import aggregate_watchlist
+        l1_with_run = dict(sample_l1_output)
+        l1_with_run["run_id"] = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+        l1_with_run["profile_version"] = "g1-2026-07-21"
+        l1_with_run["input_ticker_set_hash"] = "hash1234"
+        l1_file = temp_watchlist_dir / "l1_output.json"
+        l1_file.write_text(json.dumps(l1_with_run))
+
+        with patch("monitor.aggregation.ScoutCache") as mock_cache_class, \
+             patch("monitor.aggregation.ValuationFetcher") as mock_val_class:
+            mock_cache = MagicMock()
+            mock_cache.get.return_value = None  # 无 L2 cache 命中，candidate 字段干净
+            mock_cache_class.return_value = mock_cache
+            mock_val = MagicMock()
+            mock_val.fetch_with_fallback.return_value = {"pe_percentile_5y": 18.5}
+            mock_val_class.return_value = mock_val
+            aggregate_watchlist("2026-06-30", l1_output_file=str(l1_file),
+                                watchlist_dir=temp_watchlist_dir)
+        # run-scoped 文件名（前 8 hex of uuid4）
+        run_scoped = temp_watchlist_dir / "2026-06-30_aaaaaaaa.json"
+        assert run_scoped.exists(), "SHALL 写 run-scoped {date}_{run_id[:8]}.json"
+
+    def test_aggregate_falls_back_to_date_only_when_no_run_id(self, sample_l1_output, temp_watchlist_dir):
+        """旧 L1 无 run_id → aggregate_watchlist fallback {date}.json（向后兼容）."""
+        from monitor.aggregation import aggregate_watchlist
+        l1_file = temp_watchlist_dir / "l1_output.json"
+        l1_file.write_text(json.dumps(sample_l1_output))  # 无 run_id
+
+        with patch("monitor.aggregation.ScoutCache") as mock_cache_class, \
+             patch("monitor.aggregation.ValuationFetcher") as mock_val_class:
+            mock_cache = MagicMock()
+            mock_cache.get.return_value = None
+            mock_cache_class.return_value = mock_cache
+            mock_val = MagicMock()
+            mock_val.fetch_with_fallback.return_value = {"pe_percentile_5y": 18.5}
+            mock_val_class.return_value = mock_val
+            aggregate_watchlist("2026-06-30", l1_output_file=str(l1_file),
+                                watchlist_dir=temp_watchlist_dir)
+        legacy = temp_watchlist_dir / "2026-06-30.json"
+        assert legacy.exists(), "旧 L1 无 run_id SHALL fallback {date}.json"
+
+    def test_get_latest_watchlist_reads_run_scoped(self, temp_watchlist_dir):
+        """get_latest_watchlist SHALL 读 run-scoped 聚合文件（非 per-ticker L3）."""
+        from monitor.diff import get_latest_watchlist
+        # run-scoped 聚合（应读）
+        (temp_watchlist_dir / "2026-07-13_aaaaaaaa.json").write_text(
+            json.dumps({"l1_candidates": 10}), encoding="utf-8")
+        # per-ticker L3（应跳过）
+        (temp_watchlist_dir / "2026-07-13_600519.SH.json").write_text(
+            json.dumps({"final_verdict": "bullish"}), encoding="utf-8")
+        # 旧纯日期聚合（应读，回退）
+        (temp_watchlist_dir / "2026-07-12.json").write_text(
+            json.dumps({"l1_candidates": 8}), encoding="utf-8")
+
+        result = get_latest_watchlist(temp_watchlist_dir)
+        assert result is not None
+        date_str, data = result
+        assert date_str == "2026-07-13", "SHALL 优先读最新 run-scoped 聚合（2026-07-13）"
+        assert data.get("l1_candidates") == 10
+
+
+class TestHistoryRunScoped:
+    """g1-canonical-run-identity D6: history() 读 run-scoped 聚合，不误跳 per-ticker L3."""
+
+    def test_history_reads_run_scoped_aggregate_not_per_ticker(self, temp_watchlist_dir):
+        """history(ticker) 读 run-scoped 聚合 {date}_{run_id[:8]}.json，跳过 per-ticker L3.
+
+        run-scoped 文件名含 `_` 但第二段是 hex run_id（非 ticker），SHALL 被读；
+        per-ticker {date}_{ticker}.json（ticker 含 . 或字母）SHALL 被跳。
+        """
+        from monitor.diff import history
+        # run-scoped 聚合（含该 ticker 的 stage/l1_score，应读）
+        (temp_watchlist_dir / "2026-07-13_aaaaaaaa.json").write_text(json.dumps({
+            "candidates": [{"ticker": "600519.SH", "stage": "l1", "l1_score": 85.5,
+                            "l3_verdict": None, "pe_percentile_5y": None}],
+        }), encoding="utf-8")
+        # per-ticker L3（应跳过，非聚合 watchlist）
+        (temp_watchlist_dir / "2026-07-13_600519.SH.json").write_text(json.dumps({
+            "final_verdict": "bullish"}), encoding="utf-8")
+        # 旧纯日期聚合（应读，回退）
+        (temp_watchlist_dir / "2026-07-12.json").write_text(json.dumps({
+            "candidates": [{"ticker": "600519.SH", "stage": "l1", "l1_score": 80.0,
+                           "l3_verdict": None, "pe_percentile_5y": None}],
+        }), encoding="utf-8")
+
+        records = history("600519.SH", watchlist_dir=temp_watchlist_dir)
+        # SHALL 读到 run-scoped (07-13) + 旧纯日期 (07-12) 两条聚合记录，非 per-ticker L3
+        dates = [r.get("date") for r in records]
+        assert "2026-07-13" in dates, "SHALL 读 run-scoped 聚合（07-13）"
+        assert "2026-07-12" in dates, "SHALL 读旧纯日期聚合（07-12）"
+        # per-ticker L3 不应作为独立 record（它不是聚合 watchlist）
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

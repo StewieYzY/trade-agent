@@ -153,24 +153,38 @@ def compute_diff(current: dict[str, Any], previous: dict[str, Any] | None) -> di
 
 
 def get_latest_watchlist(watchlist_dir: str | Path = "watchlist") -> tuple[str, dict[str, Any]] | None:
-    """获取最新的 watchlist 快照.
+    """获取最新的 watchlist 快照（g1-canonical-run-identity D6: 兼容 run-scoped 命名）.
 
-    Returns:
-        (date_str, watchlist_data) 或 None（无快照）
+    支持三种 watchlist 文件命名：
+    - run-scoped 聚合：{date}_{run_id[:8]}.json（run_id 前 8 hex，D6 新命名，优先）
+    - 旧聚合：{date}.json（G1-3 前格式，回退）
+    - per-ticker L3：{date}_{ticker}.json（ticker 含字母/`.`，跳过，非聚合 watchlist）
+
+    区分 run-scoped（第二段 8 hex 小写）vs per-ticker（第二段含 `.` 或大写字母或纯 6 位数字）。
     """
+    import re
     watchlist_dir = Path(watchlist_dir)
     if not watchlist_dir.exists():
         return None
 
+    # run_id 前 8 hex（uuid4 hex 全小写），per-ticker ticker 含 . 或大写字母
+    run_scoped_re = re.compile(r"^\d{4}-\d{2}-\d{2}_[0-9a-f]{8}$")
+    date_only_re = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
     files = sorted(watchlist_dir.glob("*.json"), reverse=True)
     for f in files:
-        # 跳过 per-ticker 和 report 文件（含 _ 的都不是纯日期 watchlist）
-        if "_" in f.stem:
-            continue
+        stem = f.stem
+        # 优先 run-scoped 聚合 + 旧纯日期聚合；跳过 per-ticker L3（{date}_{ticker}，ticker 含 . 或字母）
+        is_run_scoped = bool(run_scoped_re.match(stem))
+        is_date_only = bool(date_only_re.match(stem))
+        if not (is_run_scoped or is_date_only):
+            continue  # per-ticker L3 文件，跳过
         try:
             with f.open(encoding="utf-8") as fp:
                 data = json.load(fp)
-            return (f.stem, data)
+            # 返回 date 部分（run-scoped 取前 10 字符日期，纯日期即 stem）
+            date_str = stem[:10] if is_run_scoped else stem
+            return (date_str, data)
         except (json.JSONDecodeError, OSError):
             continue
 
@@ -196,14 +210,25 @@ def get_previous_watchlist(
 
     current_dt = datetime.strptime(current_date, "%Y-%m-%d").date()
 
-    # 收集所有日期文件
+    # g1-canonical-run-identity D6: 兼容 run-scoped {date}_{run_id[:8]}.json 命名
+    import re
+    run_scoped_re = re.compile(r"^(\d{4}-\d{2}-\d{2})_[0-9a-f]{8}$")
+    date_only_re = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+    # 收集所有日期文件（run-scoped 或纯日期聚合，跳过 per-ticker L3）
     date_files = []
     for f in watchlist_dir.glob("*.json"):
-        # 跳过 per-ticker 和 report 文件（含 _ 的都不是纯日期 watchlist）
-        if "_" in f.stem:
-            continue
+        stem = f.stem
+        # run-scoped 聚合：提取 date 部分
+        m = run_scoped_re.match(stem)
+        if m:
+            file_date_str = m.group(1)
+        elif date_only_re.match(stem):
+            file_date_str = stem
+        else:
+            continue  # per-ticker L3（{date}_{ticker}），跳过
         try:
-            file_date = datetime.strptime(f.stem, "%Y-%m-%d").date()
+            file_date = datetime.strptime(file_date_str, "%Y-%m-%d").date()
             if file_date < current_dt:
                 date_files.append((file_date, f))
         except ValueError:
@@ -254,13 +279,23 @@ def history(
     to_dt = datetime.strptime(date_to, "%Y-%m-%d").date() if date_to else None
 
     records = []
+    # g1-canonical-run-identity D6: 兼容 run-scoped {date}_{run_id[:8]}.json 命名
+    import re
+    run_scoped_re = re.compile(r"^(\d{4}-\d{2}-\d{2})_[0-9a-f]{8}$")
+    date_only_re = re.compile(r"^\d{4}-\d{2}-\d{2}$")
     for f in sorted(watchlist_dir.glob("*.json")):
-        # 跳过 per-ticker 文件（格式：{date}_{ticker}.json）
-        if f.stem.count("_") > 0:
-            continue
+        stem = f.stem
+        # run-scoped 聚合：提取 date 部分；纯日期聚合：直接用；per-ticker L3 跳过
+        m = run_scoped_re.match(stem)
+        if m:
+            file_date_str = m.group(1)
+        elif date_only_re.match(stem):
+            file_date_str = stem
+        else:
+            continue  # per-ticker L3（{date}_{ticker}，ticker 含 . 或字母），跳过
 
         try:
-            file_date = datetime.strptime(f.stem, "%Y-%m-%d").date()
+            file_date = datetime.strptime(file_date_str, "%Y-%m-%d").date()
         except ValueError:
             continue
 
@@ -280,7 +315,7 @@ def history(
         for c in data.get("candidates", []):
             if c["ticker"] == ticker:
                 records.append({
-                    "date": f.stem,
+                    "date": file_date_str,  # g1-canonical-run-identity: run-scoped 时提取 date 部分
                     "l1_score": c.get("l1_score"),
                     "stage": c.get("stage", "l1"),
                     "l3_verdict": c.get("l3_verdict"),

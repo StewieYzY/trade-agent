@@ -23,6 +23,8 @@ from datetime import date
 import httpx
 
 from council.llm import call_llm_light
+from data.lib.identity import generate_run_id, compute_input_ticker_set_hash
+from screener.profile import PROFILE_VERSION
 from .input_assembly import assemble_snapshot
 from .parse import parse_scout_output, apply_buffer_zone
 from .prompt import SCOUT_SYSTEM_PROMPT, format_snapshot
@@ -35,12 +37,19 @@ from .quality import ScoutCache
 call_llm_snapshot = call_llm_light
 
 
-async def scout_batch(candidates: list[dict], force: bool = False) -> tuple[list[dict], dict, dict]:
+async def scout_batch(
+    candidates: list[dict],
+    force: bool = False,
+    run_identity: dict | None = None,
+) -> tuple[list[dict], dict, dict]:
     """并发对 ~200 只股票做 LLM 初筛，返回 (full_results, usage_summary, failure_summary).
 
     Args:
         candidates: L1 输出的 candidates 列表（S5 schema），每项含 ticker 字段
         force: 是否跳过缓存（缺省 False）
+        run_identity: g1-canonical-run-identity 从 L1 继承的运行身份
+            {run_id, profile_version, input_ticker_set_hash}。None 时 fallback 生成
+            并标注 run_id_source="scout_fallback"（纯 L2 单跑，非来自 L1）。
 
     Returns:
         (full_results, usage_summary, failure_summary)：
@@ -48,6 +57,9 @@ async def scout_batch(candidates: list[dict], force: bool = False) -> tuple[list
           不再只留 deep_dive），每项含 ticker/verdict/confidence/one_liner/red_flags/
           green_flags/anti_trap_flags/low_confidence_anomaly，degraded 票含 degraded/
           degraded_reason，error 票含 error/missing_fields。
+          g1-canonical-run-identity: 每条额外含 run_id/profile_version/
+          input_ticker_set_hash（继承自 L1 或 fallback 生成），fallback 时含
+          run_id_source="scout_fallback"。
           shortlist 由消费方派生为 [r for r in full_results if verdict=="deep_dive"]
           按 confidence 降序取前 20（受既有 Top-20 Cap requirement 约束）。
         - usage_summary: 本次实跑的 token usage 汇总（f1-deviation-fix §7 / P1 修复），
@@ -65,12 +77,30 @@ async def scout_batch(candidates: list[dict], force: bool = False) -> tuple[list
     2. 组装特征快照（assemble_snapshot + format_snapshot）
     3. 并发调用 LLM（Semaphore(20)）
     4. 解析输出 + 应用缓冲带
-    5. 写入缓存（ScoutCache.set）
+    5. 写入缓存（ScoutCache.set，绑定 run identity）
     6. 汇总 failure_summary（errors/skips/watches/degraded/unhandled_exceptions）
     """
     cache = ScoutCache()
     today = date.today().isoformat()
     semaphore = asyncio.Semaphore(20)
+
+    # g1-canonical-run-identity: 解析/生成 run identity。
+    # L1 传入 → 继承（MUST NOT 重新生成）；None → fallback 生成 + 标注 scout_fallback。
+    if run_identity is not None:
+        run_id = run_identity.get("run_id")
+        profile_version = run_identity.get("profile_version", PROFILE_VERSION)
+        input_ticker_set_hash = run_identity.get("input_ticker_set_hash")
+        run_id_source = None  # 继承自 L1，无 fallback 标记
+    else:
+        # fallback: 从 candidates 提取 tickers 算 input_hash（确定性），run_id 用 uuid4（D2 纠正）
+        fallback_tickers = [
+            c.get("ticker") for c in candidates
+            if isinstance(c, dict) and c.get("ticker")
+        ]
+        run_id = generate_run_id()  # uuid4，每次唯一（D2 纠正：不再稳定 hash）
+        profile_version = PROFILE_VERSION
+        input_ticker_set_hash = compute_input_ticker_set_hash(fallback_tickers)
+        run_id_source = "scout_fallback"
 
     # f1-deviation-fix §7 / P1 修复：累加所有 LLM 调用的 usage（非仅 deep_dive）
     usage_summary = {
@@ -127,7 +157,10 @@ async def scout_batch(candidates: list[dict], force: bool = False) -> tuple[list
 
             # 1. 检查缓存（除非 force=True）
             if not force:
-                cached = cache.get(ticker, today)
+                # g1-canonical-run-identity: 传 run_id/profile_version 校验缓存 identity，
+                # run_id 或 profile_version 不匹配（跨 run / 规则 bump）→ 视为 miss 不复用旧 cache。
+                cached = cache.get(ticker, today,
+                                   run_id=run_id, profile_version=profile_version)
                 if cached is not None:
                     usage_summary["cache_hits"] += 1  # cache 命中，不产生新调用
                     return {
@@ -218,8 +251,14 @@ async def scout_batch(candidates: list[dict], force: bool = False) -> tuple[list
             }
 
             # 5. 写入缓存（失败不丢结果）
+            # g1-canonical-run-identity: cache entry 绑定 run identity（继承自 L1 或 fallback）
             try:
-                cache.set(ticker, today, result, features)
+                cache.set(
+                    ticker, today, result, features,
+                    run_id=run_id,
+                    profile_version=profile_version,
+                    input_ticker_set_hash=input_ticker_set_hash,
+                )
             except OSError:
                 pass  # 缓存写入失败不影响结果返回
 
@@ -251,6 +290,17 @@ async def scout_batch(candidates: list[dict], force: bool = False) -> tuple[list
     # process_one 现在对所有输入（含缺 ticker / 非 dict）都返回符合契约的 result，
     # 不再返回 None；保留 None 过滤仅作未来路径的防御性兜底。
     results = [r for r in raw_results if r is not None]
+
+    # g1-canonical-run-identity: 统一给每条 full_results 注入 run identity
+    # （继承自 L1 或 fallback 生成，全 run 共享同一 run_id）。在汇总 failure_summary 的
+    # 同一遍历里顺带注入，避免二次循环。覆盖所有路径（cache hit / error / degraded / 正常）。
+    for r in results:
+        r["run_id"] = run_id
+        r["profile_version"] = profile_version
+        if input_ticker_set_hash is not None:
+            r["input_ticker_set_hash"] = input_ticker_set_hash
+        if run_id_source is not None:  # 仅 fallback 路径标注
+            r["run_id_source"] = run_id_source
 
     # g1-l2-full-result-contract：汇总 failure_summary（errors/skips/watches/degraded）
     # shortlist 不再在此返回——由消费方从 full_results 派生（受既有 Top-20 Cap 约束）。

@@ -436,7 +436,8 @@ def test_single_ticker_dim_error_does_not_break_batch():
     # 关键断言：整批不抛异常 + 至少 600519 进入 candidates
     assert stats["total"] == 2
     candidate_tickers = [c["ticker"] for c in result["candidates"]]
-    assert "600519" in candidate_tickers, "正常 ticker 应进入最终候选池"
+    # g1-canonical-run-identity 问题2: candidate ticker canonical 化（600519 → 600519.SH）
+    assert "600519.SH" in candidate_tickers, "正常 ticker 应进入最终候选池（canonical 形式）"
 
 
 if __name__ == "__main__":

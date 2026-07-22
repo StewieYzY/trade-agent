@@ -230,11 +230,30 @@ def _degraded_note(dim: str) -> str:
 
 
 def _debate_path(ticker: str) -> Path:
-    """返回辩论记录文件路径：debate/{ticker}/{YYYY-MM-DD}.md"""
+    """返回辩论记录文件路径（新写入用 canonical 带后缀）：debate/{canonical_ticker}/{YYYY-MM-DD}.md
+
+    g1-canonical-run-identity D5 A+：新写入统一 canonical（600519.SH），与
+    _write_council_output 的 watchlist 文件名口径一致，消除 600009.json（空壳）/
+    600009.SH.json（真数据）分裂。既有 debate/{纯数字}/ 旧目录保留，_check_cache
+    回退读取（见 _legacy_debate_path）。
+    """
+    from data.lib.identity import canonical_ticker
     today = date.today().isoformat()
-    # ticker 可能含后缀（如 600519.SH），取纯数字部分
-    ticker_clean = ticker.split(".")[0]
-    return Path(f"debate/{ticker_clean}/{today}.md")
+    canonical = canonical_ticker(ticker)
+    return Path(f"debate/{canonical}/{today}.md")
+
+
+def _legacy_debate_path(ticker: str) -> Path:
+    """返回旧纯数字辩论记录路径（debate/{canonical_code}/{YYYY-MM-DD}.md），供 _check_cache 回退.
+
+    g1-canonical-run-identity D5 A+ 兼容层：既有 debate/600519/ 旧目录的历史 md
+    保留不迁，_check_cache 先查 canonical 路径（_debate_path），不存在时回退此旧路径。
+    force=True 清理时也同时清 canonical + 旧纯数字路径。
+    """
+    from data.lib.identity import canonical_code
+    today = date.today().isoformat()
+    code = canonical_code(ticker)
+    return Path(f"debate/{code}/{today}.md")
 
 
 def _append_round(path: Path, round_num: int, agents: list[AgentOutput] | None) -> None:
@@ -578,8 +597,14 @@ def _check_cache(ticker: str) -> CouncilResult | None:
         CouncilResult 或 None（未命中/解析失败）
     """
     path = _debate_path(ticker)
+    # g1-canonical-run-identity D5 A+：canonical 路径不存在时回退旧纯数字路径
+    # （兼容既有 debate/600519/ 旧目录，升级后仍可命中）
     if not path.exists():
-        return None
+        legacy = _legacy_debate_path(ticker)
+        if legacy.exists():
+            path = legacy
+        else:
+            return None
 
     content = path.read_text(encoding="utf-8")
     if "## Round 1" not in content:
@@ -611,6 +636,12 @@ async def run_debate(
         ValidationError: agent 输出 JSON 校验失败
         ValueError: 数据不足（insufficient_data）
     """
+    # g1-canonical-run-identity D5 A+：入口 canonicalize ticker，后续 _debate_path /
+    # _check_cache / _write_council_output / CouncilResult 全用 canonical 形式，
+    # 无论调用方传纯数字 600519 还是带后缀 600519.SH 都统一。
+    from data.lib.identity import canonical_ticker
+    ticker = canonical_ticker(ticker)
+
     # 1. 获取特征数据
     # f3a §3 D4：L3 入口从 assemble_council_features 改为 build_research_dossier，
     # features 形参语义从「扁平 21 字段」变为「分层 dossier」（形参名保持 features 不变）。
@@ -639,10 +670,15 @@ async def run_debate(
             return cached
 
     # 4. 准备辩论记录文件
-    # force=True 时删除旧文件再覆盖写入；force=False 时由 _check_cache 提前返回
+    # g1-canonical-run-identity D5 A+：force=True 同时清 canonical + 旧纯数字路径，
+    # 避免旧内容残留（既有 debate/{纯数字}/ 旧目录 + 新 debate/{canonical}/ 都清）。
     path = _debate_path(ticker)
-    if force and path.exists():
-        path.unlink()
+    if force:
+        if path.exists():
+            path.unlink()
+        legacy = _legacy_debate_path(ticker)
+        if legacy.exists():
+            legacy.unlink()
 
     # f1-deviation-fix §7：token usage 累加器（供 AD-03 成本实测，写入辩论记录 md，不改 schema）
     usage_log: list[dict] = []
@@ -861,10 +897,16 @@ def _write_council_output(result: CouncilResult, debate_path: Path) -> None:
     # 从 debate_path 提取日期（debate/{ticker}/{date}.md）
     date_str = debate_path.stem
 
+    # g1-canonical-run-identity D5 A+：result.ticker canonical 化（带后缀），
+    # 无论 run_debate 入口收到纯数字还是带后缀，watchlist 文件名 + 字段都统一 canonical，
+    # 与 _debate_path 口径一致，消除 600009.json（空壳）/600009.SH.json（真数据）分裂。
+    from data.lib.identity import canonical_ticker
+    canonical = canonical_ticker(result.ticker)
+
     # f2 §3.7：分歧报告字段从 round4 SynthesizerOutput 取（DA skipped 时 round4 仍跑）
     r4 = result.round4
     output = {
-        "ticker": result.ticker,
+        "ticker": canonical,
         "date": date_str,
         "final_verdict": result.final_verdict,
         "conviction": r4.conviction if r4 else None,
@@ -886,7 +928,9 @@ def _write_council_output(result: CouncilResult, debate_path: Path) -> None:
         "degraded_reason": result.degraded_reason,
     }
 
-    # L4 消费方：文件名用完整 ticker（含交易所后缀 600519.SH），与字段一致
-    output_path = watchlist_dir / f"{date_str}_{result.ticker}.json"
+    # L4 消费方：文件名用 canonical ticker（含交易所后缀 600519.SH），与字段一致
+    # g1-canonical-run-identity D5 A+：canonical 化确保无论 result.ticker 是纯数字还是
+    # 带后缀，watchlist 文件名都统一为带后缀（与 _debate_path 口径一致，消除空壳/真数据分裂）。
+    output_path = watchlist_dir / f"{date_str}_{canonical}.json"
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(output, f, ensure_ascii=False, indent=2)

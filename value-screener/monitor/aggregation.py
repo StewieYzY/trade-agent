@@ -126,21 +126,42 @@ def _read_l2_cache(ticker: str, scout_cache: ScoutCache) -> dict[str, Any] | Non
 
 
 def _read_l3_output(ticker: str, run_date: str, watchlist_dir: Path) -> dict[str, Any] | None:
-    """读取 L3 per-ticker JSON 文件."""
-    # 尝试多种文件名模式
+    """读取 L3 per-ticker JSON 文件（g1-canonical-run-identity D5 A+: canonical 双向回退）.
+
+    文件名 pattern 按序尝试，优先返回内容完整的真数据文件（非空壳）：
+    1. {date}_{canonical}.json（带后缀，如 2026-07-13_600009.SH.json，真数据）
+    2. {date}_{canonical_code}.json（纯数字，如 2026-07-13_600009.json，可能是空壳）
+    3. {date}_{ticker.replace('.', '_')}.json（旧 replace 形式，向后兼容）
+
+    caller 传 canonical ticker（600009.SH）时优先命中带后缀真数据；
+    caller 传纯数字 ticker（600009）时回退也试带后缀形式。
+    消除 2026-07-13_600009.json（空壳）/2026-07-13_600009.SH.json（真数据）分裂时只读空壳的 bug。
+    """
+    from data.lib.identity import canonical_ticker, canonical_code
+    try:
+        canonical = canonical_ticker(ticker)
+        code = canonical_code(ticker)
+    except ValueError:
+        # 非法 ticker 退回旧行为
+        canonical, code = ticker, ticker.split(".")[0]
+
     patterns = [
-        f"{run_date}_{ticker}.json",
-        f"{run_date}_{ticker.replace('.', '_')}.json",
+        f"{run_date}_{canonical}.json",            # 带后缀（真数据优先）
+        f"{run_date}_{code}.json",                 # 纯数字（可能空壳，回退）
+        f"{run_date}_{ticker.replace('.', '_')}.json",  # 旧 replace 形式
     ]
 
+    # 收集所有命中的文件，优先返回内容完整的（非空壳）
+    candidates: list[dict[str, Any]] = []
     for pattern in patterns:
         p = watchlist_dir / pattern
         if p.exists():
-            with p.open(encoding="utf-8") as f:
-                l3_data = json.load(f)
-
-            # 提取关键字段，null 防御
-            return {
+            try:
+                with p.open(encoding="utf-8") as f:
+                    l3_data = json.load(f)
+            except (json.JSONDecodeError, OSError):
+                continue
+            extracted = {
                 "l3_verdict": l3_data.get("final_verdict", "unknown") or "unknown",
                 "l3_conviction": l3_data.get("conviction"),
                 "key_variables": l3_data.get("key_variables") or None,
@@ -148,7 +169,16 @@ def _read_l3_output(ticker: str, run_date: str, watchlist_dir: Path) -> dict[str
                 "dissent_points": l3_data.get("dissent_points"),
                 "pending_verification": l3_data.get("pending_verification"),
             }
-    return None
+            candidates.append(extracted)
+
+    if not candidates:
+        return None
+    # 优先返回内容完整的（conviction 非 null 或 consensus_summary 非 null 即真数据，
+    # 非空壳）。全空壳时返回第一个。
+    for c in candidates:
+        if c.get("l3_conviction") is not None or c.get("consensus_summary") is not None:
+            return c
+    return candidates[0]
 
 
 def _check_l3_incomplete(l3_data: dict[str, Any] | None) -> bool:
@@ -247,15 +277,27 @@ def aggregate_watchlist(
     candidates = _supplement_pe_percentile(candidates)
 
     # 4. 构造 watchlist JSON
+    # g1-canonical-run-identity D6: 顶层带 run_id（从 L1 文件继承），output_file 改 run-scoped
+    # {date}_{run_id[:8]}.json（同日多次运行不同 run_id 不互相覆盖）。旧 L1 无 run_id 时
+    # fallback {date}.json（向后兼容）。
+    run_id = l1_data.get("run_id")
+    profile_version = l1_data.get("profile_version")
+    input_ticker_set_hash = l1_data.get("input_ticker_set_hash")
     watchlist = {
         "generated_at": datetime.now().isoformat(),
+        "run_id": run_id,  # 从 L1 继承（可能 None，旧 L1）
+        "profile_version": profile_version,
+        "input_ticker_set_hash": input_ticker_set_hash,
         "l1_candidates": len(candidates),
         "l2_shortlist": sum(1 for c in candidates if c["stage"] in ("l2", "l3")),
         "candidates": candidates,
     }
 
-    # 5. 写入文件
-    output_file = watchlist_dir / f"{run_date}.json"
+    # 5. 写入文件（run-scoped 命名，D6：同日不同 run_id 不覆盖）
+    if run_id:
+        output_file = watchlist_dir / f"{run_date}_{run_id[:8]}.json"
+    else:
+        output_file = watchlist_dir / f"{run_date}.json"  # 旧 L1 无 run_id fallback
     with output_file.open("w", encoding="utf-8") as f:
         json.dump(watchlist, f, ensure_ascii=False, indent=2)
 

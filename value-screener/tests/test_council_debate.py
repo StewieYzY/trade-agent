@@ -100,19 +100,30 @@ class TestBuildUserMessage:
         assert "必须引用" not in msg
 
 
-# ── _debate_path ───────────────────────────────────────────────
+# ── _debate_path（g1-canonical-run-identity D5 A+：canonical 带后缀）──
 
 class TestDebatePath:
     def test_with_suffix(self):
+        """g1-canonical-run-identity D5 A+: _debate_path 用 canonical 带后缀作目录名.
+
+        新写入统一 canonical（debate/600519.SH/），与 _write_council_output 的 watchlist
+        文件名口径一致。旧断言「.SH not in path」失效（旧逻辑去后缀纯数字）。
+        """
         path = _debate_path("600519.SH")
-        assert "600519" in str(path)
-        assert ".SH" not in str(path)
+        assert "600519.SH" in str(path), "SHALL 用 canonical 带后缀作目录名"
         assert path.suffix == ".md"
 
-    def test_without_suffix(self):
-        path = _debate_path("600519")
-        assert "600519" in str(path)
-        assert path.suffix == ".md"
+    def test_without_suffix_canonicalized(self):
+        """纯数字输入 SHALL canonical 化为带后缀（与带后缀输入同路径）."""
+        path_with = _debate_path("600519.SH")
+        path_without = _debate_path("600519")
+        assert path_with == path_without, "同证券不同形式 SHALL 返回相同 debate 路径"
+
+    def test_bj_not_misjudged(self):
+        """g1-canonical-run-identity: 920xxx BJ 不误判为 SH（debate 路径）."""
+        path = _debate_path("920060")
+        assert "920060.BJ" in str(path), "920xxx BJ debate 路径 SHALL 含 .BJ"
+        assert ".SH" not in str(path), "MUST NOT 误判为 SH"
 
     def test_date_in_path(self):
         from datetime import date
@@ -508,8 +519,17 @@ class TestRunDebate:
         assert result.round1[0].conviction == 80
 
         # 文件层验证（P0-2 核心）：旧记录应被清除，不应混叠
-        new_md = path.read_text(encoding="utf-8")
-        assert "缓存命中" not in new_md, "旧记录残留：force=True 未清除旧文件"
+        # g1-canonical-run-identity D5 A+：force=True 同时清 canonical + 旧纯数字路径，
+        # 旧 debate/600519/{date}.md（纯数字旧目录）SHALL 被清除（不存在）。
+        assert not path.exists(), "旧纯数字记录残留：force=True 未清除旧文件"
+        # 新记录写在 canonical 路径 debate/600519.SH/{date}.md（含新内容，非「缓存命中」）
+        from data.lib.identity import canonical_ticker
+        canonical_path = debate_dir / canonical_ticker("600519").split(".")[0] / f"{date.today().isoformat()}.md"
+        # 注：canonical 路径目录名是 600519.SH（带后缀），修正
+        canonical_path = debate_dir / canonical_ticker("600519") / f"{date.today().isoformat()}.md"
+        if canonical_path.exists():
+            new_md = canonical_path.read_text(encoding="utf-8")
+            assert "缓存命中" not in new_md, "新 canonical 记录不应含旧缓存内容"
         assert new_md.count("## Round 1") == 1, "Round 1 重复：文件追加而非覆盖"
         assert "好公司" in new_md, "新记录未写入"
 

@@ -74,7 +74,9 @@ def test_scout_batch_usage_summary_counts_cache_hits_separately():
             with patch("scout.batch.ScoutCache") as mock_cache_cls:
                 mock_cache = mock_cache_cls.return_value
                 # 600001 cache hit（含 usage），600002 cache miss
-                def cache_get(ticker, date_str):
+                # g1-canonical-run-identity: cache.get 现传 run_id/profile_version kwargs，
+                # mock 签名用 **kwargs 兼容。
+                def cache_get(ticker, date_str, **kwargs):
                     if ticker == "600001":
                         return {"verdict": "deep_dive", "confidence": 80, "one_liner": "cached",
                                 "red_flags": [], "green_flags": [], "anti_trap_flags": []}
@@ -295,7 +297,8 @@ def test_scout_batch_cache_hit():
         mock_cache = mock_cache_cls.return_value
 
         # 600001 缓存命中，600002 缓存未命中
-        def mock_get(ticker, date_str):
+        # g1-canonical-run-identity: cache.get 现传 run_id/profile_version kwargs，mock 用 **kwargs 兼容
+        def mock_get(ticker, date_str, **kwargs):
             if ticker == "600001":
                 return {
                     "verdict": "deep_dive",
@@ -916,6 +919,121 @@ def test_error_results_satisfy_full_result_contract():
     # 对照：deep_dive 那条本就有这些字段
     dd = next(r for r in full_results if r["ticker"] == "600003")
     assert CONTRACT_FIELDS <= set(dd.keys())
+
+
+# ============================================================
+# g1-canonical-run-identity: scout_batch 继承 run_id（design D2 + Migration 5）
+# ============================================================
+
+def _basic_llm_mock(verdict="deep_dive", confidence=75):
+    """构造一个返回固定 verdict 的 mock_call."""
+    async def mock_call(snapshot, system):
+        return (json.dumps({
+            "verdict": verdict, "confidence": confidence,
+            "one_liner": "test", "red_flags": [], "green_flags": [],
+            "anti_trap_flags": [],
+        }), LLM_USAGE)
+    return mock_call
+
+
+def _basic_features(ticker="600001"):
+    """构造 assemble_snapshot 的 mock 返回."""
+    return {
+        "ticker": ticker, "name": "测试", "industry": "测试",
+        "market_cap": 1000, "pe_ttm": 20.0, "pb": 2.0,
+        "pe_percentile_5y": 50.0, "roe_3y": [15.0, 16.0, 17.0],
+        "roe_trend": "趋势上升", "net_margin": 10.0, "debt_ratio": 50.0,
+        "goodwill_ratio": 5.0, "operating_cashflow": 100.0, "net_profit": 80.0,
+        "cashflow_match": "匹配", "revenue_growth": 10.0, "pledge_ratio": 10.0,
+        "price_change_60d": 5.0, "turnover_avg_percentile_60d": 50.0, "f_score": 7,
+    }
+
+
+def test_scout_batch_inherits_run_id_from_l1():
+    """scout_batch 收到 run_identity 参数 → full_results 每条 + cache entry SHALL 继承.
+
+    对应 run-identity spec: L2 从 L1 继承 run_id，MUST NOT 生成新 run_id。
+    scout_batch(candidates, force, run_identity={run_id, profile_version,
+    input_ticker_set_hash}) 继承之。
+    """
+    candidates = [{"ticker": "600001"}]
+    run_identity = {
+        "run_id": "l1_run_id_abc123",
+        "profile_version": "g1-2026-07-21",
+        "input_ticker_set_hash": "l1_input_hash",
+    }
+
+    with patch("scout.batch.call_llm_snapshot", new=_basic_llm_mock()):
+        with patch("scout.batch.assemble_snapshot") as mock_assemble:
+            mock_assemble.return_value = _basic_features()
+            with patch("scout.batch.ScoutCache") as mock_cache_cls:
+                mock_cache = mock_cache_cls.return_value
+                mock_cache.get.return_value = None  # 无缓存命中
+
+                results, _usage, _fail = asyncio.run(
+                    scout_batch(candidates, run_identity=run_identity)
+                )
+
+    # full_results 每条继承 run identity
+    assert len(results) == 1
+    r = results[0]
+    assert r.get("run_id") == "l1_run_id_abc123", "full_results 每条 SHALL 继承 run_id"
+    assert r.get("profile_version") == "g1-2026-07-21"
+    assert r.get("input_ticker_set_hash") == "l1_input_hash"
+    # ScoutCache.set 被调用且传了 run identity
+    mock_cache.set.assert_called()
+    set_kwargs = mock_cache.set.call_args.kwargs
+    assert set_kwargs.get("run_id") == "l1_run_id_abc123", \
+        "cache entry SHALL 绑定 run_id（传给 ScoutCache.set）"
+    assert set_kwargs.get("profile_version") == "g1-2026-07-21"
+
+
+def test_scout_batch_fallback_run_id_when_no_l1():
+    """candidates 无 run_identity → scout_batch fallback 生成 run_id 标注 scout_fallback.
+
+    对应 run-identity spec: 纯 L2 单跑 fallback 生成 run_id，MUST NOT 报错中断。
+    """
+    candidates = [{"ticker": "600001"}]  # 手动构造，非来自 L1，无 run_identity
+
+    with patch("scout.batch.call_llm_snapshot", new=_basic_llm_mock()):
+        with patch("scout.batch.assemble_snapshot") as mock_assemble:
+            mock_assemble.return_value = _basic_features()
+            with patch("scout.batch.ScoutCache") as mock_cache_cls:
+                mock_cache = mock_cache_cls.return_value
+                mock_cache.get.return_value = None
+
+                results, _usage, _fail = asyncio.run(
+                    scout_batch(candidates)  # 不传 run_identity
+                )
+
+    assert len(results) == 1
+    r = results[0]
+    assert r.get("run_id"), "fallback SHALL 生成 run_id（非空）"
+    assert r.get("run_id_source") == "scout_fallback", \
+        "fallback run_id SHALL 标注 run_id_source=scout_fallback"
+    assert r.get("profile_version"), "fallback SHALL 仍带 profile_version"
+
+
+def test_scout_batch_triple_contract_unchanged():
+    """scout_batch 仍返回三元组，签名向后兼容（G1-2 闭合不重开）.
+
+    run_identity 是可选入参，不传时仍返回 (full_results, usage_summary, failure_summary)。
+    """
+    candidates = [{"ticker": "600001"}]
+    with patch("scout.batch.call_llm_snapshot", new=_basic_llm_mock()):
+        with patch("scout.batch.assemble_snapshot") as mock_assemble:
+            mock_assemble.return_value = _basic_features()
+            with patch("scout.batch.ScoutCache") as mock_cache_cls:
+                mock_cache = mock_cache_cls.return_value
+                mock_cache.get.return_value = None
+                ret = asyncio.run(scout_batch(candidates))
+
+    assert isinstance(ret, tuple) and len(ret) == 3, \
+        "MUST 仍返回三元组 (full_results, usage_summary, failure_summary)"
+    results, usage, fail = ret
+    assert isinstance(results, list)
+    assert isinstance(usage, dict) and "call_count" in usage
+    assert isinstance(fail, dict) and "errors" in fail
 
 
 if __name__ == "__main__":
