@@ -92,10 +92,12 @@ Scout SHALL invoke LLM calls concurrently with a semaphore limit of 20. Each cal
 ### Requirement: 24h Cache with Input Snapshot
 Scout SHALL cache results to `data/cache/{canonical.code}/{date}/l2_scout.json` with TTL=24h, where `{canonical.code}` is the pure 6-digit form derived from the canonical ticker (per `run-identity` SoT), NOT the raw ticker string. The cache entry SHALL include both the LLM output (verdict/confidence/flags) and the input feature snapshot (PE/PB/ROE/market_cap/etc.), AND SHALL bind run identity (`run_id`/`profile_version`/`input_ticker_set_hash` inherited from L1). The `{date}` subdirectory isolates results by trading day, enabling cross-day diagnostic comparison.
 
-> g1-canonical-run-identity 修改：原 requirement 路径为 `data/cache/{ticker}/{date}/l2_scout.json`，`ScoutCache._path` 直接用原始 ticker 拼路径不归一，导致 `600519` 与 `600519.SH` 双目录并存（实地证据：同票两份 cache 目录）。本修改将路径改为用 `canonical.code`（纯数字），与 L0 `CacheManager._normalize_ticker`（f1-deviation-fix D3）对齐，消除分裂。同时 cache entry 补 `run_id`/`profile_version`/`input_ticker_set_hash` 绑定（继承自 L1，纯 L2 单跑用 fallback run_id），使「数据变 vs 规则变」可区分。既有 `input_snapshot` 21 字段特征值保留作诊断用途不动。既有分裂的 L2 cache 目录按 D3 同策略安全迁移（空壳删/孤儿保/不丢真实数据）。
+Cache hit 判定 SHALL 基于 TTL（24h）+ `profile_version` 兼容性，**MUST NOT 基于 `run_id`**。`run_id` 是 execution identity（定位某次 run + 产物隔离 + 审计溯源），降级为 cache entry 的 provenance 元数据（只写、只读、不参与 hit 判定）。不同 run_id 但相同 `profile_version`（规则未变）+ 相同 canonical ticker + 同日 → SHALL cache hit（复用 24h 内的 verdict，不重调 LLM）。`profile_version` 不同（规则 bump）→ SHALL cache miss。缺 `profile_version` 的 legacy cache entry → SHALL cache miss（无法证明规则版本兼容，避免新规则 run 静默复用规则版本不明的旧 verdict）。
+
+> g1-canonical-run-identity-repair 修改：G1-3 实现的 `ScoutCache.get()` 把 `run_id` 误用作 cache hit 判定（不同 run_id → miss），破坏了 24h L2 cache 复用——每次新 L1 run 都重调 L2 LLM，违背 AD-03 成本闸门与原 `#### Scenario: Cache hit` 契约。本修改澄清 execution run_id（产物隔离/审计）与 cache 复用判定的边界：cache hit 只校验 TTL + profile_version，run_id 仅为 provenance。cache hit 时保留 cache 文件中的 source run_id 不改写；当前 run 产物（full_results/CLI payload）仍用当前 execution run_id。不引入 `CacheIdentity` 类，cache 目录与 entry 结构零改。
 
 #### Scenario: Cache hit
-- **WHEN** `scout_batch` is called for a ticker that has a valid cache entry (<24h old)
+- **WHEN** `scout_batch` is called for a ticker that has a valid cache entry (<24h old) with matching `profile_version`
 - **THEN** it SHALL reuse the cached result without calling the LLM
 
 #### Scenario: Cache structure
@@ -122,7 +124,21 @@ Scout SHALL cache results to `data/cache/{canonical.code}/{date}/l2_scout.json` 
 - **WHEN** `data/cache/` already contains split L2 directories (e.g. `600519.SH/` alongside `600519/`)
 - **THEN** migration SHALL follow the same safe strategy as f1-deviation-fix D3: empty-shell split dirs (no real `l2_scout.json`) deleted; orphan split dirs with real data (no pure-digit counterpart) moved to pure-digit dir then deleted; real data MUST NOT be lost; after migration no new split dirs SHALL be created
 
----
+#### Scenario: Cross-run cache hit when profile_version unchanged
+- **WHEN** run A writes a cache entry for `600519` on date D with `profile_version=V` and `run_id=rid_a`, and run B (different `run_id=rid_b`, same `profile_version=V`) checks the cache for `600519` on date D within 24h
+- **THEN** run B SHALL cache hit (reuse run A's verdict), MUST NOT miss solely because `run_id` differs; `run_id` is provenance metadata not a hit criterion
+
+#### Scenario: Cache miss when profile_version changed
+- **WHEN** a cache entry was written with `profile_version=V1` and the current run uses `profile_version=V2` (rule bump)
+- **THEN** it SHALL cache miss and call the LLM again; old rule's verdict MUST NOT be reused under a new rule version
+
+#### Scenario: Legacy cache without profile_version misses
+- **WHEN** a cache entry predates run-identity (no `profile_version` field) and the current run carries `profile_version`
+- **THEN** it SHALL cache miss (cannot prove rule-version compatibility); the LLM SHALL be called again to refresh the entry under the current rule version
+
+#### Scenario: Cache hit preserves source run_id
+- **WHEN** a cache hit returns a cached entry written by run A (`run_id=rid_a`) to the current run B (`run_id=rid_b`)
+- **THEN** the cache file SHALL NOT be rewritten (source `run_id=rid_a` preserved as provenance); the current run B's products (`full_results`/CLI payload) SHALL carry `run_id=rid_b` (current execution identity), not the cached `rid_a`
 
 ### Requirement: OpenAI-Compatible HTTP Client
 Scout SHALL use `httpx` (already present in L0 dependencies) to call OpenAI-compatible chat completion API. The API key and base URL SHALL be read from environment variables `LLM_API_KEY` and `LLM_API_BASE` (defined in total-design §9.1). The model name SHALL be read from `LLM_MODEL` (required, no default, fail-fast if missing).

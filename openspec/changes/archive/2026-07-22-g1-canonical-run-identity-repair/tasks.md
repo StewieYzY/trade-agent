@@ -58,9 +58,9 @@
 
 ## 8. 归档与 canonical 同步
 
-- [ ] 8.1 运行 `/opsx:archive g1-canonical-run-identity-repair`，同步 delta 到 canonical：`scout-agent`（MODIFIED 24h Cache，补 cross-run hit / profile_version miss / legacy miss / source run_id 保留 4 scenario），`run-identity`（MODIFIED 运行隔离，澄清 cache 复用边界 + legacy CLI output 不覆盖 scenario），`watchlist-diff`（MODIFIED 增量 diff，补 generated_at 排序 + mtime fallback 2 scenario）
-- [ ] 8.2 归档后验证：`openspec validate scout-agent --type spec --strict` + `openspec validate run-identity --type spec --strict` + `openspec validate watchlist-diff --type spec --strict` + `openspec validate g1-fast-personal-value-screening --strict` 通过
-- [ ] 8.3 提交归档（commit message：`chore(g1): archive g1-canonical-run-identity-repair + sync canonical specs`）
+- [x] 8.1 运行 `/opsx:archive g1-canonical-run-identity-repair`，同步 delta 到 canonical：`scout-agent`（MODIFIED 24h Cache，补 cross-run hit / profile_version miss / legacy miss / source run_id 保留 4 scenario），`run-identity`（MODIFIED 运行隔离，澄清 cache 复用边界 + legacy CLI output 不覆盖 scenario），`watchlist-diff`（MODIFIED 增量 diff，补 generated_at 排序 + mtime fallback 2 scenario）
+- [x] 8.2 归档后验证：`openspec validate scout-agent --type spec --strict` + `openspec validate run-identity --type spec --strict` + `openspec validate watchlist-diff --type spec --strict` + `openspec validate g1-fast-personal-value-screening --strict` 通过
+- [x] 8.3 提交归档（commit message：`chore(g1): archive g1-canonical-run-identity-repair + sync canonical specs`）
 - [ ] 8.4 生成下一份 rolling handoff（更新 baseline 含 G1-3+repair、记录 G1-3 archive 14.3/14.4 状态、剩余风险、推进 G1-4）——handoff 由用户决定是否生成（apply 阶段不主动写）
 
 ## 附录：repair 概念边界（design D1）
