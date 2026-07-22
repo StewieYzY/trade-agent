@@ -1,7 +1,7 @@
 # run-identity Specification
 
 ## Purpose
-定义 G1 运行身份（run identity）的能力边界：canonical ticker 单一 SoT（带后缀大写形式，复用 `data/lib/market_router.py::parse_ticker` 的 `full` 字段）、`run_id` 稳定摘要生成与 L1→L2 传播、`PROFILE_VERSION` 显式审计与 bump 约束、输入快照 identity 绑定（ticker 集合 hash + 数据/规则可区分）、运行隔离（同 run 不覆盖、跨 run 可定位）。约束 AD-09 数据/规则可区分假设——身份标识与 cache key 分离：canonical ticker 带后缀作身份/输出/聚合 key，L0 `CacheManager` 与 L2 `ScoutCache` 的 cache 目录仍用 `canonical.code`（纯数字），f1-deviation-fix D3 的 L0 cache normalize 不动。
+定义 G1 运行身份（run identity）的能力边界：canonical ticker 单一 SoT（带后缀大写形式，复用 `data/lib/market_router.py::parse_ticker` 的 `full` 字段）、`run_id` 生成（UUID4 execution identity，每次唯一）与 L1→L2 传播、`PROFILE_VERSION` 显式审计与 bump 约束、输入快照 identity 绑定（ticker 集合 hash + 数据/规则可区分）、运行隔离（同 run 不覆盖、跨 run 可定位）。约束 AD-09 数据/规则可区分假设——身份标识与 cache key 分离：canonical ticker 带后缀作身份/输出/聚合 key，L0 `CacheManager` 与 L2 `ScoutCache` 的 cache 目录仍用 `canonical.code`（纯数字），f1-deviation-fix D3 的 L0 cache normalize 不动。run_id 是 execution identity（产物隔离/审计，不参与 cache hit），输入稳定性/可区分性由 `input_ticker_set_hash` + `profile_version` 承担。
 ## Requirements
 ### Requirement: Canonical Ticker 单一 SoT
 系统 SHALL 提供唯一的 canonical ticker 函数作为身份标识 SoT，输出大写带后缀形式（如 `600519.SH`、`920060.BJ`、`00700.HK`、`AAPL`），复用 `data/lib/market_router.py::parse_ticker` 的 `full` 字段。所有身份标识场景（L1/L2 输出、watchlist/CLI 输出、聚合 key、debate/watchlist 文件命名）SHALL 调用该函数，MUST NOT 各自 inline `ticker.split(".")[0]` 或自补后缀推断。
@@ -31,23 +31,23 @@
 ---
 
 ### Requirement: Run ID 生成与 L1→L2 传播
-每次 G1 L1 运行 SHALL 生成唯一 `run_id`，下游 L2 scout 与 L4 monitor weekly SHALL 从 L1 输出继承该 `run_id`，MUST NOT 各自独立生成。`run_id` SHALL 是 `f(输入 ticker 集合 hash + 采集日 + profile_version)` 的稳定摘要，使得「相同输入 + 相同日 + 相同规则」产出相同 run_id、「输入变了」或「规则变了」产出可区分的 run_id。纯 L2 单跑（无 L1 文件）SHALL fallback 生成 run_id 并标注 `run_id_source: "scout_fallback"`。L3 是独立管线（AD-01，可手动输入 ticker），run_id 传播到 L1/L2 边界止，不强求 L3 继承。
+每次 G1 L1 运行 SHALL 生成唯一 `run_id`（UUID4，每次唯一），下游 L2 scout 与 L4 monitor weekly SHALL 从 L1 输出继承该 `run_id`，MUST NOT 各自独立生成。`run_id` 是 execution identity——定位某次 run、运行产物隔离（watchlist/CLI output run-scoped 命名）、审计溯源——**MUST NOT 是输入的稳定摘要**（相同输入同日两次运行 SHALL 产出不同 run_id）。输入稳定性与可区分性 SHALL 由 `input_ticker_set_hash`（输入 ticker 集合指纹，确定性）+ `profile_version`（规则版本）两字段承担：`input_ticker_set_hash` 区分「输入集合变了」、`profile_version` 区分「规则变了」，run_id 只负责「定位到哪次 run」。纯 L2 单跑（无 L1 文件）SHALL fallback 生成 run_id 并标注 `run_id_source: "scout_fallback"`。L3 是独立管线（AD-01，可手动输入 ticker），run_id 传播到 L1/L2 边界止，不强求 L3 继承。
 
 #### Scenario: L1 生成 run_id 并写入输出
 - **WHEN** `screen_a_shares(tickers)` 被调用
-- **THEN** 返回结构顶层 SHALL 含 `run_id`（非空字符串）、`run_date`、`profile_version`、`input_ticker_set_hash` 四字段
+- **THEN** 返回结构顶层 SHALL 含 `run_id`（非空字符串，UUID4 格式）、`run_date`、`profile_version`、`input_ticker_set_hash` 四字段
 
-#### Scenario: 相同输入两次运行 run_id 一致
+#### Scenario: 相同输入两次运行 run_id 不同
 - **WHEN** 同一 ticker 集合、同一采集日、同一 profile_version 调用 `screen_a_shares` 两次
-- **THEN** 两次返回的 `run_id` SHALL 相同（稳定摘要，非随机 uuid）
+- **THEN** 两次返回的 `run_id` SHALL 不同（UUID4 每次唯一），但 `input_ticker_set_hash` SHALL 相同（确定性输入指纹，run_id 与 input_hash 解耦）
 
-#### Scenario: 输入变化 run_id 可区分
+#### Scenario: 输入变化由 input_ticker_set_hash 可区分
 - **WHEN** ticker 集合变化（增/删/改任一 code）但采集日与 profile_version 不变
-- **THEN** `run_id` SHALL 与原 run_id 不同，且 `input_ticker_set_hash` SHALL 不同（定位到「输入数据变了」）
+- **THEN** `input_ticker_set_hash` SHALL 与原 hash 不同（定位到「输入集合变了」）；run_id 因 UUID4 本就每次唯一，不承担可区分性
 
-#### Scenario: 规则变化 run_id 可区分
+#### Scenario: 规则变化由 profile_version 可区分
 - **WHEN** profile_version bump（规则常量变化）但 ticker 集合与采集日不变
-- **THEN** `run_id` SHALL 与原 run_id 不同（定位到「输入未变但规则变了」），且 `profile_version` 字段不同
+- **THEN** `profile_version` 字段 SHALL 与原不同（定位到「规则变了」）；run_id 因 UUID4 本就每次唯一，不承担可区分性
 
 #### Scenario: L2 从 L1 继承 run_id
 - **WHEN** `scout_batch` 处理来自 L1 输出的 candidates（candidates 携带或 L1 文件含 `run_id`）
@@ -129,4 +129,3 @@
 #### Scenario: legacy CLI output 无 run_id 不覆盖
 - **WHEN** CLI `screen`/`scout` 的 `--output` 目标路径已存在一个无 `run_id` 字段的旧文件（G1-3 前遗留产物，或损坏的非 JSON 文件），且当前 run 携带 `run_id`
 - **THEN** 当前 run SHALL 写入 run-scoped 分流文件名（`{stem}.{run_id[:8]}.json`），MUST NOT 覆盖该旧无 identity 文件；旧文件保留可读取
-

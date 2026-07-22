@@ -84,4 +84,3 @@
 #### Scenario: L2 verdict 未翻转
 - **WHEN** `l2_verdict` 保持 `deep_dive` 或保持 `pass`/`reject`
 - **THEN** 不触发 L3 深研，即使已有 L3 结果也不重跑
-

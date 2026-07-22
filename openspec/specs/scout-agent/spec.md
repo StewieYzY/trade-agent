@@ -329,4 +329,3 @@ f3a SHALL NOT 修改 `scout/input_assembly.py::assemble_snapshot`，L2 快管线
 
 - **WHEN** 候选走 insufficient_data 或 LLM 调用失败路径生成 `verdict=error` 的 result
 - **THEN** 该 error result SHALL 含与正常 result 相同的契约字段 `one_liner`/`red_flags`/`green_flags`/`anti_trap_flags`/`low_confidence_anomaly`（空数组/默认值），MUST NOT 只有 `ticker`/`verdict`/`error`
-
