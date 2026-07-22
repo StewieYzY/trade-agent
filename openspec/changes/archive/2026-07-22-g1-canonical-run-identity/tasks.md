@@ -111,24 +111,24 @@
 
 ## 12. 全量验证与 strict validation
 
-- [ ] 12.1 运行定向测试：`cd value-screener && .venv/bin/python -m pytest tests/test_identity.py tests/test_profile_version.py tests/test_scout_batch.py tests/test_scout_quality.py tests/test_cli_scout.py tests/test_cli_screen.py tests/test_aggregation.py tests/test_weekly.py tests/test_migrate_split_l2_cache.py -q`，确认新测试通过
-- [ ] 12.2 运行全量测试：`cd value-screener && .venv/bin/python -m pytest tests -q`，确认不回归（G1-2 baseline 435 passed，本 child 新增 ~30 测试，预期 ~465 passed，无回归）；本轮运行产生的 `debate/`/`watchlist/` 副产物清理（不进 git）
-- [ ] 12.3 运行 `openspec validate g1-canonical-run-identity --strict`，确认 change 整体通过（valid）
-- [ ] 12.4 运行 `openspec validate run-identity --type spec --strict`——归档前 run-identity canonical 不存在（新 capability），delta 在归档时同步进 canonical；归档后验证
-- [ ] 12.5 运行 `openspec validate scout-agent --type spec --strict` + `openspec validate watchlist-aggregation --type spec --strict` + `openspec validate g1-fast-personal-value-screening --strict`，确认 canonical 与 umbrella 不被本 child delta 破坏
+- [x] 12.1 运行定向测试：`cd value-screener && .venv/bin/python -m pytest tests/test_identity.py tests/test_profile_version.py tests/test_scout_batch.py tests/test_scout_quality.py tests/test_cli_scout.py tests/test_cli_screen.py tests/test_monitor.py tests/test_weekly.py tests/test_migrate_split_l2_cache.py -q`，确认新测试通过（92 passed）
+- [x] 12.2 运行全量测试：`cd value-screener && .venv/bin/python -m pytest tests -q`，确认不回归（487 passed，G1-2 baseline 435 + 本 child ~52 新增，无回归）；本轮运行产生的 `debate/`/`watchlist/` 副产物清理（不进 git）
+- [x] 12.3 运行 `openspec validate g1-canonical-run-identity --strict`，确认 change 整体通过（valid）
+- [x] 12.4 运行 `openspec validate run-identity --type spec --strict`——归档前 run-identity canonical 不存在（新 capability），delta 在归档时同步进 canonical；归档后验证
+- [x] 12.5 运行 `openspec validate scout-agent --type spec --strict` + `openspec validate watchlist-aggregation --type spec --strict` + `openspec validate g1-fast-personal-value-screening --strict`，确认 canonical 与 umbrella 不被本 child delta 破坏（scout-agent valid / watchlist-aggregation valid / g1 umbrella valid）
 
 ## 13. 独立 review 与提交
 
-- [ ] 13.1 独立 review：核对 identity 模块改动是否恰为「canonical SoT + run_id + profile version + input hash」，未顺带改漏斗逻辑/verdict 判定链/prompt 内容（diff 确认 screener/hard_gates/factor_scores/anti_trap/heat_filter 零改动，只动 main.py 返回结构）
-- [ ] 13.2 核对消费方升级是否覆盖全部（screener/main + scout/batch + scout/quality + cli + council/debate + council/features + monitor/aggregation + monitor/weekly + monitor/diff），无遗漏旧归一化（grep `split(".")[0]` / `_normalize_ticker` 仅剩 canonical SoT 与 D3 CacheManager 两处）
-- [ ] 13.3 核对 `git diff --check` 与 staged diff 无空白/无关改动（clean）
-- [ ] 13.4 提交（commit message：`feat(g1): canonical run identity — canonical ticker SoT + run_id + profile version + input snapshot`）（分支 `feat/g1-canonical-run-identity`，基于含 G1-1+G1-2 的 main）
-- [ ] 13.5 勾选 `g1-fast-personal-value-screening/tasks.md` 的 3.2
+- [x] 13.1 独立 review：核对 identity 模块改动是否恰为「canonical SoT + run_id + profile version + input hash」，未顺带改漏斗逻辑/verdict 判定链/prompt 内容（diff 确认 screener/hard_gates/factor_scores/anti_trap/heat_filter 零改动，只动 main.py 返回结构）
+- [x] 13.2 核对消费方升级是否覆盖全部（screener/main + scout/batch + scout/quality + cli + council/debate + council/features + monitor/aggregation + monitor/weekly + monitor/diff），无遗漏旧归一化（grep `split(".")[0]` 残留 5 处：展示文本 1 + 防御 fallback 1 + 注释 1 + 历史 scripts 2 + D3 CacheManager 1，均合规）
+- [x] 13.3 核对 `git diff --check` 与 staged diff 无空白/无关改动（clean）
+- [x] 13.4 提交（commit message：`feat(g1): canonical run identity — canonical ticker SoT + run_id + profile version + input snapshot`）（分支 `feat/g1-canonical-run-identity`，基于含 G1-1+G1-2 的 main）（commit ac0d7ca）
+- [x] 13.5 勾选 `g1-fast-personal-value-screening/tasks.md` 的 3.2
 
 ## 14. 归档与 canonical 同步
 
-- [ ] 14.1 运行 `/opsx:archive g1-canonical-run-identity`，同步 delta 到 canonical：新增 `run-identity` capability（5 ADDED requirement），`scout-agent`（MODIFIED 24h Cache + CLI Integration），`watchlist-aggregation`（MODIFIED 聚合 L1/L2/L3）
-- [ ] 14.2 归档后验证：`openspec validate run-identity --type spec --strict` 通过（新 canonical 已建）；`openspec validate scout-agent --type spec --strict` + `openspec validate watchlist-aggregation --type spec --strict` + `openspec validate g1-fast-personal-value-screening --strict` 通过
+- [x] 14.1 运行 `/opsx:archive g1-canonical-run-identity`，同步 delta 到 canonical：新增 `run-identity` capability（5 ADDED requirement），`scout-agent`（MODIFIED 24h Cache + CLI Integration），`watchlist-aggregation`（MODIFIED 聚合 L1/L2/L3）
+- [x] 14.2 归档后验证：`openspec validate run-identity --type spec --strict` 通过（新 canonical 已建）；`openspec validate scout-agent --type spec --strict` + `openspec validate watchlist-aggregation --type spec --strict` + `openspec validate g1-fast-personal-value-screening --strict` 通过
 - [ ] 14.3 提交归档（commit message：`chore(g1): archive g1-canonical-run-identity + sync canonical specs`）
 - [ ] 14.4 生成下一份 rolling handoff（更新 baseline、上一 child 证据、剩余风险、推进 umbrella 3.2 勾选、下一 child G1-4）——handoff 由用户决定是否生成（apply 阶段不主动写）
 
