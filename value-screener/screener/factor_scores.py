@@ -151,8 +151,13 @@ def _compute_value_score(ticker_data: dict, industry_pe_map: dict | None = None)
 
     scores = []
 
+    # g1-4-data-source-resilience D3: pe_ttm 经 fallback 返全市场均值时标
+    # present_but_degraded，不得当真值参与 PE 行业折价/PE×PB 打分（承接 canonical
+    # data-minimum-contract §4「CNINFO fallback 把 pe_ttm 静默改写为全市场均值」禁止项）
+    pe_ttm_degraded = valuation.get("pe_ttm_status") == "present_but_degraded"
+
     # 子项 1: PE 行业折价 (40%)
-    pe_ttm = valuation.get("pe_ttm") or basic.get("pe")
+    pe_ttm = (None if pe_ttm_degraded else valuation.get("pe_ttm")) or basic.get("pe")
     industry = basic.get("industry")
 
     # 尝试行业折价（主信号）
@@ -183,7 +188,7 @@ def _compute_value_score(ticker_data: dict, industry_pe_map: dict | None = None)
         scores.append(("pb", pb_score, 0.30))
 
     # 子项 3: PE×PB < 22.5 (30%)
-    pe = valuation.get("pe_ttm") or basic.get("pe")
+    pe = (None if pe_ttm_degraded else valuation.get("pe_ttm")) or basic.get("pe")
     if pe is not None and pb is not None:
         pe_pb = pe * pb
         pe_pb_score = _score_linear_decay(pe_pb, 22.5, 30.0, invert=False)

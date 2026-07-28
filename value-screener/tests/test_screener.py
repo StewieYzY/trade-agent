@@ -386,6 +386,40 @@ def test_pe_percentile_fallback_pe_ttm_missing():
     assert scores["value"] > 80
 
 
+def test_pe_ttm_present_but_degraded_excluded_from_ranking():
+    """pe_ttm 经 fallback 返全市场均值（非该公司自身 PE）不得参与 ranking（g1-4-data-source-resilience D3）
+
+    CNINFO fallback 把全表均值赋给 pe_ttm 当真值，下游 PE 行业折价/PE×PB
+    会基于「假 PE」打分。标 pe_ttm_status=present_but_degraded 后，PE 子项
+    应退出排名只保留诊断（承接 canonical data-minimum-contract §4 禁止项）。
+    """
+    industry_pe_map = {"白酒": 30.0}
+
+    # 场景 A: pe_ttm=60 是 fallback 全市场均值，标 present_but_degraded
+    # （60 远高于行业 PE 30，若当真值参与 PE 行业折价会得 0 分拉低 value）
+    degraded = {
+        "basic": {"pb": 1.5, "price": 10.0, "industry": "白酒"},
+        "financials": {},
+        "valuation": {"pe_ttm": 60.0, "pe_ttm_status": "present_but_degraded", "pb": 1.5},
+        "risk": {},
+    }
+    # 场景 B: pe_ttm=60 是真值（无 status），应正常参与 PE 行业折价被罚分
+    real_pe = {
+        "basic": {"pb": 1.5, "price": 10.0, "industry": "白酒"},
+        "financials": {},
+        "valuation": {"pe_ttm": 60.0, "pb": 1.5},
+        "risk": {},
+    }
+
+    degraded_scores = compute_factor_scores(degraded, industry_pe_map=industry_pe_map)
+    real_scores = compute_factor_scores(real_pe, industry_pe_map=industry_pe_map)
+    # present_but_degraded 的 pe_ttm 不得参与 PE 行业折价，degraded value 应高于
+    # 真值场景（真值 60 vs 行业 30 会被 PE 行业折价罚分拉低 value）
+    assert degraded_scores["value"] > real_scores["value"], (
+        "present_but_degraded 的 pe_ttm 不得当真值参与 PE 行业折价打分"
+    )
+
+
 def test_pe_both_signals_missing():
     """PE 全缺失：pe_ttm 和 pe_percentile_5y 都 None 应跳过 PE 子项"""
     ticker_data = {

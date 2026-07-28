@@ -92,7 +92,13 @@ class ValuationFetcher(BaseFetcher):
         vals = [v for v in vals if v is not None]
         industry_pe = round(sum(vals) / len(vals), 2) if vals else None
         return {
+            # g1-4-data-source-resilience D3: 全市场均值非该公司自身 PE，标
+            # present_but_degraded + provenance，下游不得当真值参与 ranking
+            # （承接 canonical data-minimum-contract §4「CNINFO fallback 把
+            # pe_ttm 静默改写为全市场均值」禁止项）
             "pe_ttm": industry_pe,
+            "pe_ttm_status": "present_but_degraded",
+            "pe_ttm_provenance": {"source": "fallback_cninfo_full_market_mean"},
             "pb": None,
             "pe_percentile_5y": None,
             "pb_percentile_5y": None,
