@@ -222,7 +222,13 @@ def _compute_safety_margin_score(ticker_data: dict) -> tuple[float, str | None]:
     dcf_note = _diagnose_dcf(financials, basic)
 
     # 安全边际 100% 由质押率构成
+    # g1-4-data-source-resilience D2: pledge_ratio 缺失按 pledge_status 三态区分
+    # （承接 canonical data-minimum-contract「risk.pledge_ratio 缺失三态区分」requirement）：
+    # - record_not_found（查无质押记录=known-zero）→ 满分（0% 质押最安全）
+    # - source_failed（provider 全失败）→ safety=0 惩罚性降级（沿用 quantitative-screener spec）
+    # - invalid_value（值解析失败）→ safety=0
     pledge_ratio = risk.get("pledge_ratio")
+    pledge_status = risk.get("pledge_status")
     if pledge_ratio is not None:
         # < 20% 得满分，20-60% 线性衰减，> 60% 得 0
         if pledge_ratio <= 20.0:
@@ -232,8 +238,11 @@ def _compute_safety_margin_score(ticker_data: dict) -> tuple[float, str | None]:
         else:
             pledge_score = (60.0 - pledge_ratio) / (60.0 - 20.0) * 100.0
         return (pledge_score, dcf_note)
+    # pledge_ratio 为 None：按 pledge_status 区分成因
+    if pledge_status == "record_not_found":
+        return (100.0, dcf_note)  # known-zero 最安全
 
-    # 质押率缺失时安全边际为 0
+    # source_failed / invalid_value / 未标 status：惩罚性 0（保守，不把缺失当安全值）
     return (0.0, dcf_note)
 
 

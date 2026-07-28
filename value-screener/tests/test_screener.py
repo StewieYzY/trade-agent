@@ -559,6 +559,39 @@ def test_safety_margin_only_pledge_when_dcf_excluded():
         f"安全边际应 100% 由质押率构成（75.0），实际为 {scores['safety_margin']}"
 
 
+def test_safety_pledge_record_not_found_known_zero_full_score():
+    """pledge_status=record_not_found（查无质押记录=known-zero）应满分（g1-4-data-source-resilience D2）
+
+    查无质押记录是正面安全信号（0% 质押，最安全），不是 provider 失败。
+    当前 pledge_ratio=None 不分成因一律 safety=0，把 known-zero 当惩罚，
+    违反 canonical data-minimum-contract「risk.pledge_ratio 缺失三态区分」requirement。
+    """
+    ticker_data = {
+        "basic": {"price": 10.0},
+        "financials": {},
+        "valuation": {},
+        "risk": {"pledge_ratio": None, "pledge_status": "record_not_found"},
+    }
+    scores = compute_factor_scores(ticker_data)
+    assert scores["safety_margin"] == 100.0, (
+        "record_not_found=known-zero 应满分（0% 质押最安全），不得当 source_failed 惩罚"
+    )
+
+
+def test_safety_pledge_source_failed_zero_score():
+    """pledge_status=source_failed（provider 全失败）应 safety=0 惩罚（g1-4-data-source-resilience D2）"""
+    ticker_data = {
+        "basic": {"price": 10.0},
+        "financials": {},
+        "valuation": {},
+        "risk": {"pledge_ratio": None, "pledge_status": "source_failed"},
+    }
+    scores = compute_factor_scores(ticker_data)
+    assert scores["safety_margin"] == 0.0, (
+        "source_failed 应 safety=0 惩罚性降级（沿用 quantitative-screener spec）"
+    )
+
+
 def test_dcf_note_insufficient_data():
     """验证 FCF 不足 2 期时，dcf_note 为 insufficient_data."""
     ticker_data = {

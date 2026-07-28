@@ -27,19 +27,30 @@ _lazy_pledge = _LazyTable(lambda: __import__("akshare").stock_gpzy_pledge_ratio_
 _lazy_audit = _LazyTable(lambda: __import__("akshare").stock_audit_report_em())
 
 
-def _fetch_pledge_ratio(code: str) -> float | None:
-    """全市场质押率表 → 本只最新质押率(%)。"""
+def _fetch_pledge_ratio(code: str) -> tuple[float | None, str]:
+    """全市场质押率表 → 本只最新质押率(%) + pledge_status。
+
+    g1-4-data-source-resilience D2: 区分三态（承接 canonical data-minimum-contract
+    「risk.pledge_ratio 缺失三态区分」requirement）：
+    - source_failed: 表空/raise（provider 全失败，由 fetch_with_fallback 兜底标）
+    - record_not_found: 查无该 ticker 记录（known-zero，正面安全信号）
+    - invalid_value: 值解析失败
+    """
     df = _lazy_pledge.get()
     if df is None or len(df) == 0:
         raise KeyError("stock_gpzy_pledge_ratio_em empty")
     code_col = next((c for c in df.columns if "代码" in str(c)), df.columns[1])
     rows = df[df[code_col].astype(str).str.zfill(6) == code]
     if rows.empty:
-        return None  # 无质押记录视为 0
+        # 查无记录 = known-zero（provider 成功，仅本只无质押），非 provider 失败
+        return None, "record_not_found"
     ratio_col = next((c for c in df.columns if "质押" in str(c) and ("比例" in str(c) or "%" in str(c))), None)
     if ratio_col is None:
         ratio_col = next((c for c in df.columns if "比例" in str(c)), df.columns[-1])
-    return _to_float(rows.iloc[0][ratio_col])
+    val = _to_float(rows.iloc[0][ratio_col])
+    if val is None:
+        return None, "invalid_value"
+    return val, "record_found"
 
 
 def _fetch_audit_opinion(code: str) -> str | None:
@@ -86,11 +97,18 @@ class RiskFetcher(BaseFetcher):
         return None
 
     def fetch(self, ticker: str) -> dict:
-        pledge = _fetch_pledge_ratio(ticker)
+        # g1-4-data-source-resilience D2: _fetch_pledge_ratio 返 (value, status)。
+        # 表空 raise → 标 source_failed（provider 全失败）；record_not_found/invalid_value
+        # 由 _fetch_pledge_ratio 返回。承接 canonical data-minimum-contract 三态区分。
+        try:
+            pledge, pledge_status = _fetch_pledge_ratio(ticker)
+        except (KeyError, ValueError, AttributeError):
+            pledge, pledge_status = None, "source_failed"
         goodwill = self._fetch_goodwill_from_financials(ticker)
         audit = _fetch_audit_opinion(ticker)  # 可选降级，None 不阻塞
         return {
             "pledge_ratio": pledge,
+            "pledge_status": pledge_status,
             "goodwill": goodwill,
             "audit_opinion": audit,
         }
