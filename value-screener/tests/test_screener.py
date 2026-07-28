@@ -151,6 +151,23 @@ def test_empty_data_degradation():
     assert scores["safety_margin"] > 0
 
 
+def test_f_score_none_when_financials_missing():
+    """f_score 在 financials 缺失时应返 None，不返 0 误导下游（g1-4-data-source-resilience D6）
+
+    F-Score 0 是真·财务质量最差；financials 缺失是「无数据」，两者语义不同。
+    返 0 会让下游/L2 误判「财务质量 0 分」参与判断，违反 canonical
+    data-minimum-contract §4「financials 缺失→F-Score=0」禁止项。
+    """
+    ticker_data = {
+        "basic": {"code": "000001", "name": "测试", "price": 10.0},
+        "financials": {},
+        "valuation": {"pe_percentile_5y": 40, "pb": 2.0, "pe_ttm": 15},
+        "risk": {"pledge_ratio": 30},
+    }
+    scores = compute_factor_scores(ticker_data)
+    assert scores["f_score"] is None, "financials 缺失时 f_score 不得返 0 误导下游，应返 None"
+
+
 def test_fcf_validity_check():
     """验证 FCF 有效性：CONSTRUCT_LONG_ASSET 全 None 时跳过 DCF"""
     ticker_data = {

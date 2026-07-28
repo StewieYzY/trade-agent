@@ -294,7 +294,10 @@ def compute_factor_scores(ticker_data: dict, industry_pe_map: dict | None = None
          "f_score": int, "dcf_note": str | None}
     """
     financials = ticker_data.get("financials", {})
-    f_score = compute_f_score(financials) if financials else 0
+    # g1-4-data-source-resilience D6: financials 缺失时 f_score 返 None（非 0）。
+    # F-Score 0 是真·财务质量最差；financials 缺失是「无数据」，返 0 会让下游/L2
+    # 误判「财务质量 0 分」参与判断（canonical data-minimum-contract §4 禁止项）。
+    f_score = compute_f_score(financials) if financials else None
 
     quality = _compute_quality_score(ticker_data)
     value = _compute_value_score(ticker_data, industry_pe_map)
