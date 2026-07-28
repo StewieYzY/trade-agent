@@ -220,26 +220,26 @@ def test_h2_fail_less_than_3_years():
 
 
 def test_h2_empty_years():
-    """H2 失败：financials.years 为空应排除"""
+    """H2 not_evaluable：financials.years 为空是数据缺失，不误杀（g1-4-data-source-resilience D4）"""
     ticker_data = {
         "basic": {"name": "空数据股", "market_cap": 100e8, "industry": "科技", "pe": 20},
         "financials": {"years": []},
         "risk": {"pledge_ratio": 30, "audit_opinion": "标准无保留意见"},
     }
     result = check_hard_gates(ticker_data)
-    assert result["pass"] is False
-    assert "H2" in result["failed_gates"]
+    assert "H2" not in result["failed_gates"], "数据缺失不得判 H2 FAIL 误杀"
+    assert "H2" in result.get("not_evaluable_gates", []), "数据缺失应标 not_evaluable"
 
 
 def test_h2_no_financials_key():
-    """H2 失败：ticker_data 无 financials 键时应排除（容错默认 []）"""
+    """H2 not_evaluable：ticker_data 无 financials 键是数据缺失，不误杀（g1-4-data-source-resilience D4）"""
     ticker_data = {
         "basic": {"name": "无财报股", "market_cap": 100e8, "industry": "科技", "pe": 20},
         "risk": {"pledge_ratio": 30, "audit_opinion": "标准无保留意见"},
     }
     result = check_hard_gates(ticker_data)
-    assert result["pass"] is False
-    assert "H2" in result["failed_gates"]
+    assert "H2" not in result["failed_gates"], "数据缺失不得判 H2 FAIL 误杀"
+    assert "H2" in result.get("not_evaluable_gates", []), "数据缺失应标 not_evaluable"
 
 
 # ==================== R2: PE 行业折价双轨策略测试 ====================

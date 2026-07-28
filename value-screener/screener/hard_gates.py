@@ -35,6 +35,7 @@ def check_hard_gates(ticker_data: dict, exclude_cyclicals: bool = False) -> dict
     risk = ticker_data.get("risk", {})
     financials = ticker_data.get("financials", {})
     failed_gates = []
+    not_evaluable_gates = []
 
     # H1: ST/*ST/退市风险
     name = basic.get("name")
@@ -43,8 +44,12 @@ def check_hard_gates(ticker_data: dict, exclude_cyclicals: bool = False) -> dict
             failed_gates.append("H1")
 
     # H2: 上市 < 3 年（用 financials.years 近似：期数不足即财务历史不够）
+    # g1-4-data-source-resilience D4: 数据缺失（无 financials 键或 years 空 list）
+    # 输出 not_evaluable 不误杀；years 有值但 <3 仍 FAIL（区分「数据缺失」与「确实不足 3 年」）
     years = financials.get("years", [])
-    if len(years) < 3:
+    if len(years) == 0:
+        not_evaluable_gates.append("H2")
+    elif len(years) < 3:
         failed_gates.append("H2")
 
     # H3: 市值 < 50 亿 (50e8 = 50亿)
@@ -82,4 +87,4 @@ def check_hard_gates(ticker_data: dict, exclude_cyclicals: bool = False) -> dict
         if pe < 0:
             failed_gates.append("H8")
 
-    return {"pass": len(failed_gates) == 0, "failed_gates": failed_gates}
+    return {"pass": len(failed_gates) == 0, "failed_gates": failed_gates, "not_evaluable_gates": not_evaluable_gates}
