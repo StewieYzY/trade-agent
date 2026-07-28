@@ -60,5 +60,5 @@
 
 - [x] 9.1 `openspec validate g1-data-minimum-contract --strict` 通过
 - [x] 9.2 放行判断自查：能明确回答 handoff §7 八个问题（G1 最少需要哪些字段、21 字段哪些 required、每个字段缺失做什么、哪些可人工补充是否阻断、哪些只保留采集不参与 G1、东财失败如何区分三态、G2/G3 缺口由谁负责、G1-4 真实 Gate 依赖哪些字段和 evidence）
-- [ ] 9.3 停下交用户 review，不直接 apply runtime；apply 中若需改 runtime（H2/heat_filter/valuation fallback/industry_mapper/risk fallback 等）拆 `g1-4-data-source-resilience` implementation/repair child
-- [ ] 9.4 design child 通过后由用户决定下一步：开 repair child / 按新契约调整 G1-4 harness 重跑 / 部分字段降 diagnostic-only / 对特定关键字段开窄人工补充 child；在数据契约与关键 provider 能力未明确前，不 archive G1-4、不勾选 umbrella 4.1/4.2、不开 G2 runtime
+- [x] 9.3 停下交用户 review，不直接 apply runtime；apply 中若需改 runtime（H2/heat_filter/valuation fallback/industry_mapper/risk fallback 等）拆 `g1-4-data-source-resilience` implementation/repair child
+- [x] 9.4 design child 通过后由用户决定下一步：开 repair child / 按新契约调整 G1-4 harness 重跑 / 部分字段降 diagnostic-only / 对特定关键字段开窄人工补充 child；在数据契约与关键 provider 能力未明确前，不 archive G1-4、不勾选 umbrella 4.1/4.2、不开 G2 runtime
