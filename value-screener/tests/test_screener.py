@@ -114,6 +114,26 @@ def test_hf1_direction():
     assert "HF1" not in result.get("failed_filters", [])
 
 
+def test_hf_kline_missing_not_evaluable():
+    """kline 维度缺失应输出 not_evaluable，不静默放行（g1-4-data-source-resilience D5）"""
+    result = check_heat_filter({})
+    assert result["pass"] is False, "kline 缺失不得静默 pass=True 放行"
+    assert result.get("not_evaluable") is True, "kline 缺失应标 not_evaluable"
+
+
+def test_hf_insufficient_data_not_evaluable():
+    """close/turnover 不足 60 日应输出 not_evaluable，不静默放行（g1-4-data-source-resilience D5）"""
+    insufficient = {
+        "kline": {
+            "turnover_rate": [0.3] * 30,  # 不足 60 日
+            "close": [10.0] * 30,
+        }
+    }
+    result = check_heat_filter(insufficient)
+    assert result["pass"] is False, "数据不足不得静默 pass=True 放行"
+    assert result.get("not_evaluable") is True, "数据不足应标 not_evaluable"
+
+
 def test_empty_data_degradation():
     """验证空数据降级：financials={} 时 quality=0"""
     ticker_data = {

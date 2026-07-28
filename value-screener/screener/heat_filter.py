@@ -25,16 +25,17 @@ def check_heat_filter(ticker_data: dict) -> dict:
     """
     kline = ticker_data.get("kline", {})
 
-    # 数据缺失容错
+    # g1-4-data-source-resilience D5: kline 维度缺失或数据不足 60 日输出 not_evaluable，
+    # 不静默 pass=True 放行（承接 canonical data-minimum-contract §4「heat_filter kline 缺失即放行」禁止项）
     if not kline:
-        return {"pass": True, "failed_filters": []}
+        return {"pass": False, "not_evaluable": True, "failed_filters": [], "reason": "kline_missing"}
 
     turnover_rate = kline.get("turnover_rate", [])
     close = kline.get("close", [])
 
     # 数据不足容错（需要至少 60 日数据）
     if len(turnover_rate) < 60 or len(close) < 60:
-        return {"pass": True, "failed_filters": []}
+        return {"pass": False, "not_evaluable": True, "failed_filters": [], "reason": "insufficient_data"}
 
     failed_filters = []
 
@@ -60,4 +61,4 @@ def check_heat_filter(ticker_data: dict) -> dict:
         if gain_60d > 20:
             failed_filters.append("HF2")
 
-    return {"pass": len(failed_filters) == 0, "failed_filters": failed_filters}
+    return {"pass": len(failed_filters) == 0, "not_evaluable": False, "failed_filters": failed_filters}
