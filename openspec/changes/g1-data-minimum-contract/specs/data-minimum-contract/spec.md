@@ -77,17 +77,20 @@ G1 快筛闭环所需字段 SHALL 以真实代码消费者为依据确定，MUST
 
 | 字段情况 | 规则结果 | L1 去向 | L2 verdict |
 |---|---|---|---|
-| 关键字段缺失且不能判断（required_missing block，如 market_cap/name/kline） | not_evaluable | 排除/不计入该 gate 放行 | error |
-| 非关键字段缺失（degraded，如 industry 单 ticker/pe_ttm 子项） | not_evaluable 该规则，其余继续 | 继续 | watch + degraded:true（仅当改分） |
+| L2 critical 缺失（required_missing block，仅 `basic.name`/`basic.market_cap`，属 L2 `critical_fields`） | not_evaluable | 排除/不计入该 gate 放行 | error |
+| Heat filter 字段缺失（required_missing block，`kline.close`/`kline.turnover_rate`，**不在 L2 critical_fields**） | heat_filter not_evaluable（阻断 heat 放行） | 继续走漏斗，但 heat 不计为「放行通过」；是否计入 `after_heat_filter` 由 repair child 定 | continue（不自动 error，kline 非 L2 critical） |
+| 非关键字段缺失（degraded，如 industry 单 ticker/pe_ttm 子项/financials 因子失效） | not_evaluable 该规则，其余继续 | 继续 | watch + degraded:true（仅当改分） |
 | 人工补充可恢复且不阻断（manual_action_required ranking_blocked=false，如 pledge source_failed） | safety=0 惩罚但继续 | 继续，带 manual_action_required_fields 标记 | continue（不强盖 degraded:true） |
 | 人工补充可恢复但阻断（manual_action_required ranking_blocked=true，如 market_cap 缺失） | not_evaluable | 排除 | error |
 | 已确认查无记录（record_not_found，如 pledge known-zero） | 满分/正常 | 继续 | 不改变 verdict |
 | 诊断字段缺失（diagnostic_only，如 risk.goodwill） | 不影响 | 继续 | 不改变 verdict |
 
+> 按 consumer 拆分原则：H2 unknown（financials.years 缺失）不误杀，漏斗计数方式由 repair child 实现；Heat filter unknown 阻断 heat 放行但不自动造成 L2 error（kline 不在 L2 critical_fields）；只有 L2 critical_fields（name/market_cap）缺失才直接 L2 error。`not_evaluable`≠`pass`，依赖该字段的 gate 不计为「放行通过」。runtime 计数机制由 repair child 定。
+
 #### Scenario: not_evaluable 不等于 pass
 
 - **WHEN** 某规则因字段缺失输出 `not_evaluable`
-- **THEN** 该结果 SHALL NOT 等同于 `pass=True`，MUST NOT 因 `not_evaluable` 静默放行该 ticker 进入下游；依赖该字段的 gate SHALL 不计入 `after_hard_gates` 放行计数（runtime 计数方式由 repair child 定）
+- **THEN** 该结果 SHALL NOT 等同于 `pass=True`，MUST NOT 因 `not_evaluable` 静默放行该 ticker 进入下游；依赖该字段的 gate SHALL 不计为「放行通过」。具体漏斗计数（H2 unknown 是否计入 `after_hard_gates`、heat unknown 是否计入 `after_heat_filter`）由 `g1-4-data-source-resilience` repair child 实现定。
 
 #### Scenario: L2 error 与 degraded→watch 按表区分
 
@@ -158,12 +161,12 @@ G1 快筛闭环所需字段 SHALL 以真实代码消费者为依据确定，MUST
 
 ### Requirement: 人工补充契约
 
-字段级 `manual_action_required` SHALL 携带最小结构：canonical ticker、字段名、status、失败原因、已尝试来源（`attempted_sources`）、数据日期（`as_of_date`）、人工动作描述（`requested_action`）、阻断的规则/因子列表（`blocks`）、是否阻断 ranking（`ranking_blocked`）、补充后是否需重跑（`requires_rerun`）、是否需 provenance（`provenance_required` + `manual_value_source` + `manual_value_note`）。人工补充 SHALL NOT 绕过 G1 Gate；关键字段大量进入人工补充时 SHALL 记录为 provider 能力不足（`manual_action_rate`），MUST NOT 宣称样本通过。本 requirement 只定义契约结构，不实现录入 UI。
+字段级 `manual_action_required` SHALL 携带最小结构：canonical ticker、字段名、status、失败原因、已尝试来源（`attempted_sources`）、数据日期（`as_of_date`）、人工动作描述（`requested_action`）、**受影响的规则/因子列表（`affected_rules`）**、是否阻断 ranking（`ranking_blocked`）、补充后是否需重跑（`requires_rerun`）、是否需 provenance（`provenance_required` + `manual_value_source` + `manual_value_note`）。`affected_rules` 列受该字段缺失影响的规则（如 H6/A5/safety_margin），`ranking_blocked` 表达是否真阻断 ranking——两者分离，MUST NOT 把「受影响规则」当「被阻断规则」。人工补充 SHALL NOT 绕过 G1 Gate；关键字段大量进入人工补充时 SHALL 记录为 provider 能力不足（`manual_action_rate`），MUST NOT 宣称样本通过。本 requirement 只定义契约结构，不实现录入 UI。
 
 #### Scenario: pledge_ratio 单源失败的人工补充契约
 
 - **WHEN** `risk.pledge_ratio` 东财单一源失败（`source_failed`），自动 provider 全部失败
-- **THEN** SHALL 产出人工补充契约：`field="pledge_ratio"`、`status="manual_action_required"`、`reason="all_automated_providers_failed"`、`attempted_sources=["eastmoney"]`、`blocks=["safety_margin_ranking","H6","A5"]`、`ranking_blocked=false`、`requires_rerun=true`、`provenance_required=true`
+- **THEN** SHALL 产出人工补充契约：`field="pledge_ratio"`、`status="manual_action_required"`、`reason="all_automated_providers_failed"`、`attempted_sources=["eastmoney"]`、`affected_rules=["safety_margin_ranking","H6","A5"]`、`ranking_blocked=false`、`requires_rerun=true`、`provenance_required=true`
 
 #### Scenario: 阻断 ranking 的关键字段人工补充
 

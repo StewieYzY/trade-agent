@@ -77,14 +77,17 @@ G1-4「300 样本规模预检」暴露的不是单点脚本 bug，而是 **G1 �
 
 | 字段情况 | 规则结果 | L1 去向 | L2 verdict |
 |---|---|---|---|
-| 关键字段缺失且不能判断（`required_missing` block，如 market_cap/name/kline） | `not_evaluable` | 排除/不计入该 gate 放行 | error |
+| L2 critical 缺失（required_missing block，仅 name/market_cap，属 L2 critical_fields） | `not_evaluable` | 排除/不计入该 gate 放行 | error |
+| Heat filter 字段缺失（required_missing block，kline.close/turnover_rate，不在 L2 critical_fields） | heat `not_evaluable`（阻断 heat 放行） | 继续走漏斗但 heat 不计「放行通过」；漏斗计数由 repair child 定 | continue（不自动 error） |
 | 非关键字段缺失（`degraded`，如 industry 单 ticker/pe_ttm 子项） | `not_evaluable` 该规则，其余继续 | 继续 | watch + degraded:true（仅当改分） |
 | 人工补充可恢复且不阻断（`manual_action_required` ranking_blocked=false，如 pledge source_failed） | safety=0 惩罚但继续 | 继续，带 `manual_action_required_fields` 标记 | continue（不强盖 degraded:true） |
 | 人工补充可恢复但阻断（`manual_action_required` ranking_blocked=true，如 market_cap 缺失） | `not_evaluable` | 排除 | error |
 | 已确认查无记录（`record_not_found`，如 pledge known-zero） | 满分/正常 | 继续 | 不改变 verdict |
 | 诊断字段缺失（`diagnostic_only`，如 risk.goodwill） | 不影响 | 继续 | 不改变 verdict |
 
-> 该表解决 spec.md 原「任一 required_missing/manual → degraded:true」与既有 L2 `verdict=error`/`degraded→watch` 路径冲突：`not_evaluable`≠`pass=False`；`not_evaluable` 的 ticker 不计入 `after_hard_gates` 放行计数；L2 `verdict=error` 与 `degraded→watch` 按上表 result_effect 区分。
+> 按 consumer 拆分：H2 unknown（financials.years 缺失）不误杀，漏斗计数由 repair child 实现；Heat filter unknown 阻断 heat 放行但不自动造成 L2 error（kline 不在 L2 critical_fields）；只有 L2 critical_fields（name/market_cap）缺失才直接 L2 error。`not_evaluable`≠`pass`，依赖该字段的 gate 不计「放行通过」。runtime 计数机制留 repair child（决策 C：只钉目标契约语义）。
+
+> 该表解决 spec.md 原「任一 required_missing/manual → degraded:true」与既有 L2 `verdict=error`/`degraded→watch` 路径冲突：`not_evaluable`≠`pass=False`；`not_evaluable` 的 ticker 不计为「放行通过」；L2 `verdict=error` 与 `degraded→watch` 按上表 result_effect 区分。kline 缺失不自动等同 L2 error（它不阻断 L2 critical_fields，只阻断 heat filter 放行）。
 
 ### D5：禁止「默认值静默改写排名语义」——明确禁止清单
 
@@ -102,7 +105,7 @@ G1-4「300 样本规模预检」暴露的不是单点脚本 bug，而是 **G1 �
 
 ### D7：人工补充契约——只定义结构，不实现 UI
 
-**决策**：字段级 `manual_action_required` 最小结构：canonical ticker / field / status / reason / attempted_sources / as_of_date / requested_action / blocks / ranking_blocked / requires_rerun / provenance_required / manual_value_source / manual_value_note。`ranking_blocked` 区分阻断（market_cap→true）与不阻断（pledge source_failed→false）。人工提示 SHALL NOT 绕过 G1 Gate；关键字段大量人工补充记为 provider 能力不足（`manual_action_rate`）。本 child 只定义契约，不实现录入 UI。**完整结构与 scenarios 落在 spec.md。**
+**决策**：字段级 `manual_action_required` 最小结构：canonical ticker / field / status / reason / attempted_sources / as_of_date / requested_action / **affected_rules**（受影响的规则，非被阻断规则）/ ranking_blocked / requires_rerun / provenance_required / manual_value_source / manual_value_note。`affected_rules` 与 `ranking_blocked` 分离：前者列受该字段缺失影响的规则（如 H6/A5/safety_margin），后者表达是否真阻断 ranking（market_cap→true，pledge source_failed→false）。人工提示 SHALL NOT 绕过 G1 Gate；关键字段大量人工补充记为 provider 能力不足（`manual_action_rate`）。本 child 只定义契约，不实现录入 UI。**完整结构与 scenarios 落在 spec.md。**
 
 ### D8：G1/G2/G3 coverage map——只登记依赖，不实现 G2/G3 字段
 
