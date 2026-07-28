@@ -17,6 +17,26 @@ from ..lib.snapshot import _LazyTable
 from ..lib.utils import to_float as _to_float
 
 
+def _resolve_industry(ticker: str, industry_map) -> tuple[str | None, str]:
+    """从 industry_map 解析单 ticker 行业 + industry_status（D1 失败显式化）.
+
+    返回 (industry, industry_status):
+    - map 为 None/空或 status=source_failed → (None, "source_failed")
+    - map 有但 ticker 不在表 → (None, "record_not_found")
+    - 找到 → (industry, "available")
+    """
+    if not industry_map:
+        return None, "source_failed"
+    # IndustryMapResult 带 status；普通 dict 无 status 视为 available
+    map_status = getattr(industry_map, "status", "available")
+    if map_status == "source_failed":
+        return None, "source_failed"
+    industry = industry_map.get(ticker)
+    if industry is None:
+        return None, "record_not_found"
+    return industry, "available"
+
+
 # 行业映射 intra-batch 只构建一次（~70 行业 × 2s ≈ 2-3 分钟，之后 STATIC 缓存复用 7d）
 _lazy_industry = _LazyTable(build_industry_map)
 
@@ -49,8 +69,9 @@ class BasicFetcher(BaseFetcher):
             return None
 
         # 从行业映射表补 industry（spot_em 无行业列）
+        # g1-4-data-source-resilience D1: 不掩盖 industry_map 失败，透传 industry_status
         industry_map = _lazy_industry.get()
-        industry = industry_map.get(ticker) if industry_map else None
+        industry, industry_status = _resolve_industry(ticker, industry_map)
 
         return {
             "code": ticker,
@@ -61,6 +82,7 @@ class BasicFetcher(BaseFetcher):
             "pb": _to_float(col("市净率", "pb")),
             "market_cap": _to_float(col("总市值")),
             "industry": industry,
+            "industry_status": industry_status,
         }
 
     # ── 兜底 provider ──────────────────────────────────────────
@@ -72,6 +94,7 @@ class BasicFetcher(BaseFetcher):
             raise KeyError(f"tencent qt empty for {ticker}")
         name_map = get_a_share_name_map()
         industry_map = _lazy_industry.get()
+        industry, industry_status = _resolve_industry(ticker, industry_map)
         return {
             "code": ticker,
             "name": qt.get("name") or name_map.get(ticker),
@@ -79,7 +102,8 @@ class BasicFetcher(BaseFetcher):
             "pe": qt.get("pe"),
             "pb": qt.get("pb"),
             "market_cap": qt.get("market_cap"),
-            "industry": industry_map.get(ticker) if industry_map else None,
+            "industry": industry,
+            "industry_status": industry_status,
         }
 
     @staticmethod

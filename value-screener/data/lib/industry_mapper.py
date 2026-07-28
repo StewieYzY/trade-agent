@@ -30,6 +30,34 @@ MIN_INDUSTRY_SAMPLES = 5
 _CACHE_FILE = Path("data/cache/_industry_map.json")
 
 
+class IndustryMapResult(dict):
+    """行业映射结果（dict 子类）+ 失败显式化状态.
+
+    g1-4-data-source-resilience D1: 承接 canonical data-minimum-contract §4
+    「industry_mapper 静默空 dict」禁止项。状态绑本 result 对象（→绑
+    _lazy_industry._df 实例），每次 loader 调用产新 result（重置），
+    reset() 清 _df 连带清状态——不污染下一次 batch。
+
+    status:
+    - available: 东财完整成功
+    - partial: 部分行业成功（covered_industries / failed_industries 记录）
+    - source_failed: 东财全部失败（attempted_sources 记录尝试过的来源）
+    """
+
+    def __init__(self, mapping=None, *, status="available",
+                 attempted_sources=None, covered_industries=None, failed_industries=None):
+        super().__init__(mapping or {})
+        self.status = status
+        self.attempted_sources = attempted_sources or []
+        self.covered_industries = covered_industries or []
+        self.failed_industries = failed_industries or []
+
+    def __repr__(self):
+        return (f"IndustryMapResult(size={len(self)}, status={self.status}, "
+                f"attempted_sources={self.attempted_sources}, "
+                f"covered={len(self.covered_industries)}, failed={len(self.failed_industries)})")
+
+
 def _load_cache() -> dict | None:
     """读缓存；过期/损坏返回 None."""
     if not _CACHE_FILE.exists():
@@ -58,23 +86,31 @@ def _save_cache(mapping: dict) -> None:
             tmp.unlink(missing_ok=True)
 
 
-def build_industry_map() -> dict[str, str]:
+def build_industry_map() -> "IndustryMapResult":
     """构建全市场 ticker→industry 映射.
 
-    主选：东财 stock_board_industry_name_em + stock_board_industry_cons_em。
-    兜底：同花顺 stock_board_industry_name_ths + stock_board_industry_index_ths（行业指数成分）。
-    两个源都失败 → 返回空 dict（不阻塞下游，basic.py industry 字段返回 None）。
+    g1-4-data-source-resilience D1: 不再静默返空 dict。东财失败时显式标
+    source_failed（带 attempted_sources + 失败原因），部分行业成功标 partial
+    （covered/failed_industries）。承接 canonical data-minimum-contract §4
+    「industry_mapper 静默空 dict」禁止项。不硬编码未经验证的 fallback 源。
+
+    返回 IndustryMapResult（dict 子类，.get(ticker) 兼容，可选读 status）。
     """
     # 先查缓存
     cached = _load_cache()
     if cached is not None:
-        return cached
+        # 缓存命中：重建为 IndustryMapResult（cache 存普通 dict，status 丢失）
+        return IndustryMapResult(cached, status="available", attempted_sources=["cache"])
 
     mapping: dict[str, str] = {}
+    covered_industries: list[str] = []
+    failed_industries: list[str] = []
+    attempted_sources: list[str] = []
 
     # 主选：东财
     try:
         import akshare as ak  # type: ignore
+        attempted_sources.append("eastmoney")
         boards = ak.stock_board_industry_name_em()
         for i, row in boards.iterrows():
             industry = str(row["板块名称"])
@@ -87,24 +123,39 @@ def build_industry_map() -> dict[str, str]:
                     if code_col:
                         for code in cons[code_col].tolist():
                             mapping[str(code).zfill(6)] = industry
+                    covered_industries.append(industry)
+                else:
+                    failed_industries.append(industry)
             except (KeyError, ValueError, AttributeError):
-                # 单行业失败不阻塞
+                # 单行业失败不阻塞，但显式记录
+                failed_industries.append(industry)
                 continue
         if mapping:
             _save_cache(mapping)
-            return mapping
-    except (KeyError, ValueError, AttributeError):
-        pass  # 东财整体失败，试同花顺
+            status = "available" if not failed_industries else "partial"
+            return IndustryMapResult(mapping, status=status,
+                                     attempted_sources=attempted_sources,
+                                     covered_industries=covered_industries,
+                                     failed_industries=failed_industries)
+    except (KeyError, ValueError, AttributeError, ImportError) as e:
+        # 东财整体失败：显式标 source_failed，不静默返空 dict
+        if not attempted_sources:
+            attempted_sources.append("eastmoney")
+        return IndustryMapResult({}, status="source_failed",
+                                 attempted_sources=attempted_sources,
+                                 failed_industries=failed_industries)
 
-    # 兜底：同花顺行业板块（stock_board_industry_name_ths 可用）
-    # 注意：stock_board_industry_cons_ths 在当前 akshare 版本不存在，
-    # stock_board_industry_index_ths 返回指数 K 线不是成分股 → 同花顺兜底不可用。
-    # 保留框架，后续 akshare 新增 cons_ths 可直接替换。
-
-    # 全部失败：返回空 dict（不抛，basic.py industry 字段返回 None）
+    # 兜底：同花顺行业板块（stock_board_industry_cons_ths 在当前 akshare 不存在，
+    # 不硬编码未经验证的 fallback）。东财部分成功但 mapping 空也归 source_failed。
     if mapping:
         _save_cache(mapping)
-    return mapping
+        return IndustryMapResult(mapping, status="partial" if failed_industries else "available",
+                                  attempted_sources=attempted_sources,
+                                  covered_industries=covered_industries,
+                                  failed_industries=failed_industries)
+    return IndustryMapResult({}, status="source_failed",
+                             attempted_sources=attempted_sources or ["eastmoney"],
+                             failed_industries=failed_industries)
 
 
 def get_industry(ticker: str, mapping: dict | None = None) -> str | None:
