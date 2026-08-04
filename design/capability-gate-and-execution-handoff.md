@@ -345,6 +345,10 @@ branch: codex/g2-integration-mainline
 - full `pytest value-screener/tests/`：`527 passed`；
 - OpenSpec strict validation 与 `git diff --check` 通过。
 
+该 integration child 已归档至
+`openspec/changes/archive/2026-08-04-g2-mainline-fallback-integration/`；
+归档只表示 clean mainline 工程 checkpoint 完成，不表示 G2 capability pass。
+
 该 checkpoint 只证明 clean mainline integration，不是 G2 capability pass；G2 A/B、
 成本证据、人工盲评和 G3 runtime 继续锁定。测试生成的 `debate/`、`watchlist/`
 只保留本地，不进入源码 commit。

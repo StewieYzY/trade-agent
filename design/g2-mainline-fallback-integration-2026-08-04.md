@@ -23,6 +23,8 @@
 - full：`527 passed in 45.33s`；
 - OpenSpec strict validation：通过；
 - `git diff --check`：通过。
+- OpenSpec child 已归档至
+  `openspec/changes/archive/2026-08-04-g2-mainline-fallback-integration/`。
 
 ## 当前边界
 
