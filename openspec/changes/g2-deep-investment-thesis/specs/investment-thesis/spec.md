@@ -12,9 +12,11 @@
 - **THEN** 系统 SHALL 标记 warning/failed 或拒绝判断，并 MUST NOT 强行输出高 conviction bullish/bearish
 
 ### Requirement: InvestmentThesis 稳定输出契约
-G2 最终输出 SHALL 使用稳定 `InvestmentThesis` contract，至少包含 `thesis_id`、`ticker`、`run_id`、`core_thesis`、`evidence`、`counter_evidence`、`assumptions`、`risks`、`key_variables`、`what_would_change_my_mind`、`dissent`、`pending_verification` 和 `quality_status`。
+G2 最终输出 SHALL 使用稳定 `InvestmentThesis` contract，至少包含 `thesis_id`、`ticker`、`run_id`、`core_thesis`、`valuation_expectation`、`evidence`、`counter_evidence`、`assumptions`、`risks`、`key_variables`、`what_would_change_my_mind`、`dissent`、`pending_verification` 和 `quality_status`。
 
 每个 key variable SHALL 能表达当前值或状态、预期方向、warning threshold、thesis-break threshold、来源和 `as_of`。
+
+`valuation_expectation` SHALL 对所有股票存在；模型适用且数据足够时包含现有经营能力价值区间、未来价值占比区间、reverse scenarios、可信增长区间、assumption snapshot、calculation status 和 provenance，模型不适用或数据不足时显式返回 `not_evaluable` 及原因。
 
 #### Scenario: Thesis 可供下游跟踪
 - **WHEN** G2 产生可发布结果
@@ -23,6 +25,23 @@ G2 最终输出 SHALL 使用稳定 `InvestmentThesis` contract，至少包含 `t
 #### Scenario: 质量状态不可丢失
 - **WHEN** 运行存在数据降级、soft warning、Agent 失败或待验证事项
 - **THEN** `quality_status` 和 `pending_verification` SHALL 显式反映该状态，下游 MUST NOT 接收到无标记 clean result
+
+### Requirement: 成长预期资本化确定性诊断
+G2 SHALL 在 dossier 与 Agent 推理之间提供版本化的 `growth_expectation_diagnostic` artifact。V0 SHALL 使用 EPV proxy 与成熟期估值交叉锚，支持“固定增长率求年限”和“固定年限求增长率”两种互斥 reverse 模式，并输出区间、敏感性、用户确认假设和 `calculation_status`。
+
+Agent MUST NOT 自行修改 diagnostic 数值、补造缺失假设、隐藏 warning，或将 diagnostic 表述为确定目标价。缺少维护性资本开支确认、成熟期估值锚、必要历史数据或有限解时，系统 SHALL 返回 `not_evaluable/partial/failed`，MUST NOT 使用 silent default。
+
+#### Scenario: 增长率和年限无约束
+- **WHEN** 用户未固定增长率或增长年限中的任一项
+- **THEN** 系统 MUST NOT 同时输出唯一的隐含增长率和唯一的隐含增长年限，并 SHALL 要求选择 reverse 模式
+
+#### Scenario: 维护性资本开支未确认
+- **WHEN** V0 使用总资本开支代理但没有用户确认的维护性资本开支比例或有效替代证据
+- **THEN** EPV proxy SHALL 标记 `maintenance_capex_unconfirmed`，MUST NOT 静默使用默认比例生成 clean result
+
+#### Scenario: 诊断模型不适用
+- **WHEN** 股票属于模型未覆盖行业、利润/现金流结构不满足公式前提或数据单位无法对齐
+- **THEN** `valuation_expectation.calculation_status` SHALL 为 `not_evaluable` 或 `failed` 并保存具体原因，InvestmentThesis 可以继续研究其他证据但不得伪造估值结论
 
 ### Requirement: 事实接地与来源追溯
 G2 发布结果中的高严重度凭空数字 MUST 为 0。至少 95% 的关键事实与数字 SHALL 可定位到 dossier 输入来源、报告期或 `as_of`；无法追溯的内容 MUST 标记为假设、推断或待验证，不得表述为已确认事实。
@@ -80,15 +99,19 @@ G2 的显性串台和隐性串台 MUST 均为 0。Agent 不得引用当前运行
 - **THEN** warning SHALL 写入最终 InvestmentThesis 或关联 quality report，并在后续读取时保持可见
 
 ### Requirement: 强单 Agent 与 Council 公平对照
-G2 Capability Gate SHALL 使用 8-10 只类型分散股票，在相同模型、相同 dossier snapshot、相同工具权限和可比预算下，对强单 Agent 与 Council 进行盲评。样本 SHALL 覆盖稳定白马、高估值成长、周期、困境反转、治理风险、预期差、数据不足和能力圈外中的主要类型。
+G2 Capability Gate SHALL 使用 8-10 只类型分散股票，在相同模型、相同 dossier snapshot、相同 `growth_expectation_diagnostic`/assumption snapshot、相同工具权限和可比预算下，对强单 Agent 与 Council 进行盲评。样本 SHALL 覆盖稳定白马、高估值成长、周期、困境反转、治理风险、预期差、数据不足和能力圈外中的主要类型。
 
 #### Scenario: A/B 输入不一致
-- **WHEN** 单 Agent 与 Council 使用不同 dossier、不同模型能力或未披露的额外工具
+- **WHEN** 单 Agent 与 Council 使用不同 dossier、不同 growth diagnostic/assumption snapshot、不同模型能力或未披露的额外工具
 - **THEN** 该样本 MUST 从正式 Gate 统计中排除并重新运行
 
 #### Scenario: 固定样本完成盲评
 - **WHEN** 8-10 只预注册样本均产生两份匿名结果
 - **THEN** 用户 SHALL 在不知道实现路径的情况下按同一 rubric 逐只评分并保留理由
+
+#### Scenario: 共享计算不计为 Council 增量
+- **WHEN** Council 输出引用了两条路径都已获得的未来价值占比、隐含增长率或前置兑现年限
+- **THEN** 该引用本身 MUST NOT 被计为 Council 独有信息增量；只有新增反证、风险、关键变量或对假设的有效质疑可以计入
 
 ### Requirement: Council 信息增量 Gate 与失败回退
 Council SHALL 在至少 70% 样本中补充强单 Agent 未发现的实质风险、反证或关键变量；用户盲评 Council 更好的比例 SHALL 至少为 60%；Council 明显更差的比例 MUST 不高于 20%。若任一核心比例未通过，默认产品形态 MUST 回退为“强单 Agent + 独立 DA/事实检查器 + Synthesizer”。
@@ -103,6 +126,8 @@ Council SHALL 在至少 70% 样本中补充强单 Agent 未发现的实质风险
 
 ### Requirement: G2 依赖与 umbrella 治理
 G2 正式能力验收 SHALL 在 G1 capability passed 后进行。所有运行时代码变更 MUST 由引用 `g2-deep-investment-thesis` 的独立 child change 实现，并说明推进的 Gate。G2 只有在真实 evidence bundle 通过后才能放行 G3 runtime。
+
+成长预期资本化 V0 MUST NOT 进入 G1 排序或 hard gate。G1 如未来增加 `high_expectation_risk`，必须由独立 child change 证明其仅为 diagnostic 标签且不改变当前 G1 critical path。G3 只可在 G2 passed 后保存和消费初始隐含预期基线。
 
 #### Scenario: G1 未通过
 - **WHEN** G1 capability status 尚未 passed

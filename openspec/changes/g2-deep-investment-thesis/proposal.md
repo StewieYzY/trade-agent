@@ -7,9 +7,11 @@
 - 将“深”正式定义为生成可溯源、可证伪、可持续跟踪的 Investment Thesis，而不是完成多轮角色扮演。
 - 建立“强单 Agent baseline vs Multi-Agent Council”的同输入盲评 Gate。
 - 定义事实接地、来源追溯、审计链、串台、R2 修订、DA 增量、用户盲评和负增量比例等验收标准。
+- 将成长预期资本化诊断定义为 dossier 与 Agent 之间的确定性分析产物，输出未来价值占比、隐含增长要求、前置兑现年限、用户确认假设和质量状态。
+- 强制强单 Agent 与 Council 消费相同的成长预期诊断产物和 assumption snapshot，不把共享确定性计算误计为 Council 独有信息增量。
 - 明确 Council 未通过信息增量 Gate 时，产品应降级为“强单 Agent + 独立 DA/事实检查器”，不强留全天团。
 - 定义结构化 `InvestmentThesis` 作为未来 L3→L3.5/L4 的稳定接口。
-- 规定本 umbrella change 不直接实现 prompt、数据源或编排修复；后续按“审计链 → dossier 数据质量 → prompt 蒸馏 → 主流程质量门 → A/B 验证”拆成 child changes。
+- 规定本 umbrella change 不直接实现 prompt、数据源、估值模型或编排修复；后续按“审计链 → dossier 数据质量 → 成长预期诊断 V0 → prompt/主流程质量门 → A/B 验证”拆成 child changes。
 
 ## Capabilities
 
@@ -23,7 +25,8 @@
 
 ## Impact
 
-- 未来受影响模块：`value-screener/council/`、L3 research dossier fetchers、debate/watchlist 持久化与质量验证工具。
+- 未来受影响模块：`value-screener/council/`、L3 research dossier fetchers、独立确定性估值诊断模块、debate/watchlist 持久化与质量验证工具。
 - 未来受影响现有 specs：`research-dossier`、`council-debate`、`debate-orchestration`、`debate-quality-gate`、`council-output-interface`、`da-and-synthesizer`。
+- 新增产品需求依据：`design/growth-expectation-capitalization-prd-2026-08-04.md`。
 - 与当前 `f3c-r1-crosstalk-root-cause` 的关系：f3c 是 G2 下的前置诊断 child change，不被本 change 替代。
 - 依赖关系：G1 通过后正式验收；G2 通过后才允许实现 G3 HoldingContract。

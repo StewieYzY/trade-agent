@@ -2,7 +2,9 @@
 
 G2 对应“深”：针对指定股票生成可信、可证伪、可持续跟踪的 Investment Thesis。当前 L3 已有 research dossier、角色 Agent、四轮辩论、DA、Synthesizer 和质量门等工程结构，但历史产物暴露过 ticker 数据错配、R1 串台、输出同质化、空壳结果和来源不足。工程结构存在不等于 Multi-Agent 已产生产品价值。
 
-本 change 是 umbrella capability charter，不直接修改现有 L3 runtime specs。后续 child changes 将依次修复审计链与数据质量、蒸馏决策框架、接入主流程质量门，并建立相同输入下的强单 Agent 与 Council A/B harness。
+`design/growth-expectation-capitalization-prd-2026-08-04.md` 新增了成长股场景：系统需要解释当前价格已经资本化了多少未来价值、隐含多高增长和多长增长期。该能力不是新的 G1 排序因子，也不能由 Agent 临场心算；它应作为 dossier 与 Agent 之间的确定性分析层进入 G2。
+
+本 change 是 umbrella capability charter，不直接修改现有 L3 runtime specs。后续 child changes 将依次修复审计链与数据质量、建立成长预期资本化 V0、蒸馏决策框架、接入主流程质量门，并建立相同输入下的强单 Agent 与 Council A/B harness。
 
 G2 正式能力验收依赖 G1 通过。设计工作可并行，但在 G1 未通过时不得用 G2 扩展掩盖候选输入质量问题。G2 未通过信息增量 Gate 时，必须接受更简单的产品形态。
 
@@ -12,6 +14,7 @@ G2 正式能力验收依赖 G1 通过。设计工作可并行，但在 G1 未通
 
 - 将 L3 的成功标准从“完成结构化辩论”改为“生成可信 Investment Thesis”。
 - 定义事实接地、来源追溯、运行审计、串台隔离、角色增量和质量状态 Gate。
+- 建立可复现的成长预期资本化 V0，保存输入、用户假设、计算版本、敏感性和失败状态。
 - 用公平 A/B 证明 Council 是否优于强单 Agent。
 - 定义稳定 `InvestmentThesis` 输出，供 G3 和 L4 消费。
 - 将后续修复与验证拆成小型 child changes。
@@ -21,6 +24,8 @@ G2 正式能力验收依赖 G1 通过。设计工作可并行，但在 G1 未通
 - 本 umbrella change 不直接修改 prompt、dossier、debate 或 watchlist 代码。
 - 不预设 Multi-Agent 必须成为最终产品形态。
 - 不以模仿投资大师语言风格作为主要质量指标。
+- 不在本 umbrella 内实现完整 reverse DCF、自动目标价或 G1 成长股硬排除。
+- 不允许 Agent 自行补齐折现率、维护性资本开支比例或可信增长区间。
 - 不输出用户具体买卖仓位，不替代 G3 持仓纪律与用户最终决策。
 - 不通过增加 Agent 数量或辩论轮数制造表面深度。
 
@@ -70,6 +75,24 @@ prompt version、dossier version/snapshot、模型配置、每轮消息、qualit
 
 `f3c-r1-crosstalk-root-cause` 作为 G2 的前置诊断 child/precondition 保留，不被本 change 替代。其余里程碑同样独立建 change、独立验证和归档。G2 只有在证据 Gate 通过后才放行 G3 runtime。
 
+### D9. 成长预期诊断是确定性分析产物，不是 Agent 观点
+
+成长预期资本化 V0 由独立计算模块基于冻结 dossier、显式用户假设和版本化公式产生。Agent 只能解释、质疑或指出不适用条件，不得修改底层数值、隐藏 warning，或将 diagnostic 结果表述为确定内在价值。
+
+备选方案是让每个 Agent 在 prompt 中自行估值。该方案会产生口径不一致、不可复现和 A/B 输入不公平，因此不采用。
+
+### D10. 在 M4 dossier 与 M5 A/B 之间设置 M4.5
+
+成长预期诊断必须在强单 Agent baseline 与 Council A/B 冻结之前接入。两条路径共享同一 `growth_expectation_diagnostic` artifact 和 `assumption_snapshot`；匿名评分评估的是解释、反证和决策框架质量，共享计算结果不得计为 Council 独有信息增量。
+
+V0 至少拆为 contract/golden cases、deterministic engine、dossier/Thesis integration 三个独立 child change。数据补强可以继续迭代，但不得用完整 V1 模型阻塞 V0。
+
+### D11. V0 保持 diagnostic 边界
+
+V0 采用 EPV proxy + 成熟期估值交叉锚，结果必须输出区间、敏感性、假设和 `calculation_status`。V0 不进入 G1 排序或 hard gate；G1 最多保留低成本 `high_expectation_risk` 标签，且不在当前 G1 critical path 实现。
+
+G3 只在 G2 passed 后消费初始隐含增长率、增长年限、未来价值占比和可信增长区间，用于比较实际经营是否追上原始预期，不重新计算或覆盖 G2 基线。
+
 ## Risks / Trade-offs
 
 - [Risk] 用户盲评样本过少导致比例波动大 → 固定 8-10 只类型分散样本，并保存逐只评分维度与理由，不只保存胜负。
@@ -77,18 +100,22 @@ prompt version、dossier version/snapshot、模型配置、每轮消息、qualit
 - [Risk] 95% 来源追溯仍可能遗漏关键错误 → 对高严重度数字采用零容忍，并由独立事实检查/人工抽查补充。
 - [Risk] Prompt 蒸馏变成大量人物资料堆积 → 每个新增 prompt 内容必须映射到决策问题、证据或拒答规则。
 - [Risk] 质量门过严导致大量 warning/failed → 先暴露真实数据与机制缺口，再由 child change 修复，不以静默降级换取成功率。
+- [Risk] 估值模型输出伪精确年限 → 默认输出区间和敏感性，固定 reverse 求解约束，并保留 `no_finite_solution/not_evaluable`。
+- [Risk] 总资本开支被误当维护性资本开支 → 必须保存用户确认比例或拒绝计算，不允许 silent default。
+- [Risk] 新估值能力拖成完整建模平台 → V0 只实现 PRD 确认的双锚 diagnostic，V1 数据补强不阻塞当前 G2 A/B。
 - [Trade-off] 回退单 Agent 会减少“天团”产品辨识度 → 换取更低成本、更清晰责任和经验证的实际质量。
 
 ## Migration Plan
 
 1. 完成 ticker/run 审计链与 incomplete cache 修复。
 2. 提升 dossier 的主营、同行、研报、来源、报告期和新鲜度质量。
-3. 将现有质量检查接入主流程并持久化 warning/failed。
-4. 以决策框架重写并版本化角色 prompt。
-5. 建立强单 Agent baseline 与 Council A/B harness。
-6. 对固定 8-10 只样本执行盲评并形成 evidence bundle。
-7. 根据 Gate 选择 Council 或强单 Agent + DA 作为默认形态。
-8. 稳定并发布 `InvestmentThesis` contract，供 G3/L4 使用。
+3. 完成长预期诊断 contract、golden cases、V0 engine 和 dossier integration。
+4. 将现有质量检查接入主流程并持久化 warning/failed。
+5. 以决策框架重写并版本化角色 prompt。
+6. 建立强单 Agent baseline 与 Council A/B harness，两条路径共享同一诊断 artifact。
+7. 对固定 8-10 只样本执行盲评并形成 evidence bundle。
+8. 根据 Gate 选择 Council 或强单 Agent + DA 作为默认形态。
+9. 稳定并发布含 `valuation_expectation` 的 `InvestmentThesis` contract，供 G3/L4 使用。
 
 回退策略：在任一阶段发现串台、审计错配或高严重度编造时，停止发布该运行结果，保留诊断证据并回退到上一个通过质量门的版本；Council A/B 未通过时直接采用强单 Agent baseline。
 
@@ -96,4 +123,5 @@ prompt version、dossier version/snapshot、模型配置、每轮消息、qualit
 
 - 8-10 只样本的最终 ticker 与类型标签由 A/B child change 冻结。
 - “实质信息增量”的评分 rubric 和用户盲评维度需在 harness child change 中预注册。
+- 成长预期诊断的默认参数建议范围、模型适用行业和 golden cases 由 M4.5 contract child change 冻结。
 - `InvestmentThesis` 首版与现有 watchlist JSON 的兼容迁移方式由输出接口 child change 决定。
