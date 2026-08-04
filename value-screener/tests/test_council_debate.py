@@ -64,6 +64,29 @@ def debate_dir(tmp_path, monkeypatch):
     return d
 
 
+def _valid_dossier(ticker: str) -> dict:
+    """深研编排测试的最小有效 dossier（不依赖 builder 或外部数据）。"""
+    code = ticker.split(".")[0]
+    return {
+        "core_snapshot": {
+            "ticker": ticker,
+            "name": f"测试公司{code}",
+            "market_cap": 10000000000,
+            "pe_ttm": 20.0,
+            "roe_3y": [10.0, 11.0, 12.0],
+            "net_margin": 5.0,
+        },
+        "research_dossier": {
+            "main_business": {
+                "code": code,
+                "main_business_text": "测试主营业务",
+            },
+            "degraded_fields": [],
+        },
+        "pledge": None,
+    }
+
+
 # ── _build_user_message ────────────────────────────────────────
 
 class TestBuildUserMessage:
@@ -393,7 +416,7 @@ class TestRunDebate:
     async def test_single_agent_r1_only(self, debate_dir):
         """单 agent: R1 调 LLM, R2-4 跳过."""
         with patch("council.debate.call_llm", new_callable=AsyncMock, return_value=(LLM_RESPONSE, LLM_USAGE)):
-            result = await run_debate("600519", agents=["buffett"], features={"name": "test"})
+            result = await run_debate("600519", agents=["buffett"], features=_valid_dossier("600519"))
         assert result.final_verdict == "bullish"
         assert len(result.round1) == 1
         assert result.round2 is None
@@ -429,7 +452,7 @@ class TestRunDebate:
             result = await run_debate(
                 "600519",
                 agents=["buffett"],
-                features={"name": "test"},
+                features=_valid_dossier("600519"),
                 mock_opinions={"buffett": mock_agent},
             )
 
@@ -474,7 +497,7 @@ class TestRunDebate:
         path.write_text(md, encoding="utf-8")
 
         with patch("council.debate.call_llm", new_callable=AsyncMock) as mock_llm:
-            result = await run_debate("600519", agents=["buffett"], features={"name": "test"})
+            result = await run_debate("600519", agents=["buffett"], features=_valid_dossier("600519"))
 
         mock_llm.assert_not_called()
         assert result.final_verdict == "bullish"
@@ -513,7 +536,7 @@ class TestRunDebate:
         path.write_text(old_md, encoding="utf-8")
 
         with patch("council.debate.call_llm", new_callable=AsyncMock, return_value=(LLM_RESPONSE, LLM_USAGE)):
-            result = await run_debate("600519", agents=["buffett"], features={"name": "test"}, force=True)
+            result = await run_debate("600519", agents=["buffett"], features=_valid_dossier("600519"), force=True)
 
         # 返回值验证：force=True 应该重跑 LLM，conviction 应该是 80 而非 90
         assert result.round1[0].conviction == 80
@@ -555,7 +578,7 @@ class TestRunDebateDivergenceRouting:
         with patch("council.debate.call_llm", side_effect=mock_call_llm):
             result = await run_debate(
                 "600009", agents=["buffett", "munger", "duan", "feng_liu"],
-                features={"name": "test"},
+                features=_valid_dossier("600009"),
             )
 
         assert result.round2 is None  # low 分歧跳 R2
@@ -597,7 +620,7 @@ class TestRunDebateDivergenceRouting:
 
         with patch("council.debate.call_llm", side_effect=mock_call_llm):
             result = await run_debate(
-                "600010", agents=agent_names, features={"name": "test"},
+                "600010", agents=agent_names, features=_valid_dossier("600010"),
             )
 
         assert result.round2 is None  # extreme 跳 R2
@@ -645,7 +668,7 @@ class TestRunDebateEvidenceExhaustedSkip:
         with patch("council.debate.call_llm", side_effect=mock_call_llm):
             result = await run_debate(
                 "600012", agents=["buffett", "munger", "duan", "feng_liu"],
-                features={"name": "test"},
+                features=_valid_dossier("600012"),
             )
 
         assert result.round2 is not None  # medium 不跳 R2
@@ -674,7 +697,7 @@ class TestRunDebateRuntimeDegrade:
         with patch("council.debate.call_llm", side_effect=mock_call_llm):
             result = await run_debate(
                 "600013", agents=["buffett", "munger", "duan", "feng_liu"],
-                features={"name": "test"},
+                features=_valid_dossier("600013"),
             )
 
         assert result.round2 is None  # 降级跳 R2
@@ -694,7 +717,7 @@ class TestRunDebateRuntimeDegrade:
             with pytest.raises(ValueError, match="all_agents_failed|council_failed"):
                 await run_debate(
                     "600014", agents=["buffett", "munger", "duan", "feng_liu"],
-                    features={"name": "test"},
+                    features=_valid_dossier("600014"),
                 )
 
 # ── DA 和 Synthesizer 测试 ────────────────────────────────────────
@@ -841,7 +864,7 @@ class TestFullCouncil:
             result = await run_debate(
                 "600519",
                 agents=["buffett", "munger", "duan", "feng_liu"],
-                features={"name": "test"},
+                features=_valid_dossier("600519"),
             )
 
         # R1(4) + R2(4) + R3(DA,1) + R4(synthesizer,1) = 10

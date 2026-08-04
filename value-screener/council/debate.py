@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import math
 import re
 from datetime import date
 from pathlib import Path
@@ -23,6 +24,133 @@ from council.features import assemble_council_features
 from council.llm import call_llm
 from council.research_dossier import build_research_dossier
 from council.schema import AgentOutput, CouncilResult, SynthesizerOutput, ValidationError
+
+
+_REQUIRED_CORE_FACTS = ("name", "market_cap", "pe_ttm", "roe_3y", "net_margin")
+_TICKER_BINDING_KEYS = ("ticker", "code", "symbol")
+_MAIN_BUSINESS_EVIDENCE_KEYS = (
+    "by_industry",
+    "by_product",
+    "by_region",
+    "main_business_text",
+    "business_scope",
+    "product_type",
+)
+
+
+def _has_evidence_value(value: Any) -> bool:
+    """判断字段是否含可供 Council 消费的值（不把 None/空容器当事实）。"""
+    if value is None:
+        return False
+    if isinstance(value, float) and math.isnan(value):
+        return False
+    if isinstance(value, str):
+        return bool(value.strip())
+    if isinstance(value, dict):
+        return any(_has_evidence_value(item) for item in value.values())
+    if isinstance(value, (list, tuple, set)):
+        return any(_has_evidence_value(item) for item in value)
+    return True
+
+
+def _validate_declared_ticker(
+    requested_ticker: str,
+    payload: dict,
+    *,
+    location: str,
+) -> None:
+    """校验 dossier 已声明的 ticker/code 不会与本次请求串台。"""
+    from data.lib.identity import canonical_ticker
+
+    for key in _TICKER_BINDING_KEYS:
+        declared = payload.get(key)
+        if declared is None:
+            continue
+        if not isinstance(declared, str) or not declared.strip():
+            raise ValueError(
+                f"no_evidence: {location}.{key} must be a non-empty ticker string."
+            )
+        try:
+            canonical_declared = canonical_ticker(declared)
+        except ValueError as exc:
+            raise ValueError(
+                f"no_evidence: {location}.{key} is not a valid ticker ({declared!r})."
+            ) from exc
+        if canonical_declared != requested_ticker:
+            raise ValueError(
+                "no_evidence: ticker mismatch between requested "
+                f"{requested_ticker} and {location}.{key}={canonical_declared}."
+            )
+
+
+def _validate_council_input(ticker: str, dossier: Any) -> dict:
+    """验证可进入 Council 的分层 dossier，失败时不允许任何后续副作用。"""
+    if not isinstance(dossier, dict) or not dossier:
+        raise ValueError("no_evidence: Council input must be a non-empty dossier dict.")
+    if "error" in dossier or dossier.get("__error__"):
+        detail = dossier.get("error") or dossier.get("reason") or "caller-provided error shell"
+        raise ValueError(f"insufficient_data: {detail}. Provide a verified dossier or skip.")
+
+    core = dossier.get("core_snapshot")
+    if not isinstance(core, dict) or not core:
+        raise ValueError("no_evidence: dossier.core_snapshot must be a non-empty dict.")
+    if "error" in core or core.get("__error__"):
+        detail = core.get("error") or core.get("reason") or "core_snapshot error shell"
+        raise ValueError(f"insufficient_data: {detail}. Provide a verified dossier or skip.")
+
+    missing_core = [field for field in _REQUIRED_CORE_FACTS if not _has_evidence_value(core.get(field))]
+    if missing_core:
+        raise ValueError(
+            "insufficient_data: core_snapshot missing required facts "
+            f"{missing_core}. Provide a verified dossier or skip."
+        )
+    _validate_declared_ticker(ticker, core, location="core_snapshot")
+
+    research = dossier.get("research_dossier")
+    if not isinstance(research, dict):
+        raise ValueError("no_evidence: dossier.research_dossier must be a dict.")
+    main_business = research.get("main_business")
+    if not isinstance(main_business, dict) or not main_business:
+        raise ValueError(
+            "no_evidence: dossier.research_dossier.main_business must be a non-empty dict."
+        )
+    if "error" in main_business or main_business.get("__error__"):
+        raise ValueError(
+            "no_evidence: dossier.research_dossier.main_business is unavailable."
+        )
+    if not any(
+        _has_evidence_value(main_business.get(key))
+        for key in _MAIN_BUSINESS_EVIDENCE_KEYS
+    ):
+        raise ValueError(
+            "no_evidence: dossier.research_dossier.main_business has no business facts."
+        )
+    _validate_declared_ticker(ticker, main_business, location="research_dossier.main_business")
+
+    return dossier
+
+
+def _prepare_council_input(ticker: str, features: Any) -> dict:
+    """解析所有入口输入，并在 cache/LLM 前收敛到已验证 dossier。"""
+    if features is None:
+        dossier = build_research_dossier(ticker)
+    elif not isinstance(features, dict):
+        raise ValueError("no_evidence: explicit features must be a dict or None.")
+    elif not features:
+        raise ValueError(
+            "no_evidence: explicit empty features cannot start a council debate. "
+            "Provide a verified dossier or skip the council run."
+        )
+    elif "error" in features or features.get("__error__"):
+        detail = features.get("error") or features.get("reason") or "caller-provided error shell"
+        raise ValueError(f"insufficient_data: {detail}. Provide a verified dossier or skip.")
+    elif "core_snapshot" in features or "research_dossier" in features:
+        dossier = features
+    else:
+        # 兼容旧的扁平快照调用，但不允许其绕过 dossier builder 或 preflight。
+        dossier = build_research_dossier(ticker, core_snapshot=features)
+
+    return _validate_council_input(ticker, dossier)
 
 
 async def call_agent(
@@ -642,22 +770,9 @@ async def run_debate(
     from data.lib.identity import canonical_ticker
     ticker = canonical_ticker(ticker)
 
-    # 1. 获取特征数据
-    # f3a §3 D4：L3 入口从 assemble_council_features 改为 build_research_dossier，
-    # features 形参语义从「扁平 21 字段」变为「分层 dossier」（形参名保持 features 不变）。
-    # build_research_dossier 内部 core_snapshot 不足时已抛 ValueError（与原 guard 同模式）。
-    if features is None:
-        features = build_research_dossier(ticker)
-        # build_research_dossier 对 core_snapshot 不足已在内部 fail-fast 抛 ValueError；
-        # 此处保留向后兼容：若调用方传入旧扁平 features 含 error 仍走原 guard
-        if isinstance(features, dict) and "error" in features and "research_dossier" not in features:
-            missing = features.get("missing_fields", [])
-            guard = features.get("guard", "unknown")
-            guard_detail = features.get("guard_detail", "")
-            raise ValueError(
-                f"insufficient_data [{guard}]: 缺失字段 {missing}。"
-                f"{guard_detail}。再重跑 council。"
-            )
+    # 1. 解析并验证输入。所有显式/隐式路径都必须在 cache、文件写入和任意 LLM
+    # 调用前收敛为可审计 dossier；失败表示本次 Council 根本未执行。
+    features = _prepare_council_input(ticker, features)
 
     # 2. 确定 agent 列表
     if agents is None:

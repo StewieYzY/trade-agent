@@ -38,9 +38,17 @@ def _mock_dossier(mock_features):
     """f3a：build_research_dossier 的 mock——扁平 mock_features 包为 core_snapshot，
     定性维度全部降级（校准测试只测 LLM 校准流程，不测 dossier 组装）。"""
     return {
-        "core_snapshot": mock_features,
+        "core_snapshot": {
+            **mock_features,
+            "market_cap": 2000000000000,
+            "roe_3y": [30.0, 31.0, 32.0],
+            "net_margin": 50.0,
+        },
         "research_dossier": {
-            "main_business": {"code": "600519", "by_industry": []},
+            "main_business": {
+                "code": "600519",
+                "main_business_text": "高端白酒销售",
+            },
             "peers": {"__error__": True, "reason": "mock"},
             "capex_proxy": {"__error__": True, "reason": "mock"},
             "research": {"coverage_count": 0},

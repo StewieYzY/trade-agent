@@ -55,9 +55,19 @@ def _full_dossier_with_core() -> dict:
     core_snapshot 含 roe_3y=30.0 → "ROE 30%" 有来源，不误判凭空。
     """
     return {
-        "core_snapshot": {"pe_ttm": 26.42, "roe_3y": [28.0, 29.0, 30.0], "net_margin": 15.86},
+        "core_snapshot": {
+            "ticker": "600519",
+            "name": "贵州茅台",
+            "market_cap": 2000000000000,
+            "pe_ttm": 26.42,
+            "roe_3y": [28.0, 29.0, 30.0],
+            "net_margin": 15.86,
+        },
         "research_dossier": {
-            "main_business": {"main_products": []},
+            "main_business": {
+                "code": "600519",
+                "main_business_text": "高端白酒销售",
+            },
             "degraded_fields": [],
         },
     }

@@ -19,7 +19,14 @@ from council.debate import run_debate, call_agent
 
 def _full_dossier() -> dict:
     return {
-        "core_snapshot": {"ticker": "600009", "pe_ttm": 26.42, "roe_3y": [15.0, 16.0, 17.0]},
+        "core_snapshot": {
+            "ticker": "600009",
+            "name": "上海机场",
+            "market_cap": 60000000000,
+            "pe_ttm": 26.42,
+            "roe_3y": [15.0, 16.0, 17.0],
+            "net_margin": 10.0,
+        },
         "research_dossier": {
             "main_business": {"code": "600009", "by_industry": [{"name": "航空", "revenue_ratio": 0.94}]},
             "peers": {"peer_avg_pe": 18.1, "industry_pe_rank": 2},

@@ -37,6 +37,28 @@ def watchlist_dir(tmp_path, monkeypatch):
     return tmp_path
 
 
+def _valid_dossier(ticker: str) -> dict:
+    code = ticker.split(".")[0]
+    return {
+        "core_snapshot": {
+            "ticker": ticker,
+            "name": "测试公司",
+            "market_cap": 10000000000,
+            "pe_ttm": 20.0,
+            "roe_3y": [10.0, 11.0, 12.0],
+            "net_margin": 5.0,
+        },
+        "research_dossier": {
+            "main_business": {
+                "code": code,
+                "main_business_text": "测试主营业务",
+            },
+            "degraded_fields": [],
+        },
+        "pledge": None,
+    }
+
+
 class TestWriteCouncilOutput:
     def test_full_council_fields(self, watchlist_dir):
         """全天团接口文件字段完整（含 f2 分歧报告 + da_skipped + degraded 字段）."""
@@ -177,7 +199,7 @@ class TestRunDebateWritesWatchlist:
     async def test_run_debate_writes_council_json(self, watchlist_dir):
         """run_debate 末尾自动写入 watchlist."""
         with patch("council.debate.call_llm", new_callable=AsyncMock, return_value=(LLM_RESPONSE, LLM_USAGE)):
-            result = await run_debate("600519", agents=["buffett"], features={"name": "test"})
+            result = await run_debate("600519", agents=["buffett"], features=_valid_dossier("600519"))
 
         today = date.today().isoformat()
         # g1-canonical-run-identity D5 A+：watchlist 文件名 + ticker 字段统一 canonical（600519.SH）

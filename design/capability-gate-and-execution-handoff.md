@@ -323,3 +323,28 @@ openspec list --json
 - G3 放行条件改变。
 
 不要把完整测试日志、长原始模型输出、API key、Authorization header 或用户持仓写入本文件。
+
+## 12. 2026-08-04：clean G2 fallback integration checkpoint
+
+已从最新 `main@dd52d11` 创建：
+
+```text
+/Users/admin/Documents/trade-agent/.worktrees/g2-integration-mainline
+branch: codex/g2-integration-mainline
+```
+
+本次只移植 G2 fallback 的最小 mainline prerequisites：
+
+- tracked `value-screener/data/cache/` source，缓存 JSON 仍 local-only；
+- f3c Council input preflight 及其受影响 fixture tests；
+- G2 strong single-agent fallback foundation。
+
+验证结果：
+
+- focused Council/preflight/fallback：`93 passed`；
+- full `pytest value-screener/tests/`：`527 passed`；
+- OpenSpec strict validation 与 `git diff --check` 通过。
+
+该 checkpoint 只证明 clean mainline integration，不是 G2 capability pass；G2 A/B、
+成本证据、人工盲评和 G3 runtime 继续锁定。测试生成的 `debate/`、`watchlist/`
+只保留本地，不进入源码 commit。
