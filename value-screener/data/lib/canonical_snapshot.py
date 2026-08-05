@@ -120,6 +120,7 @@ def build_snapshot(
         is_eligible = (
             item["status"] == "available"
             and item.get("eligibility") == "production_eligible"
+            and item.get("freshness_status") != "stale"
             and key not in conflict_keys
         )
         field = str(item["field"])
@@ -165,6 +166,7 @@ def write_snapshot(
     run_id: str | None = None,
     as_of: str | None = None,
     freshness_seconds: int | None = None,
+    manifest_extra: Mapping[str, Any] | None = None,
 ) -> Path:
     snapshot = build_snapshot(
         evidence,
@@ -184,23 +186,28 @@ def write_snapshot(
         raise SnapshotError(f"snapshot run already exists: {snapshot['run_id']}")
     run_dir.mkdir(parents=True, exist_ok=False)
 
-    _write_json(
-        run_dir / "manifest.json",
-        {
-            key: snapshot[key]
-            for key in (
-                "run_id",
-                "plan_version",
-                "schema_version",
-                "generated_at",
-                "as_of",
-                "ticker_set_hash",
-                "source_set_hash",
-                "status_summary",
-                "conflict_count",
+    manifest = {
+        key: snapshot[key]
+        for key in (
+            "run_id",
+            "plan_version",
+            "schema_version",
+            "generated_at",
+            "as_of",
+            "ticker_set_hash",
+            "source_set_hash",
+            "status_summary",
+            "conflict_count",
+        )
+    }
+    if manifest_extra:
+        collisions = set(manifest).intersection(manifest_extra)
+        if collisions:
+            raise SnapshotError(
+                f"manifest extra collides with canonical fields: {sorted(collisions)}"
             )
-        },
-    )
+        manifest.update(manifest_extra)
+    _write_json(run_dir / "manifest.json", manifest)
     _write_json(run_dir / "records.json", snapshot["records"])
     _write_json(
         run_dir / "provenance.json",

@@ -15,6 +15,13 @@ from .identity import canonical_ticker
 from .provenance import ELIGIBILITIES, STATUSES
 
 
+def _canonical_a_share_ticker(raw: Any) -> str:
+    ticker = canonical_ticker(raw)
+    if not ticker.endswith((".SH", ".SZ", ".BJ")):
+        raise ValueError(f"ticker {raw!r} is not an A-share security")
+    return ticker
+
+
 def _hash(value: Any) -> str:
     payload = json.dumps(value, ensure_ascii=False, sort_keys=True, default=str)
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
@@ -125,8 +132,10 @@ class BatchAdapter:
         safe_id = _safe_run_id(run_id)
         if freshness_seconds is not None and freshness_seconds < 0:
             raise ValueError("freshness_seconds must be non-negative")
-        canonical_tickers = tuple(sorted({canonical_ticker(ticker) for ticker in tickers}))
+        canonical_tickers, invalid_tickers = _normalize_requested_tickers(tickers)
         if not canonical_tickers:
+            if invalid_tickers:
+                raise ValueError("invalid ticker set: no valid A-share ticker")
             raise ValueError("ticker set must not be empty")
         requested_fields = tuple(dict.fromkeys(fields))
         if not requested_fields:
@@ -194,11 +203,29 @@ class BatchAdapter:
                 provider_evidence_start = len(evidence)
                 stats[key] = stats.get(key, 0) + 1
                 response = provider.fetch_batch(request)
-                records = _records_by_ticker(response)
                 response_hash = _hash(response)
+                records, response_issues = _records_by_ticker(response)
+                issues_by_ticker = {
+                    issue["ticker"]: issue
+                    for issue in response_issues
+                    if issue.get("ticker") in canonical_tickers
+                }
+                for issue in issues_by_ticker.values():
+                    evidence.extend(
+                        _failure_evidence(
+                            {**base, "ticker": issue["ticker"]},
+                            (issue["ticker"],),
+                            requested_fields,
+                            status=issue["status"],
+                            reason=issue["reason"],
+                            response_hash=response_hash,
+                        )
+                    )
                 returned = tuple(sorted(records))
                 missing = tuple(ticker for ticker in canonical_tickers if ticker not in records)
                 for ticker in canonical_tickers:
+                    if ticker in issues_by_ticker:
+                        continue
                     record = records.get(ticker)
                     if record is None:
                         evidence.extend(
@@ -271,6 +298,21 @@ class BatchAdapter:
                     )
                 )
 
+        manifest = {
+            "schema_version": "g1-provider-batch-adapter-v1",
+            "run_id": safe_id,
+            "method": method,
+            "requested_tickers": list(canonical_tickers),
+            "requested_ticker_set_hash": _hash(canonical_tickers),
+            "invalid_tickers": invalid_tickers,
+            "provider_method_calls": stats,
+            "batch_size": len(canonical_tickers),
+            "status_summary": _status_summary(evidence),
+            "providers": provider_summaries,
+            "evidence_count": len(evidence),
+            "freshness_seconds": freshness_seconds,
+            "snapshot_output": None,
+        }
         snapshot = build_snapshot(
             evidence,
             tickers=canonical_tickers,
@@ -288,21 +330,20 @@ class BatchAdapter:
                     output_root=output_root,
                     run_id=safe_id,
                     freshness_seconds=freshness_seconds,
+                    manifest_extra={
+                        key: value
+                        for key, value in manifest.items()
+                        if key
+                        not in {
+                            "run_id",
+                            "schema_version",
+                            "status_summary",
+                            "snapshot_output",
+                        }
+                    },
                 )
             )
-        manifest = {
-            "schema_version": "g1-provider-batch-adapter-v1",
-            "run_id": safe_id,
-            "method": method,
-            "requested_tickers": list(canonical_tickers),
-            "requested_ticker_set_hash": _hash(canonical_tickers),
-            "provider_method_calls": stats,
-            "batch_size": len(canonical_tickers),
-            "status_summary": _status_summary(evidence),
-            "providers": provider_summaries,
-            "evidence_count": len(evidence),
-            "snapshot_output": output_path,
-        }
+        manifest["snapshot_output"] = output_path
         return {
             "run_id": safe_id,
             "manifest": manifest,
@@ -311,36 +352,110 @@ class BatchAdapter:
         }
 
 
-def _records_by_ticker(response: Any) -> dict[str, Mapping[str, Any]]:
+def _normalize_requested_tickers(
+    tickers: Iterable[Any],
+) -> tuple[tuple[str, ...], list[dict[str, Any]]]:
+    canonical: set[str] = set()
+    invalid: list[dict[str, Any]] = []
+    for raw_ticker in tickers:
+        try:
+            canonical.add(_canonical_a_share_ticker(raw_ticker))
+        except (TypeError, ValueError) as exc:
+            invalid.append(
+                {
+                    "raw_ticker": raw_ticker,
+                    "status": "invalid_value",
+                    "reason": _redact(str(exc)),
+                }
+            )
+    return tuple(sorted(canonical)), invalid
+
+
+def _records_by_ticker(
+    response: Any,
+) -> tuple[dict[str, Mapping[str, Any]], list[dict[str, Any]]]:
     if isinstance(response, Mapping) and isinstance(response.get("records"), list):
         rows = response["records"]
     elif isinstance(response, Mapping):
+        if not response:
+            return {}, []
+        if any(not isinstance(value, Mapping) for value in response.values()):
+            raise ValueError(
+                "batch response schema must be a ticker mapping or records list"
+            )
         rows = response.items()
-        result = {}
-        for key, value in rows:
-            if isinstance(value, Mapping):
-                try:
-                    result[canonical_ticker(str(key))] = value
-                except ValueError:
-                    continue
-        return result
     elif isinstance(response, list):
         rows = response
     else:
         raise TypeError("batch response must be a mapping or list")
 
     result: dict[str, Mapping[str, Any]] = {}
+    issues: list[dict[str, Any]] = []
     for row in rows:
-        if not isinstance(row, Mapping):
-            continue
-        raw_ticker = row.get("ticker") or row.get("code") or row.get("symbol")
-        if raw_ticker is None:
-            continue
+        if isinstance(response, Mapping) and response.get("records") is None:
+            raw_key, record = row
+        else:
+            if not isinstance(row, Mapping):
+                raise ValueError("batch response row must be a mapping")
+            raw_key = row.get("ticker") or row.get("code") or row.get("symbol")
+            record = row
+        if raw_key is None:
+            raise ValueError("batch response row is missing ticker")
         try:
-            result[canonical_ticker(str(raw_ticker))] = row
-        except ValueError:
+            ticker = _canonical_a_share_ticker(str(raw_key))
+        except ValueError as exc:
+            issues.append(
+                {
+                    "ticker": None,
+                    "raw_ticker": raw_key,
+                    "status": "invalid_value",
+                    "reason": _redact(str(exc)),
+                }
+            )
             continue
-    return result
+        embedded_raw = (
+            record.get("ticker")
+            or record.get("code")
+            or record.get("symbol")
+        )
+        if embedded_raw is not None:
+            try:
+                embedded_ticker = _canonical_a_share_ticker(str(embedded_raw))
+            except ValueError as exc:
+                issues.append(
+                    {
+                        "ticker": ticker,
+                        "raw_ticker": embedded_raw,
+                        "status": "invalid_value",
+                        "reason": _redact(str(exc)),
+                    }
+                )
+                continue
+            if embedded_ticker != ticker:
+                issues.append(
+                    {
+                        "ticker": ticker,
+                        "raw_ticker": embedded_raw,
+                        "status": "invalid_value",
+                        "reason": (
+                            f"response ticker {embedded_ticker} does not match "
+                            f"mapping key {ticker}"
+                        ),
+                    }
+                )
+                continue
+        if ticker in result:
+            issues.append(
+                {
+                    "ticker": ticker,
+                    "raw_ticker": raw_key,
+                    "status": "invalid_value",
+                    "reason": f"duplicate response ticker {ticker}",
+                }
+            )
+            continue
+        result[ticker] = record
+    return result, issues
 
 
 def _record_evidence(
@@ -390,7 +505,7 @@ def _record_evidence(
             and item["status"] == "available"
             and _is_stale(item.get("retrieved_at"), freshness_seconds)
         ):
-            item["eligibility"] = "not_qualified"
+            item["freshness_status"] = "stale"
             item["reason"] = f"evidence older than freshness window ({freshness_seconds}s)"
         result.append(item)
     return result

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -367,7 +368,8 @@ def test_stale_evidence_is_not_a_production_override():
     )
 
     assert result["snapshot"]["records"]["600519.SH"]["last_price"] is None
-    assert result["snapshot"]["provenance"][0]["eligibility"] == "not_qualified"
+    assert result["snapshot"]["provenance"][0]["eligibility"] == "production_eligible"
+    assert result["snapshot"]["provenance"][0]["freshness_status"] == "stale"
     assert "freshness window" in result["snapshot"]["provenance"][0]["reason"]
 
 
@@ -412,3 +414,196 @@ def test_invalid_ticker_is_rejected_before_provider_call():
             run_id="invalid",
         )
     assert calls == []
+
+
+def test_mixed_invalid_ticker_is_reported_without_blocking_valid_ticker():
+    calls = []
+
+    def fetch(request):
+        calls.append(request)
+        return {"600519.SH": _record("600519.SH", 123.4)}
+
+    result = BatchAdapter(
+        [
+            ProviderSpec(
+                "fixture",
+                "provider",
+                fetch,
+                eligibility="production_eligible",
+            )
+        ]
+    ).run(
+        tickers=["600519.SH", "not-a-ticker"],
+        method="quote",
+        fields=["last_price"],
+        run_id="mixed-invalid",
+    )
+
+    assert len(calls) == 1
+    invalid = result["manifest"]["invalid_tickers"][0]
+    assert invalid["raw_ticker"] == "not-a-ticker"
+    assert invalid["status"] == "invalid_value"
+    assert invalid["reason"]
+    assert result["snapshot"]["records"]["600519.SH"]["last_price"] == 123.4
+
+
+def test_mapping_key_mismatch_is_invalid_and_not_production_value():
+    def fetch(_request):
+        return {"600519.SH": _record("000858.SZ", 999.0)}
+
+    result = BatchAdapter(
+        [
+            ProviderSpec(
+                "fixture",
+                "provider",
+                fetch,
+                eligibility="production_eligible",
+            )
+        ]
+    ).run(
+        tickers=["600519.SH"],
+        method="quote",
+        fields=["last_price"],
+        run_id="mapping-mismatch",
+    )
+
+    evidence = result["evidence"][0]
+    assert evidence["status"] == "invalid_value"
+    assert "does not match" in evidence["reason"]
+    assert result["snapshot"]["records"]["600519.SH"]["last_price"] is None
+
+
+def test_malformed_response_envelope_is_not_record_not_found():
+    def fetch(_request):
+        return {"status": "ok", "data": []}
+
+    result = BatchAdapter(
+        [
+            ProviderSpec(
+                "fixture",
+                "provider",
+                fetch,
+                eligibility="production_eligible",
+            )
+        ]
+    ).run(
+        tickers=["600519.SH"],
+        method="quote",
+        fields=["last_price"],
+        run_id="malformed-envelope",
+    )
+
+    assert result["evidence"][0]["status"] == "invalid_value"
+    assert "schema" in result["evidence"][0]["reason"]
+
+
+def test_non_a_share_ticker_is_reported_without_a_share_provenance():
+    calls = []
+
+    def fetch(request):
+        calls.append(request)
+        return {"600519.SH": _record("600519.SH", 123.4)}
+
+    result = BatchAdapter(
+        [
+            ProviderSpec(
+                "fixture",
+                "provider",
+                fetch,
+                eligibility="production_eligible",
+            )
+        ]
+    ).run(
+        tickers=["600519.SH", "AAPL"],
+        method="quote",
+        fields=["last_price"],
+        run_id="market-boundary",
+    )
+
+    assert len(calls) == 1
+    invalid = result["manifest"]["invalid_tickers"][0]
+    assert invalid["raw_ticker"] == "AAPL"
+    assert invalid["status"] == "invalid_value"
+    assert "A-share" in invalid["reason"]
+    assert result["snapshot"]["records"]["600519.SH"]["last_price"] == 123.4
+
+
+def test_fresh_and_stale_production_evidence_fail_closed_together():
+    fresh = datetime.now(timezone.utc).isoformat()
+    stale = "2020-01-01T00:00:00+00:00"
+
+    result = BatchAdapter(
+        [
+            ProviderSpec(
+                "baseline",
+                "fresh",
+                lambda _request: {
+                    "600519.SH": _record(
+                        "600519.SH",
+                        123.4,
+                        retrieved_at=fresh,
+                    )
+                },
+                eligibility="production_eligible",
+            ),
+            ProviderSpec(
+                "baseline",
+                "stale",
+                lambda _request: {
+                    "600519.SH": _record(
+                        "600519.SH",
+                        130.0,
+                        retrieved_at=stale,
+                    )
+                },
+                eligibility="production_eligible",
+            ),
+        ]
+    ).run(
+        tickers=["600519.SH"],
+        method="quote",
+        fields=["last_price"],
+        run_id="fresh-stale-conflict",
+        freshness_seconds=60,
+    )
+
+    assert result["snapshot"]["records"]["600519.SH"]["last_price"] is None
+    assert any(
+        conflict["kind"] == "freshness"
+        for conflict in result["snapshot"]["conflicts"]
+    )
+
+
+def test_persisted_manifest_keeps_batch_audit_fields(tmp_path):
+    def fetch(_request):
+        return {"600519.SH": _record("600519.SH", 123.4)}
+
+    result = BatchAdapter(
+        [
+            ProviderSpec(
+                "fixture",
+                "provider",
+                fetch,
+                eligibility="production_eligible",
+            )
+        ]
+    ).run(
+        tickers=["600519.SH", "000858.SZ"],
+        method="quote",
+        fields=["last_price"],
+        run_id="persisted-audit",
+        output_root=tmp_path,
+        freshness_seconds=60,
+    )
+
+    persisted = json.loads(
+        (tmp_path / "persisted-audit" / "manifest.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert persisted["method"] == "quote"
+    assert persisted["requested_tickers"] == ["000858.SZ", "600519.SH"]
+    assert persisted["provider_method_calls"] == {"provider:quote": 1}
+    assert persisted["providers"][0]["missing_tickers"] == ["000858.SZ"]
+    assert persisted["freshness_seconds"] == 60
+    assert result["manifest"]["snapshot_output"]
