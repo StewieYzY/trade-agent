@@ -86,17 +86,28 @@ def build_snapshot(
     plan_version: str,
     run_id: str | None = None,
     as_of: str | None = None,
+    freshness_seconds: int | None = None,
 ) -> dict[str, Any]:
+    if freshness_seconds is not None and freshness_seconds < 0:
+        raise SnapshotError("freshness_seconds must be non-negative")
     normalized = [validate_field_evidence(item, allow_production=True) for item in evidence]
     ticker_list = sorted({canonical_ticker(ticker) for ticker in tickers})
     if not ticker_list:
         raise SnapshotError("snapshot ticker set must not be empty")
 
-    conflicts = detect_conflicts(normalized, allow_production=True)
+    conflicts = detect_conflicts(
+        [
+            item
+            for item in normalized
+            if item.get("eligibility") == "production_eligible"
+        ],
+        freshness_seconds=freshness_seconds,
+        allow_production=True,
+    )
     conflict_keys = {
-        tuple(conflict["key"])
+        tuple(conflict["key"][:2])
         for conflict in conflicts
-        if "key" in conflict and len(conflict["key"]) == 3
+        if "key" in conflict and len(conflict["key"]) >= 2
     }
 
     records: dict[str, dict[str, Any]] = {ticker: {} for ticker in ticker_list}
@@ -105,7 +116,7 @@ def build_snapshot(
         ticker = canonical_ticker(item["ticker"])
         if ticker not in records:
             records[ticker] = {}
-        key = (ticker, item.get("field"), item.get("as_of") or item.get("report_period"))
+        key = (ticker, item.get("field"))
         is_eligible = (
             item["status"] == "available"
             and item.get("eligibility") == "production_eligible"
@@ -153,6 +164,7 @@ def write_snapshot(
     output_root: str | Path,
     run_id: str | None = None,
     as_of: str | None = None,
+    freshness_seconds: int | None = None,
 ) -> Path:
     snapshot = build_snapshot(
         evidence,
@@ -160,6 +172,7 @@ def write_snapshot(
         plan_version=plan_version,
         run_id=run_id,
         as_of=as_of,
+        freshness_seconds=freshness_seconds,
     )
     root = Path(output_root).resolve()
     run_dir = (root / snapshot["run_id"]).resolve()

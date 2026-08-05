@@ -215,7 +215,6 @@ def detect_conflicts(
         key = (
             normalized.get("ticker"),
             normalized.get("field"),
-            normalized.get("as_of") or normalized.get("report_period"),
         )
         groups[key].append(normalized)
 
