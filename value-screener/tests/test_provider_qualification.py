@@ -63,6 +63,7 @@ def test_available_and_partial_field_evidence_is_traceable():
     assert evidence[0]["status"] == "available"
     assert evidence[0]["value"] == 123.4
     assert evidence[0]["unit"] == "CNY/share"
+    assert evidence[0]["retrieved_at"] == evidence[0]["provenance"]["retrieved_at"]
     assert evidence[1]["status"] == "record_not_found"
 
 

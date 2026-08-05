@@ -331,6 +331,7 @@ def _field_evidence(
     if status not in STATUSES:
         raise ValueError(f"unknown qualification status: {status}")
     meta = dict(metadata or {})
+    retrieved_at = datetime.now(timezone.utc).isoformat()
     return {
         "provider_family": adapter.provider_family,
         "provider": adapter.provider,
@@ -349,13 +350,13 @@ def _field_evidence(
         "reason": reason,
         "documentation_status": adapter.documentation_status,
         "response_hash": response_hash,
-        "retrieved_at": datetime.now(timezone.utc).isoformat(),
+        "retrieved_at": retrieved_at,
         "provenance": {
             "provider_family": adapter.provider_family,
             "provider": adapter.provider,
             "method": case.method,
             "run_scoped": True,
-            "retrieved_at": datetime.now(timezone.utc).isoformat(),
+            "retrieved_at": retrieved_at,
             **meta,
         },
     }
