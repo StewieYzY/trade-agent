@@ -15,8 +15,10 @@ main checkout:
 G1 integration checkpoint:
   path:   /Users/admin/Documents/trade-agent/.worktrees/g1-provider-batch-adapter-mainline
   branch: codex/g1-provider-batch-adapter-mainline
-  HEAD:   5e9664f docs(g1): specify provider health failure visibility
-  status: dirty; frozen provider-health implementation/tests/tasks and this handoff are uncommitted
+  frozen implementation commit:
+          8437cd1 feat(g1): freeze provider health execution boundary
+  status: clean immediately after frozen implementation commit;
+          this handoff then receives one docs-only follow-up
 ```
 
 `main` 尚未合入 provider batch adapter 或 provider health child。当前
@@ -63,7 +65,7 @@ schema:   spec-driven
 progress: 19/19
 state:    isComplete=true
 archive:  未执行
-commit:   未执行
+commit:   8437cd1 feat(g1): freeze provider health execution boundary
 ```
 
 冻结范围仅包括：
@@ -200,18 +202,16 @@ review，因此当前最终代码没有新的 live-provider runtime evidence；h
 
 ## 下一步
 
-当前只剩工程 checkpoint 决策：
+冻结 checkpoint 已提交。后续恢复点正式切换为：
 
-1. 复核最终 diff 和 staging 范围；
-2. 决定是否 commit 冻结的 provider health child；
-3. commit 后再决定是否 archive；archive 仍不代表 G1 pass；
-4. 停止扩展 health runner，转入 field-level qualification decision；
-5. 由后续独立 child 消费新的、run-scoped、可审计 evidence，明确哪些字段
+1. 不再扩展 provider health runner；archive 可单独决定，且不代表 G1 pass；
+2. 建立独立 field-level qualification / canonical snapshot child；
+3. 由该 child 消费新的、run-scoped、可审计 evidence，明确哪些字段
    满足 provenance、时间基准、跨 ticker coverage 和下游契约；
-6. 只对明确合格字段生成 run-scoped canonical snapshot，其余状态保留在
+4. 只对明确合格字段生成 run-scoped canonical snapshot，其余状态保留在
    sidecar，不填默认值；
-7. snapshot 冻结后，才准备 Council-vs-fallback A/B；
-8. M4.5 仍按 contract → V0 engine → dossier integration 推进，最终 A/B
+5. snapshot 冻结后，才准备 Council-vs-fallback A/B；
+6. M4.5 仍按 contract → V0 engine → dossier integration 推进，最终 A/B
    两条路径共享相同 diagnostic 和 assumption snapshot。
 
 LongPort/Longbridge 仍是 candidate/blocked。只有 field-level qualification
