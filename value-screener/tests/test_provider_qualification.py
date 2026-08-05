@@ -63,6 +63,7 @@ def test_available_and_partial_field_evidence_is_traceable():
     assert evidence[0]["status"] == "available"
     assert evidence[0]["value"] == 123.4
     assert evidence[0]["unit"] == "CNY/share"
+    assert evidence[0]["retrieved_at"] == evidence[0]["provenance"]["retrieved_at"]
     assert evidence[1]["status"] == "record_not_found"
 
 
@@ -137,7 +138,8 @@ def test_rate_limit_stops_remaining_cases_for_provider(tmp_path):
 
     assert calls == ["quote"]
     assert result["manifest"]["stop_reason"] == "rate_limited:longport:quote:600519.SH"
-    assert len(result["evidence"]) == 2
+    assert result["manifest"]["completion_status"] == "incomplete"
+    assert result["evidence"] is None
 
 
 def test_run_id_cannot_escape_output_root(tmp_path):

@@ -48,36 +48,56 @@ _NUMERIC_FIELDS = {
     "eps_consensus",
     "revenue_consensus",
 }
-_TIME_REQUIRED_FIELDS = {
-    "revenue",
-    "net_profit",
-    "total_assets",
-    "total_liabilities",
-    "cash",
-    "operating_cash_flow",
-    "capital_expenditure",
-    "pe_ttm",
-    "pb",
-    "pe_median",
-    "eps_consensus",
-    "revenue_consensus",
-}
+_TIME_REQUIRED_FIELDS = set(_NUMERIC_FIELDS)
+_FRESHNESS_STATUSES = {"fresh", "stale", "unknown"}
 
 
 class ProvenanceContractError(ValueError):
     """Evidence contract is malformed or violates a fail-closed rule."""
 
 
-def _redact(text: Any) -> str:
+def redact_sensitive_text(text: Any) -> str:
     value = str(text)
-    value = re.sub(r"(?i)(https?://)[^/\s@]+@", r"\1<redacted>@", value)
     value = re.sub(
-        r"(?i)\b(authorization|api[_-]?key|secret|token)\s*[:=]\s*\S+",
+        r"(?i)([a-z][a-z0-9+.-]*://)[^/\s@]+@",
+        r"\1<redacted>@",
+        value,
+    )
+
+    def _redact_auth(match: re.Match[str]) -> str:
+        prefix = match.group("prefix") or ""
+        scheme = match.group("scheme")
+        secret = match.group("secret")
+        looks_sensitive = (
+            any(marker in secret.lower() for marker in ("secret", "token", "key", "sk-"))
+            or len(secret) >= 16
+        )
+        if not prefix and not looks_sensitive:
+            return match.group(0)
+        return f"{prefix}{scheme.title()} <redacted>"
+
+    value = re.sub(
+        r"(?i)(?P<prefix>\bauthorization\s*[:=]\s*)?"
+        r"(?P<scheme>basic|bearer|token)\s+(?P<secret>\S+)",
+        _redact_auth,
+        value,
+    )
+    value = re.sub(
+        r"(?i)\bapi(?:[_\-\s]?key)\s*[:=]\s*\S+",
+        "api_key=<redacted>",
+        value,
+    )
+    value = re.sub(
+        r"(?i)\b(secret|token)\s*[:=]\s*\S+",
         r"\1=<redacted>",
         value,
     )
     value = re.sub(r"\bsk-[A-Za-z0-9_-]+\b", "sk-<redacted>", value)
     return value[:2_000]
+
+
+def _redact(text: Any) -> str:
+    return redact_sensitive_text(text)
 
 
 def _json_safe(value: Any) -> Any:
@@ -89,7 +109,7 @@ def _json_safe(value: Any) -> Any:
         return {str(k): _json_safe(v) for k, v in value.items()}
     if isinstance(value, (list, tuple, set)):
         return [_json_safe(item) for item in value]
-    return _redact(repr(value))
+    return redact_sensitive_text(repr(value))
 
 
 def _hash(value: Any) -> str:
@@ -151,20 +171,44 @@ def validate_field_evidence(
         or not provenance.get(key)
     ]
     reason = result.get("reason")
-    if missing:
+    if missing and status == "available":
         status = "not_evaluated"
         reason = f"missing provenance: {', '.join(missing)}"
+    freshness_status = result.get("freshness_status")
+    if (
+        status == "available"
+        and freshness_status is not None
+        and freshness_status not in _FRESHNESS_STATUSES
+    ):
+        status = "invalid_value"
+        reason = reason or f"unknown freshness status: {freshness_status!r}"
 
     field = result.get("field")
     value = result.get("value")
     if status == "available":
-        if field in _NUMERIC_FIELDS and not _is_numeric(value):
+        if value is None:
+            status = "not_evaluated"
+            reason = reason or "provider field has no value"
+        else:
+            top_retrieved_at = _parse_time(result.get("retrieved_at"))
+            sidecar_retrieved_at = _parse_time(
+                (provenance or {}).get("retrieved_at")
+            )
+            if top_retrieved_at is None or sidecar_retrieved_at is None:
+                status = "not_evaluated"
+                reason = reason or "retrieved_at is missing or invalid"
+            elif top_retrieved_at != sidecar_retrieved_at:
+                status = "not_evaluated"
+                reason = reason or "retrieved_at does not match provenance"
+        if status == "available" and field in _NUMERIC_FIELDS and not _is_numeric(value):
             status = "invalid_value"
             reason = reason or "numeric field has non-finite/non-numeric value"
-        elif field in _NUMERIC_FIELDS and not result.get("unit") and not result.get("currency"):
+        elif status == "available" and field in _NUMERIC_FIELDS and not result.get("unit") and not result.get("currency"):
             status = "not_evaluated"
             reason = reason or "numeric field has no unit/currency"
-        elif field in _TIME_REQUIRED_FIELDS and not (result.get("as_of") or result.get("report_period")):
+        elif status == "available" and field in _TIME_REQUIRED_FIELDS and not (
+            result.get("as_of") or result.get("report_period")
+        ):
             status = "not_evaluated"
             reason = reason or "time basis is missing"
 
@@ -175,7 +219,7 @@ def validate_field_evidence(
             "status": status,
             "eligibility": eligibility,
             "value": _json_safe(value),
-            "reason": _redact(reason) if reason else None,
+            "reason": redact_sensitive_text(reason) if reason else None,
             "provenance": _json_safe(provenance or {}),
         }
     )
@@ -208,19 +252,51 @@ def detect_conflicts(
 ) -> list[dict[str, Any]]:
     """Return conflicts without selecting or dropping any source evidence."""
     groups: dict[tuple[Any, ...], list[dict[str, Any]]] = defaultdict(list)
+    invalid_freshness: dict[tuple[Any, ...], list[dict[str, Any]]] = defaultdict(list)
     for item in evidence:
         normalized = validate_field_evidence(item, allow_production=allow_production)
+        top_retrieved_at = _parse_time(item.get("retrieved_at"))
+        sidecar_retrieved_at = _parse_time(
+            (item.get("provenance") or {}).get("retrieved_at")
+        )
+        freshness_status = item.get("freshness_status")
+        if (
+            item.get("status") == "available"
+            and item.get("value") is not None
+            and normalized["status"] != "available"
+            and (
+                top_retrieved_at is None
+                or sidecar_retrieved_at is None
+                or top_retrieved_at != sidecar_retrieved_at
+                or (
+                    freshness_status is not None
+                    and freshness_status not in _FRESHNESS_STATUSES
+                )
+            )
+        ):
+            invalid_freshness[
+                (normalized.get("ticker"), normalized.get("field"))
+            ].append(normalized)
         if normalized["status"] != "available":
             continue
         key = (
             normalized.get("ticker"),
             normalized.get("field"),
-            normalized.get("as_of") or normalized.get("report_period"),
         )
         groups[key].append(normalized)
 
     conflicts: list[dict[str, Any]] = []
     current = now or datetime.now(timezone.utc)
+    for key, items in invalid_freshness.items():
+        conflicts.append(
+            {
+                "kind": "freshness",
+                "key": key,
+                "providers": items,
+                "fresh_providers": [],
+                "stale_providers": items,
+            }
+        )
     for key, items in groups.items():
         values = {_hash(item.get("value")) for item in items}
         units = {(item.get("unit"), item.get("currency")) for item in items}
@@ -232,22 +308,33 @@ def detect_conflicts(
         if len(times) > 1:
             conflicts.append({"kind": "time_basis", "key": key, "providers": items})
 
-        if freshness_seconds is not None:
+        if freshness_seconds is not None or any(
+            item.get("freshness_status") in {"stale", "unknown"}
+            for item in items
+        ):
             fresh = []
             stale = []
             for item in items:
                 retrieved = _parse_time(
                     (item.get("provenance") or {}).get("retrieved_at")
                 )
-                if retrieved is None or (current - retrieved).total_seconds() > freshness_seconds:
+                if item.get("freshness_status") in {"stale", "unknown"}:
+                    stale.append(item)
+                elif freshness_seconds is not None and (
+                    retrieved is None
+                    or (
+                    current - retrieved
+                    ).total_seconds() > freshness_seconds
+                ):
                     stale.append(item)
                 else:
                     fresh.append(item)
-            if fresh and stale:
+            if stale:
                 conflicts.append(
                     {
                         "kind": "freshness",
                         "key": key,
+                        "providers": items,
                         "fresh_providers": fresh,
                         "stale_providers": stale,
                     }

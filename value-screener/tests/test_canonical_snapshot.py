@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -24,6 +25,7 @@ def _evidence(
     eligibility: str = "production_eligible",
     status: str = "available",
     response_hash: str = "a" * 64,
+    retrieved_at: str = "2026-08-04T09:00:00+00:00",
 ):
     return {
         "provider_family": "baseline",
@@ -41,7 +43,7 @@ def _evidence(
         "status": status,
         "eligibility": eligibility,
         "response_hash": response_hash,
-        "retrieved_at": "2026-08-04T09:00:00+00:00",
+        "retrieved_at": retrieved_at,
         "provenance": {
             "provider_family": "baseline",
             "provider": provider,
@@ -50,7 +52,7 @@ def _evidence(
             "ticker": ticker,
             "raw_field": "最新价",
             "response_hash": response_hash,
-            "retrieved_at": "2026-08-04T09:00:00+00:00",
+            "retrieved_at": retrieved_at,
         },
     }
 
@@ -133,3 +135,97 @@ def test_snapshot_does_not_touch_legacy_cache(tmp_path):
     )
 
     assert json.loads(legacy.read_text()) == {"price": 1}
+
+
+def test_single_stale_production_evidence_is_not_canonical_consumable():
+    snapshot = build_snapshot(
+        [_evidence(retrieved_at="a" * 64)],
+        tickers=["600519.SH"],
+        plan_version="test-v1",
+        run_id="single-stale",
+        freshness_seconds=60,
+    )
+
+    assert snapshot["records"]["600519.SH"]["last_price"] is None
+    assert any(
+        conflict["kind"] == "freshness"
+        for conflict in snapshot["conflicts"]
+    )
+
+
+def test_timestamp_mismatch_between_evidence_and_provenance_fails_closed():
+    evidence = _evidence(retrieved_at="2026-08-04T09:00:00+00:00")
+    evidence["provenance"]["retrieved_at"] = "not-a-timestamp"
+
+    snapshot = build_snapshot(
+        [evidence],
+        tickers=["600519.SH"],
+        plan_version="test-v1",
+        run_id="timestamp-mismatch",
+    )
+
+    assert snapshot["records"]["600519.SH"]["last_price"] is None
+    assert snapshot["provenance"][0]["status"] == "not_evaluated"
+    assert any(
+        conflict["kind"] == "freshness"
+        for conflict in snapshot["conflicts"]
+    )
+
+
+def test_freshness_reference_and_window_change_source_identity():
+    evidence = _evidence(retrieved_at="2026-08-04T09:00:00+00:00")
+    first = build_snapshot(
+        [evidence],
+        tickers=["600519.SH"],
+        plan_version="test-v1",
+        run_id="freshness-hash-a",
+        freshness_seconds=60,
+        freshness_as_of=datetime(2026, 8, 4, 9, 1, tzinfo=timezone.utc),
+    )
+    second = build_snapshot(
+        [evidence],
+        tickers=["600519.SH"],
+        plan_version="test-v1",
+        run_id="freshness-hash-b",
+        freshness_seconds=120,
+        freshness_as_of=datetime(2026, 8, 4, 9, 2, tzinfo=timezone.utc),
+    )
+
+    assert first["source_set_hash"] != second["source_set_hash"]
+
+
+def test_explicit_stale_status_is_a_conflict_without_window():
+    evidence = _evidence()
+    evidence["freshness_status"] = "stale"
+
+    snapshot = build_snapshot(
+        [evidence],
+        tickers=["600519.SH"],
+        plan_version="test-v1",
+        run_id="explicit-stale",
+    )
+
+    assert snapshot["records"]["600519.SH"]["last_price"] is None
+    assert any(
+        conflict["kind"] == "freshness"
+        for conflict in snapshot["conflicts"]
+    )
+
+
+def test_invalid_freshness_status_fails_closed_and_is_a_conflict():
+    evidence = _evidence()
+    evidence["freshness_status"] = "bogus"
+
+    snapshot = build_snapshot(
+        [evidence],
+        tickers=["600519.SH"],
+        plan_version="test-v1",
+        run_id="invalid-freshness-status",
+    )
+
+    assert snapshot["records"]["600519.SH"]["last_price"] is None
+    assert snapshot["provenance"][0]["status"] == "invalid_value"
+    assert any(
+        conflict["kind"] == "freshness"
+        for conflict in snapshot["conflicts"]
+    )
