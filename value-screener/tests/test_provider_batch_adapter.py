@@ -16,13 +16,18 @@ from data.lib.provider_batch_adapter import (  # noqa: E402
 from data.lib.canonical_snapshot import SnapshotError
 
 
+_USE_CURRENT_RETRIEVED_AT = object()
+
+
 def _record(
     ticker: str,
     value: float,
     *,
     unit: str = "CNY/share",
-    retrieved_at: str | None = None,
+    retrieved_at: str | None | object = _USE_CURRENT_RETRIEVED_AT,
 ) -> dict:
+    if retrieved_at is _USE_CURRENT_RETRIEVED_AT:
+        retrieved_at = datetime.now(timezone.utc).isoformat()
     return {
         "ticker": ticker,
         "last_price": value,
@@ -184,6 +189,7 @@ def test_field_failure_isolated_and_preserved_in_sidecar():
                         "unit": "CNY/share",
                         "currency": "CNY",
                         "as_of": "2026-08-05",
+                        "retrieved_at": datetime.now(timezone.utc).isoformat(),
                     },
                     "turnover_rate": {
                         "status": "source_failed",
@@ -311,6 +317,7 @@ def test_time_basis_mismatch_fails_closed():
                     "unit": "CNY/share",
                     "currency": "CNY",
                     "as_of": as_of,
+                    "retrieved_at": datetime.now(timezone.utc).isoformat(),
                 }
             },
         }
@@ -522,6 +529,30 @@ def test_invalid_mapping_key_with_valid_embedded_ticker_is_invalid_value():
     assert result["snapshot"]["records"]["600519.SH"]["last_price"] is None
 
 
+def test_unbindable_response_key_is_not_record_not_found():
+    def fetch(_request):
+        return {"not-a-ticker": {"last_price": 123.4}}
+
+    result = BatchAdapter(
+        [
+            ProviderSpec(
+                "fixture",
+                "provider",
+                fetch,
+                eligibility="production_eligible",
+            )
+        ]
+    ).run(
+        tickers=["600519.SH"],
+        method="quote",
+        fields=["last_price"],
+        run_id="unbindable-response-key",
+    )
+
+    assert result["evidence"][0]["status"] == "invalid_value"
+    assert "unbindable" in result["evidence"][0]["reason"]
+
+
 def test_scalar_response_entry_does_not_cancel_valid_mapping_entry():
     def fetch(_request):
         return {
@@ -550,6 +581,77 @@ def test_scalar_response_entry_does_not_cancel_valid_mapping_entry():
     assert by_ticker["000858.SZ"]["status"] == "invalid_value"
     assert result["snapshot"]["records"]["600519.SH"]["last_price"] == 123.4
     assert result["snapshot"]["records"]["000858.SZ"]["last_price"] is None
+
+
+def test_malformed_list_row_does_not_cancel_valid_row():
+    def fetch(_request):
+        return [
+            _record("600519.SH", 123.4),
+            {"last_price": 88.8},
+        ]
+
+    result = BatchAdapter(
+        [
+            ProviderSpec(
+                "fixture",
+                "provider",
+                fetch,
+                eligibility="production_eligible",
+            )
+        ]
+    ).run(
+        tickers=["600519.SH", "000858.SZ"],
+        method="quote",
+        fields=["last_price"],
+        run_id="malformed-list-row",
+    )
+
+    by_ticker = {item["ticker"]: item for item in result["evidence"]}
+    assert by_ticker["600519.SH"]["status"] == "available"
+    assert by_ticker["000858.SZ"]["status"] == "invalid_value"
+    assert result["snapshot"]["records"]["600519.SH"]["last_price"] == 123.4
+
+
+def test_field_metadata_type_error_is_isolated_to_field():
+    def fetch(_request):
+        return {
+            "600519.SH": {
+                "ticker": "600519.SH",
+                "last_price": 123.4,
+                "turnover_rate": 2.1,
+                "_fields": {
+                    "last_price": {
+                        "unit": "CNY/share",
+                        "currency": "CNY",
+                        "as_of": "2026-08-05",
+                        "retrieved_at": datetime.now(timezone.utc).isoformat(),
+                    },
+                    "turnover_rate": None,
+                },
+            }
+        }
+
+    result = BatchAdapter(
+        [
+            ProviderSpec(
+                "fixture",
+                "provider",
+                fetch,
+                eligibility="production_eligible",
+            )
+        ]
+    ).run(
+        tickers=["600519.SH"],
+        method="quote",
+        fields=["last_price", "turnover_rate"],
+        run_id="metadata-type-error",
+    )
+
+    by_field = {item["field"]: item for item in result["evidence"]}
+    assert by_field["last_price"]["status"] == "available"
+    assert by_field["turnover_rate"]["status"] == "invalid_value"
+    assert result["snapshot"]["records"]["600519.SH"]["last_price"] == 123.4
+    assert result["snapshot"]["records"]["600519.SH"]["turnover_rate"] is None
 
 
 def test_non_a_share_ticker_is_reported_without_a_share_provenance():
@@ -590,7 +692,11 @@ def test_missing_retrieved_at_is_not_treated_as_fresh():
                 "baseline",
                 "missing-time",
                 lambda _request: {
-                    "600519.SH": _record("600519.SH", 123.4)
+                    "600519.SH": _record(
+                        "600519.SH",
+                        123.4,
+                        retrieved_at=None,
+                    )
                 },
                 eligibility="production_eligible",
             )
@@ -600,7 +706,6 @@ def test_missing_retrieved_at_is_not_treated_as_fresh():
         method="quote",
         fields=["last_price"],
         run_id="missing-retrieved-at",
-        freshness_seconds=60,
     )
 
     assert result["snapshot"]["records"]["600519.SH"]["last_price"] is None

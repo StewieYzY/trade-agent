@@ -52,3 +52,14 @@
 - requested fields 纳入 `BatchRequest`、`request_id`、provider summary 和落盘 manifest，避免不同字段请求身份混淆。
 
 本轮验证：adapter + canonical focused 29 passed；完整 provider qualification、provenance、canonical snapshot 边界套件合计 50 passed；compileall 与 `git diff --check` 通过。
+
+## Third independent-review corrections — 2026-08-05
+
+第三次独立 review 的 3 个 P1 与 1 个 P2 已修复：
+
+- 缺失 `retrieved_at` 即使未设置 freshness window 也标记为 `freshness_status=unknown`，不能进入 production canonical。
+- 无法绑定的非法 response key 及 list malformed row 转为 response-level `invalid_value`，只影响无法绑定的请求 ticker；合法记录继续处理。
+- `records` list 的 malformed row 不再中止整批。
+- `_fields` 容器或单字段 metadata 类型异常按 field 生成 `invalid_value` evidence，不再触发 provider-level duplicate/failure 覆盖。
+
+本轮验证：adapter focused 25 passed；完整 provider qualification、provenance、canonical snapshot 边界套件合计 53 passed；compileall 与 `git diff --check` 通过。

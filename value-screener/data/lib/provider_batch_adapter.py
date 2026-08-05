@@ -217,6 +217,9 @@ class BatchAdapter:
                     for issue in response_issues
                     if issue.get("ticker") in canonical_tickers
                 }
+                unbound_issues = [
+                    issue for issue in response_issues if issue.get("ticker") is None
+                ]
                 for issue in issues_by_ticker.values():
                     evidence.extend(
                         _failure_evidence(
@@ -235,6 +238,18 @@ class BatchAdapter:
                         continue
                     record = records.get(ticker)
                     if record is None:
+                        if unbound_issues:
+                            evidence.extend(
+                                _failure_evidence(
+                                    {**base, "ticker": ticker},
+                                    (ticker,),
+                                    requested_fields,
+                                    status="invalid_value",
+                                    reason=unbound_issues[0]["reason"],
+                                    response_hash=response_hash,
+                                )
+                            )
+                            continue
                         evidence.extend(
                             _failure_evidence(
                                 {**base, "ticker": ticker},
@@ -422,11 +437,27 @@ def _records_by_ticker(
                 continue
         else:
             if not isinstance(row, Mapping):
-                raise ValueError("batch response row must be a mapping")
+                issues.append(
+                    {
+                        "ticker": None,
+                        "raw_ticker": None,
+                        "status": "invalid_value",
+                        "reason": "batch response row must be a mapping",
+                    }
+                )
+                continue
             raw_key = row.get("ticker") or row.get("code") or row.get("symbol")
             record = row
         if raw_key is None:
-            raise ValueError("batch response row is missing ticker")
+            issues.append(
+                {
+                    "ticker": None,
+                    "raw_ticker": None,
+                    "status": "invalid_value",
+                    "reason": "batch response row is missing ticker",
+                }
+            )
+            continue
         try:
             ticker = _canonical_a_share_ticker(str(raw_key))
         except ValueError as exc:
@@ -451,7 +482,7 @@ def _records_by_ticker(
                         + (
                             f" for embedded ticker {embedded_ticker}"
                             if embedded_ticker
-                            else f": {_redact(str(exc))}"
+                            else f" (unbindable): {_redact(str(exc))}"
                         )
                     ),
                 }
@@ -515,14 +546,24 @@ def _record_evidence(
     result = []
     for field in fields:
         raw = record.get(field)
-        metadata = field_meta.get(field, {}) if isinstance(field_meta, Mapping) else {}
+        metadata_error = None
+        if not isinstance(field_meta, Mapping):
+            metadata = {}
+            metadata_error = "field metadata container must be a mapping"
+        else:
+            metadata = field_meta.get(field, {})
+            if not isinstance(metadata, Mapping):
+                metadata = {}
+                metadata_error = "field metadata must be a mapping"
         if isinstance(raw, Mapping) and "value" in raw:
             value = raw.get("value")
             metadata = {**metadata, **raw}
         else:
             value = raw
-        reason = None
-        status = metadata.get("status") or record.get("_status")
+        reason = metadata_error
+        status = "invalid_value" if metadata_error else (
+            metadata.get("status") or record.get("_status")
+        )
         if status is None:
             if field not in record:
                 status = "not_evaluated"
@@ -544,7 +585,10 @@ def _record_evidence(
             response_hash=response_hash,
             reason=reason,
         )
-        if (
+        if item["status"] == "available" and not metadata.get("retrieved_at"):
+            item["freshness_status"] = "unknown"
+            item["reason"] = "retrieved_at is missing for freshness evaluation"
+        elif (
             freshness_seconds is not None
             and item["status"] == "available"
         ):
