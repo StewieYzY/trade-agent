@@ -63,3 +63,26 @@
 - `_fields` 容器或单字段 metadata 类型异常按 field 生成 `invalid_value` evidence，不再触发 provider-level duplicate/failure 覆盖。
 
 本轮验证：adapter focused 25 passed；完整 provider qualification、provenance、canonical snapshot 边界套件合计 53 passed；compileall 与 `git diff --check` 通过。
+
+## Fourth independent-review corrections — 2026-08-05
+
+第四次独立 review 发现的 2 个 P0/P1 与 5 个边界问题已继续修复：
+
+- 空 mapping、空 list、空 `records` 和含 “not found” 的模糊 provider exception 不再当作 `record_not_found`；统一保留为 `source_failed`，只有成功返回且明确遗漏 ticker 才使用 `record_not_found`。
+- adapter/provider error reason 统一覆盖 Bearer token、`sk-*`、API key 和 URL userinfo 脱敏，evidence 与 provider summary 均不保留明文 secret。
+- 任意字段的 `available + None`、缺失或非法 `retrieved_at` 都 fail closed；当前/行情类 numeric 字段也要求显式时间基准，不能因为字段是非财务字段而绕过时间合同。
+- freshness reference 在一次 batch run 内固定并写入 manifest；canonical snapshot 的 source hash 保留 freshness status，直接 snapshot 入口也会为非法 freshness 生成冲突证据。
+- 归一化后的重复 canonical ticker 被记录为 `invalid_value`，不重复发起请求；method/fields 输入必须是非空字符串集合；provider method call key 纳入 provider family，避免审计碰撞。
+
+本轮验证：adapter/canonical/provenance focused 48 passed；正确项目 venv 下 full pytest `590 passed in 47.36s`；compileall 与 `git diff --check` 通过。系统 Python 因缺少 `akshare`/`pandas`/`typer` 无法完成全量收集，该环境结果不作为通过证据。
+
+## Fifth independent-review corrections — 2026-08-05
+
+第五次独立 review 继续修复以下状态与安全边界：
+
+- `source_failed`、`record_not_found` 等失败 evidence 即使没有 retrieval timestamp，也保留原始失败状态、redacted reason 和 status summary；不以 `not_evaluated` 覆盖 provider failure 语义。
+- `freshness_status` 只接受 `fresh`、`stale`、`unknown`；未知值转为 `invalid_value`，并进入 freshness conflict，禁止 canonical 消费。
+- 脱敏对裸 Bearer/Basic/Token 只在有授权前缀或明显 secret-like value 时处理，避免把普通诊断文本如 `invalid token format`、`bearer bond endpoint` 改写；URI userinfo 覆盖通用 scheme（包括 `ftp`）。
+- `tickers` 的 `None`、字符串和不可迭代输入统一返回稳定的 `ValueError`。
+
+本轮 focused 验证：adapter/canonical/provenance `55 passed`。full pytest、compileall、`git diff --check` 需在最终复审后重新执行。

@@ -72,7 +72,7 @@ def test_batch_provider_is_called_once_and_maps_each_ticker():
     assert len(calls) == 1
     assert calls[0].tickers == ("000858.SZ", "600519.SH")
     assert result["manifest"]["provider_method_calls"] == {
-        "baseline:quote": 1
+        "fixture:baseline:quote": 1
     }
     summary = result["manifest"]["providers"][0]
     assert summary["batch_size"] == 2
@@ -823,7 +823,248 @@ def test_persisted_manifest_keeps_batch_audit_fields(tmp_path):
     )
     assert persisted["method"] == "quote"
     assert persisted["requested_tickers"] == ["000858.SZ", "600519.SH"]
-    assert persisted["provider_method_calls"] == {"provider:quote": 1}
+    assert persisted["provider_method_calls"] == {
+        "fixture:provider:quote": 1
+    }
     assert persisted["providers"][0]["missing_tickers"] == ["000858.SZ"]
     assert persisted["freshness_seconds"] == 60
     assert result["manifest"]["snapshot_output"]
+
+
+@pytest.mark.parametrize(
+    "fetch",
+    [
+        lambda _request: {},
+        lambda _request: {"records": []},
+        lambda _request: [],
+        lambda _request: (_ for _ in ()).throw(
+            RuntimeError("record not found for provider")
+        ),
+        lambda _request: (_ for _ in ()).throw(KeyError("record not found")),
+        lambda _request: (_ for _ in ()).throw(ValueError("not found")),
+    ],
+)
+def test_empty_or_ambiguous_not_found_response_is_source_failed(fetch):
+    result = BatchAdapter(
+        [
+            ProviderSpec(
+                "fixture",
+                "provider",
+                fetch,
+                eligibility="production_eligible",
+            )
+        ]
+    ).run(
+        tickers=["600519.SH"],
+        method="quote",
+        fields=["last_price"],
+        run_id="empty-provider-response",
+    )
+
+    assert result["evidence"][0]["status"] == "source_failed"
+    assert result["snapshot"]["provenance"][0]["status"] == "source_failed"
+    assert result["snapshot"]["status_summary"] == {"source_failed": 1}
+    assert result["snapshot"]["records"]["600519.SH"]["last_price"] is None
+
+
+def test_provider_error_reason_redacts_bearer_and_secret_tokens():
+    messages = (
+        "Authorization: Bearer secret-token api_key=sk-secret "
+        "https://user:pass@example.com",
+        "Authorization=Bearer plain-secret api key=plain-api-key",
+        "Bearer bare-secret token=token-value",
+    )
+    for index, message in enumerate(messages):
+        result = BatchAdapter(
+            [
+                ProviderSpec(
+                    "fixture",
+                    "provider",
+                    lambda _request, message=message: (_ for _ in ()).throw(
+                        RuntimeError(message)
+                    ),
+                )
+            ]
+        ).run(
+            tickers=["600519.SH"],
+            method="quote",
+            fields=["last_price"],
+            run_id=f"redacted-provider-error-{index}",
+        )
+
+        reason = result["evidence"][0]["reason"]
+        summary_reason = result["manifest"]["providers"][0]["reason"]
+        for text in (reason, summary_reason):
+            assert "secret-token" not in text
+            assert "plain-secret" not in text
+            assert "bare-secret" not in text
+            assert "sk-secret" not in text
+            assert "plain-api-key" not in text
+            assert "token-value" not in text
+            assert "user:pass@" not in text
+
+
+def test_redaction_preserves_normal_diagnostic_words_and_redacts_other_uri_schemes():
+    result = BatchAdapter(
+        [
+            ProviderSpec(
+                "fixture",
+                "provider",
+                lambda _request: (_ for _ in ()).throw(
+                    RuntimeError(
+                        "invalid token format; bearer bond endpoint failed; "
+                        "ftp://user:pass@example.com"
+                    )
+                ),
+            )
+        ]
+    ).run(
+        tickers=["600519.SH"],
+        method="quote",
+        fields=["last_price"],
+        run_id="redaction-context",
+    )
+
+    reason = result["evidence"][0]["reason"]
+    assert "invalid token format" in reason
+    assert "bearer bond endpoint failed" in reason
+    assert "user:pass@" not in reason
+
+
+def test_available_none_is_not_canonical_consumable():
+    def fetch(_request):
+        return {
+            "600519.SH": {
+                "ticker": "600519.SH",
+                "name": None,
+                "_fields": {
+                    "name": {
+                        "status": "available",
+                        "as_of": "2026-08-05",
+                        "retrieved_at": datetime.now(timezone.utc).isoformat(),
+                    }
+                },
+            }
+        }
+
+    result = BatchAdapter(
+        [
+            ProviderSpec(
+                "fixture",
+                "provider",
+                fetch,
+                eligibility="production_eligible",
+            )
+        ]
+    ).run(
+        tickers=["600519.SH"],
+        method="static_info",
+        fields=["name"],
+        run_id="none-is-not-available",
+    )
+
+    assert result["evidence"][0]["status"] == "not_evaluated"
+    assert result["snapshot"]["records"]["600519.SH"]["name"] is None
+    assert result["snapshot"]["provenance"][0]["canonical_consumable"] is False
+
+
+def test_invalid_retrieved_at_is_not_fresh_or_consumable():
+    result = BatchAdapter(
+        [
+            ProviderSpec(
+                "fixture",
+                "provider",
+                lambda _request: {
+                    "600519.SH": _record(
+                        "600519.SH",
+                        123.4,
+                        retrieved_at="not-a-timestamp",
+                    )
+                },
+                eligibility="production_eligible",
+            )
+        ]
+    ).run(
+        tickers=["600519.SH"],
+        method="quote",
+        fields=["last_price"],
+        run_id="invalid-retrieved-at",
+    )
+
+    assert result["snapshot"]["records"]["600519.SH"]["last_price"] is None
+    assert result["snapshot"]["provenance"][0]["freshness_status"] == "unknown"
+    assert result["snapshot"]["provenance"][0]["status"] == "not_evaluated"
+
+
+def test_duplicate_canonical_ticker_is_reported_without_duplicate_request():
+    calls = []
+
+    def fetch(request):
+        calls.append(request)
+        return {"600519.SH": _record("600519.SH", 123.4)}
+
+    result = BatchAdapter(
+        [
+            ProviderSpec(
+                "fixture",
+                "provider",
+                fetch,
+                eligibility="production_eligible",
+            )
+        ]
+    ).run(
+        tickers=["600519", "600519.SH"],
+        method="quote",
+        fields=["last_price"],
+        run_id="duplicate-ticker",
+    )
+
+    assert len(calls) == 1
+    assert result["manifest"]["invalid_tickers"] == [
+        {
+            "raw_ticker": "600519.SH",
+            "status": "invalid_value",
+            "reason": "duplicate canonical ticker 600519.SH",
+        }
+    ]
+
+
+def test_method_and_fields_require_non_empty_strings():
+    adapter = BatchAdapter(
+        [
+            ProviderSpec(
+                "fixture",
+                "provider",
+                lambda _request: {},
+            )
+        ]
+    )
+
+    with pytest.raises(ValueError, match="method"):
+        adapter.run(
+            tickers=["600519.SH"],
+            method="",
+            fields=["last_price"],
+            run_id="invalid-method",
+        )
+    with pytest.raises(ValueError, match="fields"):
+        adapter.run(
+            tickers=["600519.SH"],
+            method="quote",
+            fields="last_price",
+            run_id="invalid-fields",
+        )
+    with pytest.raises(ValueError, match="fields"):
+        adapter.run(
+            tickers=["600519.SH"],
+            method="quote",
+            fields=None,
+            run_id="missing-fields",
+        )
+    with pytest.raises(ValueError, match="tickers"):
+        adapter.run(
+            tickers=None,
+            method="quote",
+            fields=["last_price"],
+            run_id="missing-tickers",
+        )

@@ -12,7 +12,7 @@ from typing import Any, Callable, Iterable, Mapping
 
 from .canonical_snapshot import build_snapshot, write_snapshot
 from .identity import canonical_ticker
-from .provenance import ELIGIBILITIES, STATUSES
+from .provenance import ELIGIBILITIES, STATUSES, redact_sensitive_text
 
 
 def _canonical_a_share_ticker(raw: Any) -> str:
@@ -53,21 +53,14 @@ def _classify_error(exc: Exception) -> str:
     if "not supported" in message or "unsupported" in message:
         return "not_supported_for_market"
     if "no record" in message or "not found" in message:
-        return "record_not_found"
+        return "source_failed"
     if isinstance(exc, (ValueError, TypeError, KeyError)):
         return "invalid_value"
     return "source_failed"
 
 
 def _redact(value: Any) -> str:
-    text = str(value)
-    text = re.sub(r"(?i)(https?://)[^/\s@]+@", r"\1<redacted>@", text)
-    text = re.sub(
-        r"(?i)\b(authorization|api[_-]?key|secret|token)\s*[:=]\s*\S+",
-        r"\1=<redacted>",
-        text,
-    )
-    return text[:2_000]
+    return redact_sensitive_text(value)
 
 
 @dataclass(frozen=True)
@@ -138,21 +131,46 @@ class BatchAdapter:
         safe_id = _safe_run_id(run_id)
         if freshness_seconds is not None and freshness_seconds < 0:
             raise ValueError("freshness_seconds must be non-negative")
-        canonical_tickers, invalid_tickers = _normalize_requested_tickers(tickers)
+        if not isinstance(method, str) or not method.strip():
+            raise ValueError("method must be a non-empty string")
+        method = method.strip()
+        if fields is None or isinstance(fields, (str, bytes)):
+            raise ValueError("fields must be an iterable of non-empty strings")
+        if tickers is None or isinstance(tickers, (str, bytes)):
+            raise ValueError("tickers must be an iterable of A-share tickers")
+        try:
+            raw_tickers = tuple(tickers)
+        except TypeError as exc:
+            raise ValueError(
+                "tickers must be an iterable of A-share tickers"
+            ) from exc
+        canonical_tickers, invalid_tickers = _normalize_requested_tickers(raw_tickers)
         if not canonical_tickers:
             if invalid_tickers:
                 raise ValueError("invalid ticker set: no valid A-share ticker")
             raise ValueError("ticker set must not be empty")
-        requested_fields = tuple(dict.fromkeys(fields))
+        try:
+            raw_fields = tuple(fields)
+        except TypeError as exc:
+            raise ValueError(
+                "fields must be an iterable of non-empty strings"
+            ) from exc
+        if any(
+            not isinstance(field, str) or not field.strip()
+            for field in raw_fields
+        ):
+            raise ValueError("fields must contain only non-empty strings")
+        requested_fields = tuple(dict.fromkeys(field.strip() for field in raw_fields))
         if not requested_fields:
             raise ValueError("field set must not be empty")
 
         evidence: list[dict[str, Any]] = []
         stats: dict[str, int] = {}
         provider_summaries: list[dict[str, Any]] = []
+        freshness_reference = datetime.now(timezone.utc)
 
         for provider in self.providers:
-            key = f"{provider.provider}:{method}"
+            key = f"{provider.provider_family}:{provider.provider}:{method}"
             request = BatchRequest(
                 provider_family=provider.provider_family,
                 provider=provider.provider,
@@ -269,6 +287,7 @@ class BatchAdapter:
                             requested_fields,
                             response_hash,
                             freshness_seconds=freshness_seconds,
+                            freshness_reference=freshness_reference,
                         )
                     )
                 provider_summaries.append(
@@ -335,6 +354,11 @@ class BatchAdapter:
             "providers": provider_summaries,
             "evidence_count": len(evidence),
             "freshness_seconds": freshness_seconds,
+            "freshness_evaluated_at": (
+                freshness_reference.isoformat()
+                if freshness_seconds is not None
+                else None
+            ),
             "snapshot_output": None,
         }
         snapshot = build_snapshot(
@@ -343,6 +367,9 @@ class BatchAdapter:
             plan_version=plan_version,
             run_id=safe_id,
             freshness_seconds=freshness_seconds,
+            freshness_as_of=(
+                freshness_reference if freshness_seconds is not None else None
+            ),
         )
         output_path = None
         if output_root is not None:
@@ -354,6 +381,9 @@ class BatchAdapter:
                     output_root=output_root,
                     run_id=safe_id,
                     freshness_seconds=freshness_seconds,
+                    freshness_as_of=(
+                        freshness_reference if freshness_seconds is not None else None
+                    ),
                     manifest_extra={
                         key: value
                         for key, value in manifest.items()
@@ -363,6 +393,7 @@ class BatchAdapter:
                             "schema_version",
                             "status_summary",
                             "snapshot_output",
+                            "freshness_evaluated_at",
                         }
                     },
                 )
@@ -381,9 +412,21 @@ def _normalize_requested_tickers(
 ) -> tuple[tuple[str, ...], list[dict[str, Any]]]:
     canonical: set[str] = set()
     invalid: list[dict[str, Any]] = []
+    seen: set[str] = set()
     for raw_ticker in tickers:
         try:
-            canonical.add(_canonical_a_share_ticker(raw_ticker))
+            normalized = _canonical_a_share_ticker(raw_ticker)
+            if normalized in seen:
+                invalid.append(
+                    {
+                        "raw_ticker": raw_ticker,
+                        "status": "invalid_value",
+                        "reason": f"duplicate canonical ticker {normalized}",
+                    }
+                )
+                continue
+            seen.add(normalized)
+            canonical.add(normalized)
         except (TypeError, ValueError) as exc:
             invalid.append(
                 {
@@ -402,7 +445,7 @@ def _records_by_ticker(
         rows = response["records"]
     elif isinstance(response, Mapping):
         if not response:
-            return {}, []
+            raise RuntimeError("provider response is empty")
         if (
             any(key in response for key in ("status", "data", "error", "message"))
             and any(not isinstance(value, Mapping) for value in response.values())
@@ -415,6 +458,8 @@ def _records_by_ticker(
         rows = response
     else:
         raise TypeError("batch response must be a mapping or list")
+    if not rows:
+        raise RuntimeError("provider response is empty")
 
     result: dict[str, Mapping[str, Any]] = {}
     issues: list[dict[str, Any]] = []
@@ -541,6 +586,7 @@ def _record_evidence(
     response_hash: str,
     *,
     freshness_seconds: int | None = None,
+    freshness_reference: datetime | None = None,
 ) -> list[dict[str, Any]]:
     field_meta = record.get("_fields", {})
     result = []
@@ -573,6 +619,9 @@ def _record_evidence(
                 reason = "provider field has no value"
             else:
                 status = "available"
+        elif status == "available" and value is None:
+            status = "not_evaluated"
+            reason = reason or "provider field has no value"
         if status not in STATUSES:
             reason = f"unknown provider field status: {status!r}"
             status = "invalid_value"
@@ -585,17 +634,22 @@ def _record_evidence(
             response_hash=response_hash,
             reason=reason,
         )
-        if item["status"] == "available" and not metadata.get("retrieved_at"):
+        retrieved_at = metadata.get("retrieved_at")
+        parsed_retrieved_at = _parse_timestamp(retrieved_at)
+        if item["status"] == "available" and parsed_retrieved_at is None:
             item["freshness_status"] = "unknown"
-            item["reason"] = "retrieved_at is missing for freshness evaluation"
+            item["reason"] = (
+                "retrieved_at is missing or invalid for freshness evaluation"
+            )
         elif (
             freshness_seconds is not None
             and item["status"] == "available"
         ):
-            if not metadata.get("retrieved_at"):
-                item["freshness_status"] = "unknown"
-                item["reason"] = "retrieved_at is missing for freshness evaluation"
-            elif _is_stale(item.get("retrieved_at"), freshness_seconds):
+            if _is_stale(
+                retrieved_at,
+                freshness_seconds,
+                now=freshness_reference,
+            ):
                 item["freshness_status"] = "stale"
                 item["reason"] = (
                     f"evidence older than freshness window ({freshness_seconds}s)"
@@ -640,7 +694,7 @@ def _make_evidence(
     response_hash: str | None,
     reason: str | None = None,
 ) -> dict[str, Any]:
-    retrieved_at = metadata.get("retrieved_at") or datetime.now(timezone.utc).isoformat()
+    retrieved_at = metadata.get("retrieved_at")
     return {
         **base,
         "field": field,
@@ -668,16 +722,29 @@ def _make_evidence(
     }
 
 
-def _is_stale(retrieved_at: Any, freshness_seconds: int) -> bool:
-    if not isinstance(retrieved_at, str):
-        return True
+def _parse_timestamp(value: Any) -> datetime | None:
+    if not isinstance(value, str) or not value:
+        return None
     try:
-        parsed = datetime.fromisoformat(retrieved_at.replace("Z", "+00:00"))
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
     except ValueError:
-        return True
+        return None
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=timezone.utc)
-    return (datetime.now(timezone.utc) - parsed).total_seconds() > freshness_seconds
+    return parsed
+
+
+def _is_stale(
+    retrieved_at: Any,
+    freshness_seconds: int,
+    *,
+    now: datetime | None = None,
+) -> bool:
+    parsed = _parse_timestamp(retrieved_at)
+    if parsed is None:
+        return True
+    reference = now or datetime.now(timezone.utc)
+    return (reference - parsed).total_seconds() > freshness_seconds
 
 
 def _status_summary_for(status: str, count: int) -> dict[str, int]:
@@ -730,5 +797,5 @@ def _provider_summary(
         "ticker_set_hash": request.ticker_set_hash,
         "response_hash": response_hash,
         "status_summary": dict(status_summary),
-        "reason": reason,
+        "reason": _redact(reason) if reason else None,
     }

@@ -49,7 +49,12 @@ def _write_json(path: Path, payload: Any) -> None:
     os.replace(temporary, path)
 
 
-def _source_set_hash(evidence: Iterable[Mapping[str, Any]]) -> str:
+def _source_set_hash(
+    evidence: Iterable[Mapping[str, Any]],
+    *,
+    freshness_seconds: int | None = None,
+    freshness_evaluated_at: str | None = None,
+) -> str:
     identity = [
         {
             "ticker": item.get("ticker"),
@@ -60,10 +65,20 @@ def _source_set_hash(evidence: Iterable[Mapping[str, Any]]) -> str:
             "response_hash": item.get("response_hash"),
             "status": item.get("status"),
             "eligibility": item.get("eligibility", "not_qualified"),
+            "freshness_status": item.get("freshness_status"),
         }
         for item in evidence
     ]
-    return _hash(sorted(identity, key=lambda item: json.dumps(item, sort_keys=True)))
+    return _hash(
+        {
+            "fields": sorted(
+                identity,
+                key=lambda item: json.dumps(item, sort_keys=True),
+            ),
+            "freshness_seconds": freshness_seconds,
+            "freshness_evaluated_at": freshness_evaluated_at,
+        }
+    )
 
 
 def _ticker_set_hash(tickers: Iterable[str]) -> str:
@@ -87,10 +102,27 @@ def build_snapshot(
     run_id: str | None = None,
     as_of: str | None = None,
     freshness_seconds: int | None = None,
+    freshness_as_of: datetime | None = None,
 ) -> dict[str, Any]:
     if freshness_seconds is not None and freshness_seconds < 0:
         raise SnapshotError("freshness_seconds must be non-negative")
-    normalized = [validate_field_evidence(item, allow_production=True) for item in evidence]
+    freshness_evaluated_at = (
+        freshness_as_of.isoformat()
+        if freshness_as_of is not None
+        else (
+            datetime.now(timezone.utc).isoformat()
+            if freshness_seconds is not None
+            else None
+        )
+    )
+    freshness_reference = freshness_as_of
+    if freshness_reference is None and freshness_seconds is not None:
+        freshness_reference = datetime.fromisoformat(freshness_evaluated_at)
+    raw_evidence = list(evidence)
+    normalized = [
+        validate_field_evidence(item, allow_production=True)
+        for item in raw_evidence
+    ]
     ticker_list = sorted({canonical_ticker(ticker) for ticker in tickers})
     if not ticker_list:
         raise SnapshotError("snapshot ticker set must not be empty")
@@ -98,10 +130,11 @@ def build_snapshot(
     conflicts = detect_conflicts(
         [
             item
-            for item in normalized
+            for item in raw_evidence
             if item.get("eligibility") == "production_eligible"
         ],
         freshness_seconds=freshness_seconds,
+        now=freshness_reference,
         allow_production=True,
     )
     conflict_keys = {
@@ -148,8 +181,13 @@ def build_snapshot(
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "as_of": as_of,
         "ticker_set_hash": _ticker_set_hash(ticker_list),
-        "source_set_hash": _source_set_hash(normalized),
+        "source_set_hash": _source_set_hash(
+            normalized,
+            freshness_seconds=freshness_seconds,
+            freshness_evaluated_at=freshness_evaluated_at,
+        ),
         "status_summary": _status_summary(normalized),
+        "freshness_evaluated_at": freshness_evaluated_at,
         "conflict_count": len(conflicts),
         "records": records,
         "provenance": sidecar,
@@ -166,6 +204,7 @@ def write_snapshot(
     run_id: str | None = None,
     as_of: str | None = None,
     freshness_seconds: int | None = None,
+    freshness_as_of: datetime | None = None,
     manifest_extra: Mapping[str, Any] | None = None,
 ) -> Path:
     snapshot = build_snapshot(
@@ -175,6 +214,7 @@ def write_snapshot(
         run_id=run_id,
         as_of=as_of,
         freshness_seconds=freshness_seconds,
+        freshness_as_of=freshness_as_of,
     )
     root = Path(output_root).resolve()
     run_dir = (root / snapshot["run_id"]).resolve()
@@ -197,6 +237,7 @@ def write_snapshot(
             "ticker_set_hash",
             "source_set_hash",
             "status_summary",
+            "freshness_evaluated_at",
             "conflict_count",
         )
     }

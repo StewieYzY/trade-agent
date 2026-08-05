@@ -64,11 +64,25 @@ def test_missing_unit_or_time_basis_downgrades_numeric_field():
     missing_time = validate_field_evidence(
         _evidence(field="pe_ttm", as_of=None, report_period=None)
     )
+    missing_quote_time = validate_field_evidence(
+        _evidence(field="last_price", as_of=None)
+    )
 
     assert missing_unit["status"] == "not_evaluated"
     assert "unit" in missing_unit["reason"]
     assert missing_time["status"] == "not_evaluated"
     assert "time basis" in missing_time["reason"]
+    assert missing_quote_time["status"] == "not_evaluated"
+    assert "time basis" in missing_quote_time["reason"]
+
+
+def test_available_none_is_downgraded_even_for_non_numeric_field():
+    result = validate_field_evidence(
+        _evidence(field="name", value=None, as_of="2026-08-04")
+    )
+
+    assert result["status"] == "not_evaluated"
+    assert "no value" in result["reason"]
 
 
 def test_missing_provenance_and_production_promotion_fail_closed():
