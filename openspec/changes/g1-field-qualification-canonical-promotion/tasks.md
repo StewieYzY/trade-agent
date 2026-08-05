@@ -1,0 +1,23 @@
+## 1. OpenSpec contract
+
+- [x] 1.1 Freeze the field qualification policy version, five canonical tickers, method/field matrix, and group-level decision statuses.
+- [x] 1.2 Define source-run completeness checks, policy hash, decision schema, promotion manifest, and protected output boundary.
+
+## 2. Field qualification evaluator
+
+- [x] 2.1 Add failing tests for incomplete source runs, evidence count mismatch, unexpected ticker/field, missing provenance/time basis, and rejected statuses.
+- [x] 2.2 Implement source-run loading and explicit policy validation without modifying source artifacts.
+- [x] 2.3 Add failing tests for complete groups, missing ticker coverage, duplicate evidence, metadata conflicts, stale/unknown freshness, and candidate-provider isolation.
+- [x] 2.4 Implement deterministic group evaluation and promoted evidence copies with explicit rejection reasons.
+
+## 3. Canonical promotion entrypoint
+
+- [x] 3.1 Add failing tests for decision artifact, canonical snapshot output, duplicate run IDs, protected paths, and source-run immutability.
+- [x] 3.2 Implement the run-scoped promotion script using the existing canonical snapshot writer.
+- [x] 3.3 Add CLI argument validation and stable decision/source hashes.
+
+## 4. Verification and handoff
+
+- [x] 4.1 Run focused field qualification, canonical snapshot, and provenance tests with the repository venv.
+- [x] 4.2 Run strict OpenSpec validation, compileall, full pytest, and git diff check; clean generated runtime artifacts.
+- [x] 4.3 Write the dated implementation decision and update this task list only for verified tasks.
