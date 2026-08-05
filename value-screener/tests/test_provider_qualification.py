@@ -138,7 +138,8 @@ def test_rate_limit_stops_remaining_cases_for_provider(tmp_path):
 
     assert calls == ["quote"]
     assert result["manifest"]["stop_reason"] == "rate_limited:longport:quote:600519.SH"
-    assert len(result["evidence"]) == 2
+    assert result["manifest"]["completion_status"] == "incomplete"
+    assert result["evidence"] is None
 
 
 def test_run_id_cannot_escape_output_root(tmp_path):
