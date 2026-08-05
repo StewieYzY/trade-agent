@@ -76,12 +76,17 @@ class BatchRequest:
     provider: str
     method: str
     tickers: tuple[str, ...]
+    fields: tuple[str, ...]
     run_id: str
     shadow: bool
 
     @property
     def ticker_set_hash(self) -> str:
         return _hash(self.tickers)
+
+    @property
+    def fields_hash(self) -> str:
+        return _hash(self.fields)
 
     @property
     def request_id(self) -> str:
@@ -91,6 +96,7 @@ class BatchRequest:
                 self.provider,
                 self.method,
                 self.ticker_set_hash,
+                self.fields_hash,
             )
         )
 
@@ -152,6 +158,7 @@ class BatchAdapter:
                 provider=provider.provider,
                 method=method,
                 tickers=canonical_tickers,
+                fields=requested_fields,
                 run_id=safe_id,
                 shadow=provider.shadow,
             )
@@ -304,6 +311,8 @@ class BatchAdapter:
             "method": method,
             "requested_tickers": list(canonical_tickers),
             "requested_ticker_set_hash": _hash(canonical_tickers),
+            "requested_fields": list(requested_fields),
+            "requested_fields_hash": _hash(requested_fields),
             "invalid_tickers": invalid_tickers,
             "provider_method_calls": stats,
             "batch_size": len(canonical_tickers),
@@ -379,7 +388,10 @@ def _records_by_ticker(
     elif isinstance(response, Mapping):
         if not response:
             return {}, []
-        if any(not isinstance(value, Mapping) for value in response.values()):
+        if (
+            any(key in response for key in ("status", "data", "error", "message"))
+            and any(not isinstance(value, Mapping) for value in response.values())
+        ):
             raise ValueError(
                 "batch response schema must be a ticker mapping or records list"
             )
@@ -394,6 +406,20 @@ def _records_by_ticker(
     for row in rows:
         if isinstance(response, Mapping) and response.get("records") is None:
             raw_key, record = row
+            if not isinstance(record, Mapping):
+                try:
+                    ticker = _canonical_a_share_ticker(str(raw_key))
+                except ValueError:
+                    ticker = None
+                issues.append(
+                    {
+                        "ticker": ticker,
+                        "raw_ticker": raw_key,
+                        "status": "invalid_value",
+                        "reason": "response record must be a mapping",
+                    }
+                )
+                continue
         else:
             if not isinstance(row, Mapping):
                 raise ValueError("batch response row must be a mapping")
@@ -404,12 +430,30 @@ def _records_by_ticker(
         try:
             ticker = _canonical_a_share_ticker(str(raw_key))
         except ValueError as exc:
+            embedded_raw = (
+                record.get("ticker")
+                or record.get("code")
+                or record.get("symbol")
+            ) if isinstance(record, Mapping) else None
+            embedded_ticker = None
+            if embedded_raw is not None:
+                try:
+                    embedded_ticker = _canonical_a_share_ticker(str(embedded_raw))
+                except ValueError:
+                    pass
             issues.append(
                 {
-                    "ticker": None,
+                    "ticker": embedded_ticker,
                     "raw_ticker": raw_key,
                     "status": "invalid_value",
-                    "reason": _redact(str(exc)),
+                    "reason": (
+                        f"invalid response mapping key {raw_key!r}"
+                        + (
+                            f" for embedded ticker {embedded_ticker}"
+                            if embedded_ticker
+                            else f": {_redact(str(exc))}"
+                        )
+                    ),
                 }
             )
             continue
@@ -503,10 +547,15 @@ def _record_evidence(
         if (
             freshness_seconds is not None
             and item["status"] == "available"
-            and _is_stale(item.get("retrieved_at"), freshness_seconds)
         ):
-            item["freshness_status"] = "stale"
-            item["reason"] = f"evidence older than freshness window ({freshness_seconds}s)"
+            if not metadata.get("retrieved_at"):
+                item["freshness_status"] = "unknown"
+                item["reason"] = "retrieved_at is missing for freshness evaluation"
+            elif _is_stale(item.get("retrieved_at"), freshness_seconds):
+                item["freshness_status"] = "stale"
+                item["reason"] = (
+                    f"evidence older than freshness window ({freshness_seconds}s)"
+                )
         result.append(item)
     return result
 
@@ -627,6 +676,8 @@ def _provider_summary(
         "method": request.method,
         "run_id": request.run_id,
         "request_id": request.request_id,
+        "requested_fields": list(request.fields),
+        "requested_fields_hash": request.fields_hash,
         "requested_tickers": list(request.tickers),
         "batch_size": len(request.tickers),
         "call_count": call_count,

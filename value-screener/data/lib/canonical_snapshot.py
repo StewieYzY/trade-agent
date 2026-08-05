@@ -120,7 +120,7 @@ def build_snapshot(
         is_eligible = (
             item["status"] == "available"
             and item.get("eligibility") == "production_eligible"
-            and item.get("freshness_status") != "stale"
+            and item.get("freshness_status") not in {"stale", "unknown"}
             and key not in conflict_keys
         )
         field = str(item["field"])

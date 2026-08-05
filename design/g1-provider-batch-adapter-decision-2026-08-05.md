@@ -41,3 +41,14 @@
 - stale evidence 保留 `production_eligible` 作为冲突证据，但标记 `freshness_status=stale`；fresh/stale disagreement 产生 freshness conflict，canonical value 为 null，单独 stale 也不能消费。
 
 修复后验证：adapter focused 18 passed；provider qualification、provenance、canonical snapshot 边界套件合计 45 passed；compileall 与 `git diff --check` 通过。该修复仍不代表真实 provider qualification 或 G1 capability pass。
+
+## Second independent-review corrections — 2026-08-05
+
+第二次独立 review 发现的 3 个 P1 与 2 个 P2 已继续修复：
+
+- 非法 mapping key 若能解析出 embedded ticker，会绑定到该 ticker 的 `invalid_value` evidence，不再降级成 `record_not_found`。
+- mapping 中的 `None`/标量条目按 ticker 隔离，合法记录继续进入 merge，不再被整批 schema error 覆盖。
+- canonical 直入口对单独 stale evidence 也生成 freshness conflict；缺少 adapter freshness timestamp 标记为 `unknown`，不能消费。
+- requested fields 纳入 `BatchRequest`、`request_id`、provider summary 和落盘 manifest，避免不同字段请求身份混淆。
+
+本轮验证：adapter + canonical focused 29 passed；完整 provider qualification、provenance、canonical snapshot 边界套件合计 50 passed；compileall 与 `git diff --check` 通过。

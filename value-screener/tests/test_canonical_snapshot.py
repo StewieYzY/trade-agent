@@ -24,6 +24,7 @@ def _evidence(
     eligibility: str = "production_eligible",
     status: str = "available",
     response_hash: str = "a" * 64,
+    retrieved_at: str = "2026-08-04T09:00:00+00:00",
 ):
     return {
         "provider_family": "baseline",
@@ -41,7 +42,7 @@ def _evidence(
         "status": status,
         "eligibility": eligibility,
         "response_hash": response_hash,
-        "retrieved_at": "2026-08-04T09:00:00+00:00",
+        "retrieved_at": retrieved_at,
         "provenance": {
             "provider_family": "baseline",
             "provider": provider,
@@ -50,7 +51,7 @@ def _evidence(
             "ticker": ticker,
             "raw_field": "最新价",
             "response_hash": response_hash,
-            "retrieved_at": "2026-08-04T09:00:00+00:00",
+            "retrieved_at": retrieved_at,
         },
     }
 
@@ -133,3 +134,19 @@ def test_snapshot_does_not_touch_legacy_cache(tmp_path):
     )
 
     assert json.loads(legacy.read_text()) == {"price": 1}
+
+
+def test_single_stale_production_evidence_is_not_canonical_consumable():
+    snapshot = build_snapshot(
+        [_evidence(retrieved_at="a" * 64)],
+        tickers=["600519.SH"],
+        plan_version="test-v1",
+        run_id="single-stale",
+        freshness_seconds=60,
+    )
+
+    assert snapshot["records"]["600519.SH"]["last_price"] is None
+    assert any(
+        conflict["kind"] == "freshness"
+        for conflict in snapshot["conflicts"]
+    )

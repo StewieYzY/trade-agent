@@ -238,15 +238,20 @@ def detect_conflicts(
                 retrieved = _parse_time(
                     (item.get("provenance") or {}).get("retrieved_at")
                 )
-                if retrieved is None or (current - retrieved).total_seconds() > freshness_seconds:
+                if item.get("freshness_status") in {"stale", "unknown"}:
+                    stale.append(item)
+                elif retrieved is None or (
+                    current - retrieved
+                ).total_seconds() > freshness_seconds:
                     stale.append(item)
                 else:
                     fresh.append(item)
-            if fresh and stale:
+            if stale:
                 conflicts.append(
                     {
                         "kind": "freshness",
                         "key": key,
+                        "providers": items,
                         "fresh_providers": fresh,
                         "stale_providers": stale,
                     }
