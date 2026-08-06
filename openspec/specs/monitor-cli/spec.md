@@ -1,4 +1,10 @@
-## ADDED Requirements
+# monitor-cli Specification
+
+## Purpose
+
+定义 L4 监控层的 CLI 子命令组（monitor weekly / watchlist / diff / history）：weekly 运行监控主循环、watchlist 查询聚合观察列表、diff 对比快照变化、history 查询单只股票历史轨迹。
+
+## Requirements
 
 ### Requirement: monitor weekly 子命令
 系统 SHALL 提供 `monitor weekly` 子命令运行 weekly_monitor 主循环。

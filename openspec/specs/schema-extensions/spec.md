@@ -1,4 +1,10 @@
-## ADDED Requirements
+# schema-extensions Specification
+
+## Purpose
+
+定义 AgentOutput 的 extra 字段透传机制：agent 特有字段（冯柳 5 字段、DA 盲点清单）通过 extra dict 收集与透传，基础 8 字段严格校验不变，extra 字段进入辩论记录 md 并在 R2 的 other_opinions 中完整传递供他人消费。
+
+## Requirements
 
 ### Requirement: AgentOutput extra 字段透传
 `AgentOutput` SHALL 支持 `extra: dict` 字段，用于透传 agent 特有字段（冯柳 5 字段、DA 盲点清单）。

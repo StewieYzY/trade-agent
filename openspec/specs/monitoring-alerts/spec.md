@@ -1,4 +1,10 @@
-## ADDED Requirements
+# monitoring-alerts Specification
+
+## Purpose
+
+定义 L4 监控层的提醒生成规则：估值区间提醒（AD-02 双条件，MVP 阶段因催化数据源缺失退化为 placeholder）、风险事件硬规则扫描、key_variables 人工核对提醒、提醒不自动触发 L3，以及提醒生成的数据缺失错误处理。
+
+## Requirements
 
 ### Requirement: 估值区间提醒（AD-02 双条件）
 系统 SHALL 在估值低位 AND 催化出现时触发提醒（AD-02 硬约束）。

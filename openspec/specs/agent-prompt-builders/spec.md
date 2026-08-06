@@ -1,4 +1,10 @@
-## ADDED Requirements
+# agent-prompt-builders Specification
+
+## Purpose
+
+定义 L3 天团四位投资大师（buffett / munger / duan / feng_liu）的 prompt builder 规范：Level 2 四层 prompt 结构（AD-08）、AGENT_REGISTRY 注册方式，以及 prompt 自包含（无 RAG 依赖）、大师间存在本质差异（可被 AD-09 辩论增量 gate 检验）的要求。
+
+## Requirements
 
 ### Requirement: 投资大师 Level 2 四层 prompt 结构
 系统 SHALL 为每位投资大师提供独立的 prompt builder 函数，prompt SHALL 严格遵循 Level 2 四层结构（AD-08）：

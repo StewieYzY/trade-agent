@@ -1,4 +1,10 @@
-## ADDED Requirements
+# council-output-interface Specification
+
+## Purpose
+
+定义 L3 天团辩论到 L4 监控的接口契约：council 子命令跑完单股即写 `watchlist/{date}_council.json`（不引入批跑聚合），字段来源于 CouncilResult 与 R1/R2 的 what_would_change_my_mind 收集，与 L1/L2 的 screener watchlist 文件独立。
+
+## Requirements
 
 ### Requirement: L3→L4 接口文件结构
 系统 SHALL 产出 `watchlist/{date}_council.json`，每个 council 子命令跑完单股即写（不引入批跑聚合）。

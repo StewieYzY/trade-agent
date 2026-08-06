@@ -1,4 +1,10 @@
-## ADDED Requirements
+# catalyst-detection Specification
+
+## Purpose
+
+定义 L4 监控层基本面催化检测的 MVP 阶段行为与完整态设计：MVP 阶段催化数据源全部缺失，催化维度为空、仅检测风险信号，估值提醒输出 placeholder；同时保留 §7.1 催化判断原则与 LLM 催化判断预留接口，待 event-fetcher 补齐后启用。
+
+## Requirements
 
 ### Requirement: MVP 阶段基本面催化维度为空
 系统 SHALL 在 MVP 阶段将基本面催化检测设为空（无可用数据源），仅检测风险信号。

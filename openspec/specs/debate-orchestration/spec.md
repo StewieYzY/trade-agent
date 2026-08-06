@@ -1,4 +1,10 @@
-## MODIFIED Requirements
+# debate-orchestration Specification
+
+## Purpose
+
+定义 L3 天团辩论的编排机制：debate.py 实现 4 轮串行辩论（R1 隔离 / R2 交叉质疑 / R3 DA / R4 收敛），信息可见性由编排器控制，单 agent 场景跳轮；最终输出 CouncilResult 显式命名字段结构；agent 列表从 AGENT_REGISTRY 读取。
+
+## Requirements
 
 ### Requirement: CouncilResult 结构
 辩论编排器的最终输出 SHALL 是 CouncilResult 对象，采用显式命名字段（而非 rounds 列表）：

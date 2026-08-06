@@ -1,3 +1,9 @@
+# da-and-synthesizer Specification
+
+## Purpose
+
+定义 DA（Devil's Advocate）与 Synthesizer 两个职责型角色的 prompt、输出结构与调用方式：DA 负责找盲点与仲裁（事实回查各 agent 引用数据的真实性）、Synthesizer 负责收敛共识（依赖 DA 仲裁报告、DA 被跳过时降级自行收敛）、SynthesizerOutput dataclass 校验，以及两者不注册进 AGENT_REGISTRY、由 debate.py 独立调用。
+
 ## Requirements
 
 ### Requirement: DA prompt 职责导向

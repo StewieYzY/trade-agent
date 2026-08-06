@@ -1,3 +1,9 @@
+# debate-quality-gate Specification
+
+## Purpose
+
+定义全天团辩论的验证门体系：机制门（10 次 LLM 调用成功 + 结构合法）、质量门（AD-09 辩论增量）、成本实测、R1 引用真实特征反向校验（防幻觉产出）、R2 新证据 soft 校验、分歧报告完整性、DA 仲裁事实回查，以及 A/B 分化度量化判据（Jaccard 距离）。
+
 ## Requirements
 
 ### Requirement: 机制门（全天团 4 轮完整跑通）

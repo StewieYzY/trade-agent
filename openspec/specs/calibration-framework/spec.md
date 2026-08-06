@@ -1,4 +1,10 @@
-## MODIFIED Requirements
+# calibration-framework Specification
+
+## Purpose
+
+定义天团 agent 的校准测试框架：用已知真实股票验证各 agent 判断是否符合设计预期（立场型 agent 断言 signal，DA/Synthesizer 断言 schema 结构），校准 SHALL 调用 assemble_council_features 取真实特征数据、不 mock。
+
+## Requirements
 
 ### Requirement: 校准测试
 校准测试 SHALL 验证各 agent 对已知股票的判断是否符合设计预期：
