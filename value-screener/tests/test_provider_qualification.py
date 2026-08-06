@@ -81,6 +81,9 @@ def test_reserved_provenance_fields_cannot_be_overridden_by_response_metadata():
                         "unit": "CNY/share",
                         "currency": "CNY",
                         "as_of": "2026-08-06",
+                        "provider_family": "field-wrong-family",
+                        "ticker": "FIELD.WRONG",
+                        "response_hash": "field-wrong-response-hash",
                     }
                 },
             },
@@ -94,6 +97,7 @@ def test_reserved_provenance_fields_cannot_be_overridden_by_response_metadata():
                 "response_hash": "wrong-response-hash",
                 "retrieved_at": "2000-01-01T00:00:00+00:00",
                 "run_scoped": False,
+                "source_locator": "fixture://quote/600519.SH",
             },
         }
 
@@ -122,6 +126,7 @@ def test_reserved_provenance_fields_cannot_be_overridden_by_response_metadata():
     ):
         assert item["provenance"][key] == item[key]
     assert item["provenance"]["run_scoped"] is True
+    assert item["provenance"]["source_locator"] == "fixture://quote/600519.SH"
 
 
 @pytest.mark.parametrize(

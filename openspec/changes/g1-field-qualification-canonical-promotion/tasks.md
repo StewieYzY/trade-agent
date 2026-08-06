@@ -34,3 +34,9 @@
 - [x] 6.1 Reproduce the review finding with `_meta`/field metadata that attempts to override provenance-reserved keys.
 - [x] 6.2 Make canonical provenance fields authoritative by writing them after non-reserved metadata.
 - [x] 6.3 Extend the runner-to-promotion integration test to assert final `provenance.json` identity/hash consistency and re-run the repair verification suite.
+
+## 7. R-G1-001 review coverage follow-up
+
+- [x] 7.1 Add a field-level metadata collision fixture for `_fields.<field>` and verify it fails against the pre-fix merge order.
+- [x] 7.2 Assert that non-reserved metadata is retained while canonical provenance fields remain runner-authoritative.
+- [x] 7.3 Run only the R-G1-001 targeted test set plus strict OpenSpec, compileall, and `git diff --check`; do not run the repository-wide suite for this follow-up.
