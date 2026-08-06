@@ -131,6 +131,17 @@ council/prompts/*.md            ← Agent 个性化学术立场
 - 修改完成后，优先运行 lint 和相关测试
 - 做 review 时优先指出风险、bug、回归和缺失测试；没有发现问题时也要说明剩余风险
 
+## 开发纪律（2026-08-06 复盘立规）
+
+复盘根因：worktree/分支失控（8 worktree、本地 main 领先远端 35 提交）、canonical 治理框架零真实消费而产品 Gate 零进展、mock 测试掩盖真实调用错误。以下纪律强制执行：
+
+- **同一时间只允许 1 个 Goal、1 个 child change、1 个 worktree。** 前一个 child 未完成「独立 review → archive → `openspec validate --all --strict` 全绿 → 合入 main 并 push origin → worktree 清理」闭环，不得开始下一个；缺一环视为未完成，禁止叠加新分支
+- **push origin/main 是合入门的一部分。** 本地 main 与远端漂移超过当次 change 的提交量，视为事故
+- **Handoff 只留一个 CURRENT 指针**（原位更新）；dated handoff 一律视为历史快照，只增不改
+- **没有真实运行暴露的失败模式，不为它建框架。** 治理 / 契约 / 隔离类新工作项必须先指向一次真实运行或 Gate 的失败证据，不做预防性建设
+- mock 测试覆盖外部调用（LLM / 数据源）时，必须同时断言调用签名与参数形状，防止「测试全绿、真实调用即炸」（先例：`council/fallback.py` 给不接受 `model=` 的 `call_llm` 传参）
+- 开新 child 前先查 umbrella tasks 对应 Gate 节：Gate 证据项（规模预检 / 实跑 / 产品复核）未完成时，优先补证据，不追加新的治理 child
+
 ## 禁区
 
 - `old-archive/` — 只读，仅供设计讨论时回溯推导过程，不要修改
