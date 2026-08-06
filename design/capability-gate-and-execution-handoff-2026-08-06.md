@@ -26,7 +26,7 @@
 > `PR #1 codex/mainline-sync-2026-08-05 → main`
 >
 > 当前直接执行阶段：
-> 规划治理 checkpoint review；通过后进入 `R-G1-001`～`R-G1-004`
+> Queue 1：`R-G1-001` repair attempt 1，已完成实现与验证，等待 independent review
 
 ## 1. 本文件的唯一权威地位
 
@@ -330,7 +330,7 @@ PR #1: REQUEST CHANGES
 
 | ID | Milestone | Canonical owner | 状态 | Attempt | PR blocker |
 |---|---|---|---|---:|---|
-| `R-G1-001` | M1/M2 | `g1-field-qualification-canonical-promotion` | identified | 0 | 是 |
+| `R-G1-001` | M1/M2 | `g1-field-qualification-canonical-promotion` | verified | 1 | 是 |
 | `R-G1-002` | M1/M2 | `g1-field-qualification-canonical-promotion` | identified | 0 | 是 |
 | `R-G1-003` | M2 | `g1-field-qualification-canonical-promotion` | identified | 0 | 是 |
 | `R-G1-004` | M1/M2 | `g1-provider-health-and-failure-visibility` | identified | 0 | 是 |
@@ -389,6 +389,21 @@ runner status=available
 - 真实 `QualificationRunner output → evaluator → promotion` fixture 通过；
 - source evidence 不被 promotion 修改；
 - independent re-review closed。
+
+**Attempt 1 evidence (2026-08-06)**
+
+- RED：最小 runner/evaluator/promotion fixture 在修复前返回 `blocked`，根因是
+  `provenance` 缺少 `market/ticker/raw_field/response_hash`。
+- Implementation：`_field_evidence()` 将四个字段与 evidence 顶层值保持一致地写入
+  `provenance`；未修改 evaluator、promotion 或 canonical consumer。
+- GREEN：`test_r_g1_001_provenance_compatibility.py` 及相关 provider/evaluator/
+  provenance/canonical 测试通过；promotion 后 source run 文件保持不变。
+- Verification：相关全量 `125 passed`，仓库完整 pytest `652 passed`，OpenSpec strict、
+  compileall 与 `git diff --check` 均通过。
+- Scope：不处理 `R-G1-002`、`R-G1-003`、`R-G1-004`、G1-4、canonical consumer、
+  G2 或任何未登记 repair。
+- Next state：`independent_review`；在独立 review 完成前不得将本 ID 标为
+  `closed`，也不得 archive change 或宣称 G1/G2 Capability passed。
 
 ### R-G1-002：Source plan/hash/matrix completeness
 
