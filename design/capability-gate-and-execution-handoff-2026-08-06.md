@@ -429,7 +429,9 @@ runner status=available
   metadata 仍保留。
 - Verification：R-G1-001 定向测试 `49 passed`；本次按用户要求不运行 repository-wide
   pytest；strict OpenSpec、compileall、`git diff --check` 通过。
-- Next state：重新进行 independent review；本次仍不关闭、不 archive。
+- Next state：重新进行 independent review；本次 archive 已按用户指示执行，但
+  R-G1-001 仍未 closed，不能据此宣称 independent review 通过或 G1/G2 Capability
+  passed。
 
 ### R-G1-002：Source plan/hash/matrix completeness
 

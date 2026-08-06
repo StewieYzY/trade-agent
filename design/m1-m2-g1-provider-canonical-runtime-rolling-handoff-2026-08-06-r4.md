@@ -70,9 +70,9 @@ value-screener/tests/test_canonical_snapshot.py
 ```text
 change: g1-field-qualification-canonical-promotion
 tasks: 新增并完成 7.1–7.3
-archive: 未执行
+archive: `openspec/changes/archive/2026-08-06-g1-field-qualification-canonical-promotion`
 ```
 
-本 handoff 不构成 independent review 通过、不构成 archive，也不构成 G1/G2
-Capability passed。下一步仍是重新 independent review；确认 P2 关闭后才能讨论
-将 R-G1-001 推进到 `closed`。
+本 handoff 不构成 independent review 通过，也不构成 G1/G2 Capability passed。
+OpenSpec archive 已按用户指示执行；下一步仍是重新 independent review，确认 P2
+关闭后才能讨论将 R-G1-001 推进到 `closed`。
