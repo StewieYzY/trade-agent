@@ -29,7 +29,7 @@ can distinguish provider failure from a malformed provenance contract.
 - **THEN** the runner SHALL preserve its canonical provider, method, market, ticker,
   raw field, response hash, `retrieved_at`, and `run_scoped` values in `provenance`
   while retaining only non-reserved metadata as additional provenance
-### Requirement: Promotion SHALL consume only complete qualification runs
+ ### Requirement: Promotion SHALL consume only complete qualification runs
 
 The promotion evaluator SHALL read a run-scoped qualification manifest and evidence
 artifact, require a completed run with matching evidence counts and a valid frozen

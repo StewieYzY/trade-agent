@@ -26,7 +26,7 @@
 > `PR #1 codex/mainline-sync-2026-08-05 → main`
 >
 > 当前直接执行阶段：
-> Queue 1：`R-G1-001` repair attempt 1，已完成实现与验证，等待 independent review
+> Queue 1：`R-G1-001` repair attempt 2，已完成实现与验证，等待重新 independent review
 
 ## 1. 本文件的唯一权威地位
 
@@ -330,7 +330,7 @@ PR #1: REQUEST CHANGES
 
 | ID | Milestone | Canonical owner | 状态 | Attempt | PR blocker |
 |---|---|---|---|---:|---|
-| `R-G1-001` | M1/M2 | `g1-field-qualification-canonical-promotion` | verified | 1 | 是 |
+| `R-G1-001` | M1/M2 | `g1-field-qualification-canonical-promotion` | verified | 2 | 是 |
 | `R-G1-002` | M1/M2 | `g1-field-qualification-canonical-promotion` | identified | 0 | 是 |
 | `R-G1-003` | M2 | `g1-field-qualification-canonical-promotion` | identified | 0 | 是 |
 | `R-G1-004` | M1/M2 | `g1-provider-health-and-failure-visibility` | identified | 0 | 是 |
@@ -404,6 +404,20 @@ runner status=available
   G2 或任何未登记 repair。
 - Next state：`independent_review`；在独立 review 完成前不得将本 ID 标为
   `closed`，也不得 archive change 或宣称 G1/G2 Capability passed。
+
+**Independent review follow-up / Attempt 2 evidence (2026-08-06)**
+
+- Review verdict：`REQUEST CHANGES`，发现 response `_meta`/field metadata 可以通过
+  `**meta` 覆盖 provenance 保留字段。
+- RED：新增冲突 metadata fixture，修复前
+  `provenance.provider_family/ticker/response_hash/retrieved_at` 与 evidence 顶层不一致。
+- Implementation：`provenance` 先接收非保留 metadata，再由 runner 最后写入
+  provider/method/market/ticker/raw_field/response_hash/retrieved_at/run_scoped。
+- GREEN：reserved-field regression 与 runner→evaluator→promotion integration 均通过，
+  且最终 `provenance.json` 与 source evidence identity/hash 一致。
+- Verification：相关测试 `126 passed`，仓库完整 pytest `653 passed`，OpenSpec strict、
+  compileall 与 `git diff --check` 均通过。
+- Next state：重新进行 independent review；本次 follow-up 仍不关闭、不 archive。
 
 ### R-G1-002：Source plan/hash/matrix completeness
 
