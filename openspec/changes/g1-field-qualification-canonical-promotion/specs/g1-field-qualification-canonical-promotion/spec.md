@@ -1,5 +1,27 @@
 ## ADDED Requirements
 
+### Requirement: Qualification runner SHALL emit canonical provenance-compatible evidence
+
+The qualification runner SHALL copy the canonical field identity and response hash
+(`market`, `ticker`, `raw_field`, and `response_hash`) into each evidence item's
+`provenance` object, using the same values as the evidence top level. This SHALL
+hold for available and non-available field evidence so the downstream validator
+can distinguish provider failure from a malformed provenance contract.
+
+#### Scenario: Available runner evidence remains eligible for evaluation
+
+- **WHEN** a completed `QualificationRunner` output contains an available field
+  with valid value, unit, time basis, and response hash
+- **THEN** `validate_field_evidence()` SHALL keep the field `available`, and the
+  evaluator-to-promotion path SHALL be able to qualify it without reconstructing
+  provenance at a later layer
+
+#### Scenario: Runner provenance mirrors top-level identity
+
+- **WHEN** the runner emits field evidence
+- **THEN** `provenance.market`, `provenance.ticker`, `provenance.raw_field`, and
+  `provenance.response_hash` SHALL equal the corresponding top-level values
+
 ### Requirement: Promotion SHALL consume only complete qualification runs
 
 The promotion evaluator SHALL read a run-scoped qualification manifest and evidence

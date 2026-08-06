@@ -21,3 +21,10 @@
 - [x] 4.1 Run focused field qualification, canonical snapshot, and provenance tests with the repository venv.
 - [x] 4.2 Run strict OpenSpec validation, compileall, full pytest, and git diff check; clean generated runtime artifacts.
 - [x] 4.3 Write the dated implementation decision and update this task list only for verified tasks.
+
+## 5. R-G1-001 repair: qualification runner provenance compatibility
+
+- [x] 5.1 Add the minimal RED fixture covering `QualificationRunner output → evaluator → promotion`, and verify the current output is blocked by the missing provenance contract fields.
+- [x] 5.2 Update `_field_evidence()` to mirror `market`, `ticker`, `raw_field`, and `response_hash` into `provenance` without changing evaluator or promotion policy.
+- [x] 5.3 Add regression assertions for runner provenance mirroring and an integration assertion that promotion leaves the source qualification run byte-for-byte unchanged.
+- [x] 5.4 Complete the repair attempt with focused tests, relevant full tests, strict validation, artifact/secret/live-output checks, and `git diff --check`; leave independent review as the next Repair state.

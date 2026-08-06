@@ -499,6 +499,7 @@ def _field_evidence(
     safe_metadata = _json_safe(dict(metadata or {}))
     meta = dict(safe_metadata) if isinstance(safe_metadata, Mapping) else {}
     retrieved_at = datetime.now(timezone.utc).isoformat()
+    raw_field = meta.pop("raw_field", field)
     return {
         "provider_family": adapter.provider_family,
         "provider": adapter.provider,
@@ -507,7 +508,7 @@ def _field_evidence(
         "ticker": case.ticker,
         "security_type": case.security_type,
         "field": field,
-        "raw_field": meta.pop("raw_field", field),
+        "raw_field": raw_field,
         "value": _json_safe(value),
         "unit": meta.pop("unit", None),
         "currency": meta.pop("currency", None),
@@ -522,6 +523,10 @@ def _field_evidence(
             "provider_family": adapter.provider_family,
             "provider": adapter.provider,
             "method": case.method,
+            "market": case.market,
+            "ticker": case.ticker,
+            "raw_field": raw_field,
+            "response_hash": response_hash,
             "run_scoped": True,
             "retrieved_at": retrieved_at,
             **meta,
