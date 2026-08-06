@@ -520,6 +520,7 @@ def _field_evidence(
         "response_hash": response_hash,
         "retrieved_at": retrieved_at,
         "provenance": {
+            **meta,
             "provider_family": adapter.provider_family,
             "provider": adapter.provider,
             "method": case.method,
@@ -529,7 +530,6 @@ def _field_evidence(
             "response_hash": response_hash,
             "run_scoped": True,
             "retrieved_at": retrieved_at,
-            **meta,
         },
     }
 

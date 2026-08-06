@@ -21,13 +21,26 @@ from scripts.promote_provider_snapshot import (  # noqa: E402
 def test_runner_output_can_flow_through_evaluator_and_promotion(tmp_path):
     def invoke(_case: ProbeCase):
         return {
-            "last_price": 123.4,
-            "_fields": {
-                "last_price": {
-                    "unit": "CNY/share",
-                    "currency": "CNY",
-                    "as_of": "2026-08-06",
+            "data": {
+                "last_price": 123.4,
+                "_fields": {
+                    "last_price": {
+                        "unit": "CNY/share",
+                        "currency": "CNY",
+                        "as_of": "2026-08-06",
+                    }
                 }
+            },
+            "_meta": {
+                "provider_family": "wrong-family",
+                "provider": "wrong-provider",
+                "method": "wrong-method",
+                "market": "WRONG",
+                "ticker": "WRONG.TK",
+                "raw_field": "wrong-raw-field",
+                "response_hash": "wrong-response-hash",
+                "retrieved_at": "2000-01-01T00:00:00+00:00",
+                "run_scoped": False,
             },
         }
 
@@ -69,6 +82,20 @@ def test_runner_output_can_flow_through_evaluator_and_promotion(tmp_path):
     assert json.loads((run_dir / "records.json").read_text())["600519.SH"][
         "last_price"
     ] == 123.4
+    source_item = source_result["evidence"][0]
+    promoted_item = json.loads((run_dir / "provenance.json").read_text())["fields"][0]
+    for key in (
+        "provider_family",
+        "provider",
+        "method",
+        "market",
+        "ticker",
+        "raw_field",
+        "response_hash",
+        "retrieved_at",
+    ):
+        assert promoted_item["provenance"][key] == source_item[key]
+    assert promoted_item["provenance"]["run_scoped"] is True
     assert {
         path.name: path.read_bytes()
         for path in source_dir.iterdir()

@@ -22,6 +22,14 @@ can distinguish provider failure from a malformed provenance contract.
 - **THEN** `provenance.market`, `provenance.ticker`, `provenance.raw_field`, and
   `provenance.response_hash` SHALL equal the corresponding top-level values
 
+#### Scenario: Response metadata cannot override canonical provenance
+
+- **WHEN** a provider response envelope contains `_meta` or field metadata with
+  values for provenance-reserved keys
+- **THEN** the runner SHALL preserve its canonical provider, method, market, ticker,
+  raw field, response hash, `retrieved_at`, and `run_scoped` values in `provenance`
+  while retaining only non-reserved metadata as additional provenance
+
 ### Requirement: Promotion SHALL consume only complete qualification runs
 
 The promotion evaluator SHALL read a run-scoped qualification manifest and evidence

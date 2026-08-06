@@ -71,6 +71,59 @@ def test_available_and_partial_field_evidence_is_traceable():
     assert evidence[1]["status"] == "record_not_found"
 
 
+def test_reserved_provenance_fields_cannot_be_overridden_by_response_metadata():
+    def invoke(_case: ProbeCase):
+        return {
+            "data": {
+                "last_price": 123.4,
+                "_fields": {
+                    "last_price": {
+                        "unit": "CNY/share",
+                        "currency": "CNY",
+                        "as_of": "2026-08-06",
+                    }
+                },
+            },
+            "_meta": {
+                "provider_family": "wrong-family",
+                "provider": "wrong-provider",
+                "method": "wrong-method",
+                "market": "WRONG",
+                "ticker": "WRONG.TK",
+                "raw_field": "wrong-raw-field",
+                "response_hash": "wrong-response-hash",
+                "retrieved_at": "2000-01-01T00:00:00+00:00",
+                "run_scoped": False,
+            },
+        }
+
+    evidence, result = _probe_case(
+        ProviderAdapter("baseline", "fixture", invoke=invoke),
+        ProbeCase(
+            ticker="600519.SH",
+            market="SH",
+            security_type="consumer",
+            method="quote",
+            fields=("last_price",),
+        ),
+    )
+
+    assert result["status"] == "available"
+    item = evidence[0]
+    for key in (
+        "provider_family",
+        "provider",
+        "method",
+        "market",
+        "ticker",
+        "raw_field",
+        "response_hash",
+        "retrieved_at",
+    ):
+        assert item["provenance"][key] == item[key]
+    assert item["provenance"]["run_scoped"] is True
+
+
 @pytest.mark.parametrize(
     ("exc", "status"),
     [

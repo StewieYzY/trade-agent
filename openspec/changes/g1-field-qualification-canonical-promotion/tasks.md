@@ -28,3 +28,9 @@
 - [x] 5.2 Update `_field_evidence()` to mirror `market`, `ticker`, `raw_field`, and `response_hash` into `provenance` without changing evaluator or promotion policy.
 - [x] 5.3 Add regression assertions for runner provenance mirroring and an integration assertion that promotion leaves the source qualification run byte-for-byte unchanged.
 - [x] 5.4 Complete the repair attempt with focused tests, relevant full tests, strict validation, artifact/secret/live-output checks, and `git diff --check`; leave independent review as the next Repair state.
+
+## 6. R-G1-001 independent-review follow-up
+
+- [x] 6.1 Reproduce the review finding with `_meta`/field metadata that attempts to override provenance-reserved keys.
+- [x] 6.2 Make canonical provenance fields authoritative by writing them after non-reserved metadata.
+- [x] 6.3 Extend the runner-to-promotion integration test to assert final `provenance.json` identity/hash consistency and re-run the repair verification suite.
