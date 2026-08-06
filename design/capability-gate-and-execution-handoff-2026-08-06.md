@@ -26,7 +26,7 @@
 > `PR #1 codex/mainline-sync-2026-08-05 → main`
 >
 > 当前直接执行阶段：
-> Queue 1：`R-G1-001` repair attempt 2，已完成实现与验证，等待重新 independent review
+> Queue 1：`R-G1-001` repair attempt 3，已完成定向验证，等待重新 independent review
 
 ## 1. 本文件的唯一权威地位
 
@@ -330,7 +330,7 @@ PR #1: REQUEST CHANGES
 
 | ID | Milestone | Canonical owner | 状态 | Attempt | PR blocker |
 |---|---|---|---|---:|---|
-| `R-G1-001` | M1/M2 | `g1-field-qualification-canonical-promotion` | verified | 2 | 是 |
+| `R-G1-001` | M1/M2 | `g1-field-qualification-canonical-promotion` | verified | 3 | 是 |
 | `R-G1-002` | M1/M2 | `g1-field-qualification-canonical-promotion` | identified | 0 | 是 |
 | `R-G1-003` | M2 | `g1-field-qualification-canonical-promotion` | identified | 0 | 是 |
 | `R-G1-004` | M1/M2 | `g1-provider-health-and-failure-visibility` | identified | 0 | 是 |
@@ -418,6 +418,18 @@ runner status=available
 - Verification：相关测试 `126 passed`，仓库完整 pytest `653 passed`，OpenSpec strict、
   compileall 与 `git diff --check` 均通过。
 - Next state：重新进行 independent review；本次 follow-up 仍不关闭、不 archive。
+
+**Independent review coverage follow-up / Attempt 3 evidence (2026-08-06)**
+
+- Review finding：P2 测试未覆盖 `_fields.<field>` 级别的保留字段冲突，也未断言
+  非保留 metadata 保留。
+- RED：临时恢复 pre-fix 的 `**meta` 合并顺序后，field-level collision test 失败；
+  失败值为 `field-wrong-family` 覆盖 runner 的 `baseline`。
+- Test fix：增加 field-level collision fixture，并断言 `source_locator` 等非保留
+  metadata 仍保留。
+- Verification：R-G1-001 定向测试 `49 passed`；本次按用户要求不运行 repository-wide
+  pytest；strict OpenSpec、compileall、`git diff --check` 通过。
+- Next state：重新进行 independent review；本次仍不关闭、不 archive。
 
 ### R-G1-002：Source plan/hash/matrix completeness
 
