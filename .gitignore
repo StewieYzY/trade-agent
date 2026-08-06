@@ -29,3 +29,4 @@ uzi-skill/
 
 # Claude Code: local personal settings (contains machine paths)
 .claude/settings.local.json
+.patches/

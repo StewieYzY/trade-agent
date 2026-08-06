@@ -126,6 +126,7 @@ async def call_llm(
     system_prompt: str,
     user_message: str,
     reasoning_level: str = "heavy",
+    model: str | None = None,
 ) -> tuple[str, dict]:
     """调用 OpenAI 兼容 LLM API（heavy/moderate 推理等级），返回 (content, usage).
 
@@ -133,6 +134,8 @@ async def call_llm(
         system_prompt: System prompt
         user_message: User message（特征数据 + 指令）
         reasoning_level: 推理等级（"heavy" / "moderate"）
+        model: 显式模型覆盖（G2 fallback contract，spec strong-single-agent-fallback）。
+            提供时跳过 LLM_MODEL_HEAVY / LLM_MODEL_MODERATE 检查；缺省走环境变量映射
 
     Returns:
         (content, usage)：content 为 LLM 返回的 JSON 字符串，usage 含
@@ -146,11 +149,11 @@ async def call_llm(
     环境变量：
     - LLM_API_KEY: API 密钥（required）
     - LLM_API_BASE: API base URL（required）
-    - LLM_MODEL_HEAVY: 重度推理模型（required when reasoning_level="heavy"）
-    - LLM_MODEL_MODERATE: 中度推理模型（required when reasoning_level="moderate"）
+    - LLM_MODEL_HEAVY: 重度推理模型（required when reasoning_level="heavy" 且未显式覆盖）
+    - LLM_MODEL_MODERATE: 中度推理模型（required when reasoning_level="moderate" 且未显式覆盖）
     """
-    model = _get_model_for_level(reasoning_level)
-    return await _http_call(system_prompt, user_message, model, timeout=120.0)
+    resolved_model = model or _get_model_for_level(reasoning_level)
+    return await _http_call(system_prompt, user_message, resolved_model, timeout=120.0)
 
 
 async def call_llm_light(

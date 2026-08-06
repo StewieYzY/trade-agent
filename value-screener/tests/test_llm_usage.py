@@ -151,3 +151,41 @@ async def test_call_llm_light_missing_env_fails_fast(monkeypatch):
     # LLM_MODEL 未设
     with pytest.raises(ValueError, match="LLM_MODEL"):
         await call_llm_light("snap", "sys")
+
+
+@pytest.mark.anyio
+async def test_call_llm_explicit_model_overrides_env(env_vars, monkeypatch):
+    """显式 model 覆盖时 HTTP 调用使用该模型，且显式覆盖豁免等级环境变量（G2 fallback contract）."""
+    # 移除等级环境变量：显式 model 覆盖时不应要求 LLM_MODEL_HEAVY 存在
+    monkeypatch.delenv("LLM_MODEL_HEAVY", raising=False)
+    fake_resp = _make_httpx_mock({"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2}, "{}")
+
+    with patch("council.llm.httpx.AsyncClient") as mock_client_cls:
+        mock_client = AsyncMock()
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=None)
+        mock_client.post = AsyncMock(return_value=fake_resp)
+        mock_client_cls.return_value = mock_client
+
+        await call_llm("sys", "user", "heavy", model="explicit-strong-model")
+
+    call_kwargs = mock_client.post.call_args.kwargs
+    assert call_kwargs["json"]["model"] == "explicit-strong-model"
+
+
+@pytest.mark.anyio
+async def test_call_llm_default_model_from_env(env_vars):
+    """不传 model 时 HTTP 调用使用 LLM_MODEL_HEAVY（回归保护既有行为）."""
+    fake_resp = _make_httpx_mock({"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2}, "{}")
+
+    with patch("council.llm.httpx.AsyncClient") as mock_client_cls:
+        mock_client = AsyncMock()
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=None)
+        mock_client.post = AsyncMock(return_value=fake_resp)
+        mock_client_cls.return_value = mock_client
+
+        await call_llm("sys", "user", "heavy")
+
+    call_kwargs = mock_client.post.call_args.kwargs
+    assert call_kwargs["json"]["model"] == "test-heavy-model"

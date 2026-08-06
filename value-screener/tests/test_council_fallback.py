@@ -194,3 +194,22 @@ def test_synthesis_copies_passed_fields_and_blocks_without_new_facts():
     assert blocked["conviction"] == 0
     assert blocked["key_metrics"] == []
     assert blocked["pending_verification"] == ["fabricated metric"]
+
+
+def test_fallback_call_llm_call_shape_matches_real_signature(monkeypatch):
+    """fallback 调用 call_llm 的实参形状必须能绑定真实 council.llm.call_llm 签名.
+
+    防回归先例：fallback.py 传 model= 关键字，而 call_llm 曾不接受该参数，
+    mock 假签名（fake_call）掩盖了真实 TypeError。用 inspect.bind 对真实签名校验。
+    """
+    import inspect
+
+    from council import llm
+
+    monkeypatch.setenv("LLM_API_KEY", "k")
+    monkeypatch.setenv("LLM_API_BASE", "http://x")
+    monkeypatch.setenv("LLM_MODEL_HEAVY", "heavy-model")
+
+    sig = inspect.signature(llm.call_llm)
+    # 与 fallback.run_fallback 内部调用点（council/fallback.py::call_llm(...)）同形
+    sig.bind("system", "user", "heavy", model="explicit-model")
