@@ -1,11 +1,16 @@
 # TradingAgents-CN 与 trade-agent「快、深、拿得住」能力对照报告
 
-> 文档类型：永久外部借鉴与能力边界基线  
-> 分析日期：2026-08-03  
-> 外部项目：`hsliuping/TradingAgents-CN`  
-> 外部核验基线：`main@74783e8817d6cf6de29867880631cc555153f36b`（commit date: 2026-07-24，README 标记 v1.1.0）  
-> 本项目核验基线：`trade-agent/main@dd52d11`  
-> 上位设计：`three-goal-capability-roadmap.md`、`total-design.md`、`architecture-decisions.md`  
+> 文档类型：永久外部借鉴与能力边界基线
+>
+> 分析日期：2026-08-03
+>
+> 外部项目：`hsliuping/TradingAgents-CN`
+>
+> 外部核验基线：`main@74783e8817d6cf6de29867880631cc555153f36b`（commit date: 2026-07-24，README 标记 v1.1.0）
+>
+> 本项目核验基线：`trade-agent/main@dd52d11`
+>
+> 上位设计：`three-goal-capability-roadmap.md`、`total-design.md`、`architecture-decisions.md`
 > 目的：判断 TradingAgents-CN 对本项目 G1「快」、G2「深」、G3「拿得住」有哪些值得借鉴、哪些可以复用、哪些不应照搬，以及哪些方面本项目已有更好的产品观点。
 
 ---

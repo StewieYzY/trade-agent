@@ -2,10 +2,13 @@
 
 > 日期：2026-08-05
 >
-> 类型：永久性总 Handoff / 最新完整执行规划
+> 类型：历史完整执行 Handoff
 >
-> 状态：取代 `capability-gate-and-execution-handoff-2026-08-04.md` 成为最新
-> dated 执行 Handoff；08-04 及更早版本保留为历史快照
+> 状态：`SUPERSEDED / HISTORICAL / READ-ONLY`
+>
+> 已由 `capability-gate-and-execution-handoff-2026-08-06.md` 取代。
+> 当前执行必须从 `design/capability-gate-and-execution-handoff.md` 进入，
+> 不得从本文件恢复工作。
 >
 > 产品能力第一参考源：`design/three-goal-capability-roadmap.md`
 >

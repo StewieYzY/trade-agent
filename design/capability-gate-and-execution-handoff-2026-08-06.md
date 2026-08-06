@@ -1,0 +1,956 @@
+# trade-agent Capability Gate 与完整执行 Handoff
+
+> 日期：2026-08-06
+>
+> Master ID：`MASTER-2026-08-06`
+>
+> 类型：唯一当前生效的大规划 Handoff
+>
+> 状态：`CURRENT`
+>
+> 稳定入口：`design/capability-gate-and-execution-handoff.md`
+>
+> 取代：`design/capability-gate-and-execution-handoff-2026-08-05.md`
+>
+> 产品能力第一参考源：`design/three-goal-capability-roadmap.md`
+>
+> 架构决策：`design/architecture-decisions.md`
+>
+> runtime/integration baseline：
+> `bce6bc6 merge: integrate g1 field qualification canonical promotion`
+>
+> 当前 main/docs baseline：
+> `2f13be9 docs: add 2026-08-05 capability execution handoff`
+>
+> 当前 GitHub 审查入口：
+> `PR #1 codex/mainline-sync-2026-08-05 → main`
+>
+> 当前直接执行阶段：
+> 规划治理 checkpoint review；通过后进入 `R-G1-001`～`R-G1-004`
+
+## 1. 本文件的唯一权威地位
+
+本文件是当前唯一生效的大规划 Handoff，统一记录：
+
+- G1「快」→ G2「深」→ G3「拿得住」的产品目标和 Capability Gate；
+- M0–M7 的依赖、真实状态、放行条件和停止条件；
+- 当前 main、PR、worktree、OpenSpec、测试和 live evidence 状态；
+- 所有已知 repair 的唯一登记、归属、状态、退出条件和执行顺序；
+- 当前唯一允许的执行入口；
+- 防止重复实现、反复修复和无边界成本消耗的治理规则。
+
+任何 rolling handoff、OpenSpec child、review report、PR description 或对话摘要都
+不能成为第二份大规划，也不能覆盖本文件的工作优先级。
+
+稳定入口：
+
+```text
+design/capability-gate-and-execution-handoff.md
+        ↓
+design/capability-gate-and-execution-handoff-2026-08-06.md
+```
+
+历史 dated Handoff 保留为 read-only milestone snapshot，但不再作为执行入口。
+
+## 2. 单一大规划治理
+
+### 2.1 CURRENT / HISTORICAL
+
+任一时刻只能有一个状态为 `CURRENT` 的完整大规划。
+
+新建 dated 大规划时必须同时：
+
+1. 将新的 dated 文件标为 `CURRENT`；
+2. 更新稳定入口文件只指向新的 dated 文件；
+3. 将旧 dated 文件标为 `SUPERSEDED / HISTORICAL / READ-ONLY`；
+4. 迁移所有未关闭 Repair ID，不能换名、丢失或重复登记；
+5. 写明旧版本为何失效、哪些状态发生变化；
+6. 不删除历史文件，不把历史 snapshot 冒充当前事实。
+
+### 2.2 Rolling Handoff 的权限
+
+Rolling handoff 是微观执行恢复点，只能领取本文件 Repair Register 或 milestone
+queue 中已经存在的工作。
+
+Rolling handoff 不得：
+
+- 新建未在本文件登记的 repair；
+- 为同一 finding 换名字建立第二项工作；
+- 重排 M0–M7；
+- 把局部 child 描述成全局进度；
+- 把 tasks complete、archive、commit、PR merge 或绿测写成 capability pass；
+- 把历史 fixture/live evidence 冒充当前代码证据；
+- 在 G1 rolling 中顺手修 G2，在 G2 rolling 中顺手修 G1-4。
+
+Rolling handoff 发现新问题时必须停止扩 scope，先回到本文件：
+
+```text
+search existing Repair ID / OpenSpec task
+→ 已存在：复用原 ID
+→ 不存在：登记新 ID、owner、退出条件
+→ 更新对应 OpenSpec
+→ 才能进入 rolling execution
+```
+
+### 2.3 一个问题只有一个 owner
+
+每个 repair 只能有一个 canonical owner：
+
+- 一个 Repair ID；
+- 一个主 OpenSpec change；
+- 一个 root cause；
+- 一组 RED tests；
+- 一个 closure verdict。
+
+其他 change 可以引用该 ID，但不得复制成自己的 repair。
+
+## 3. 防止重复修复和无限循环
+
+### 3.1 Repair 状态机
+
+```text
+identified
+→ planned
+→ red_confirmed
+→ implemented
+→ verified
+→ independent_review
+→ closed
+```
+
+异常状态：
+
+```text
+blocked
+design_escalation
+regressed
+```
+
+### 3.2 Attempt 计数
+
+一次 repair attempt 必须完整包含：
+
+```text
+root-cause evidence
+→ RED test
+→ minimal fix
+→ focused tests
+→ relevant/full tests
+→ strict validation
+→ independent re-review
+```
+
+只改代码、只补测试、只改 spec 或只跑绿测都不算完成 attempt。
+
+### 3.3 停止规则
+
+- 同一 Repair ID 连续两次 independent re-review 仍未关闭：
+  - 状态改为 `design_escalation`；
+  - 停止继续 patch；
+  - 重新审查合同/边界/架构；
+  - 第三次实现前必须获得用户明确批准。
+- 不得通过换文件名、换 child、换 Repair ID 重置 attempt 次数。
+- 已关闭问题再次出现时使用原 ID，状态改为 `regressed`。
+- deterministic contract repair 未关闭前，不运行新的 live provider/LLM。
+- 没有新的 failure evidence 时，不允许“再试一次”式修改。
+
+### 3.4 成本停止条件
+
+- provider/LLM 调用必须有用户授权、冻结 input、run ID 和 repo 外 output root；
+- fixture、mock、strict validation 和单测不能触发 live Gate 放行；
+- 同一 live run 不因失败被无边界重跑；
+- network/provider 失败保持失败证据，不使用未经验证的 fallback；
+- secrets、raw provider payload、debate/watchlist/runtime artifacts 不进入 commit。
+
+## 4. 稳定产品目标
+
+```text
+G1 快：个人价值风格筛选
+    ↓ Capability Gate
+G2 深：可信 InvestmentThesis
+    ↓ Capability Gate
+G3 拿得住：持仓纪律副驾驶
+```
+
+### G1「快」
+
+```text
+qualified provider
+→ normalized raw response
+→ failure-visible canonical snapshot
+→ staged local funnel
+→ L2 cost gate
+→ 用户风格候选池
+```
+
+目标不是 provider 数量、因子数量或短期预测。
+
+### G2「深」
+
+```text
+可信事实
++ 可审计推断
++ 明确假设
++ 反证/风险/关键变量
++ 什么情况下改变判断
+= InvestmentThesis
+```
+
+Council 只有在受控 A/B 证明稳定增量后才保留；否则回退：
+
+```text
+strong single agent
++ independent DA / fact checker
++ deterministic synthesizer
+```
+
+### G3「拿得住」
+
+```text
+passed InvestmentThesis
+→ 用户确认 HoldingContract
+→ 区分价格扰动 / 预期偏差 / Thesis 破坏
+→ 提醒用户按纪律复核
+```
+
+不连接券商、不自动交易，用户保留最终判断。
+
+## 5. 当前 Git 与 PR 基线
+
+### 5.1 Main
+
+```text
+path:   /Users/admin/Documents/trade-agent
+branch: main
+HEAD:   2f13be9bd35d569b730addb1995534a628708396
+upstream: origin/main
+relation before governance checkpoint:
+  origin/main is an ancestor
+  local main ahead by 35 commits
+status: clean
+```
+
+### 5.2 PR #1
+
+```text
+number: #1
+state: open
+draft: true
+title: docs/g1/g2: sync 2026-08-05 mainline capability handoff
+base:  75c4a138c7612555907ccecc5e93dfc5128df420
+head:  2f13be9bd35d569b730addb1995534a628708396
+mergeable_state: clean
+review verdict: REQUEST CHANGES
+```
+
+`mergeable_state=clean` 只表示 Git 可以合并，不表示合同、工程或 Capability 已
+ready。
+
+PR #1 必须保持 Draft，直到所有 PR-blocking Repair ID closed 并通过整体
+independent re-review。
+
+### 5.3 当前治理 worktree
+
+```text
+path:
+  /Users/admin/Documents/trade-agent/.worktrees/handoff-governance-2026-08-06
+branch:
+  codex/handoff-governance-2026-08-06
+base:
+  origin/codex/mainline-sync-2026-08-05@2f13be9
+scope:
+  planning governance only
+```
+
+该 worktree 不实施 runtime repair。
+
+### 5.4 其他 worktree
+
+| Worktree | HEAD | 状态 | 当前含义 |
+|---|---:|---|---|
+| `f3c-harness-mainline` | `a041314` | dirty，约 23 项 | M0 历史/未收口，不能整体合并 |
+| `trade-agent-f3c-strong-model-control` | `f83bb85` | clean | 旧 stacked source only |
+| `g1-provider-batch-adapter` | `a6e6699` | clean | 历史 source only |
+| `g2-integration-mainline` | `f47db88` | clean / main ancestor | 已进入 main 的 fallback integration checkpoint |
+
+## 6. 当前 OpenSpec
+
+| Change | Tasks | CLI 状态 | 大规划真实状态 |
+|---|---:|---|---|
+| `g1-provider-health-and-failure-visibility` | 19/19 | complete / active | review finding 未修，不 ready to archive |
+| `g1-field-qualification-canonical-promotion` | 12/12 | complete / active | review findings 未修，不 ready to archive |
+| `g2-strong-single-agent-fallback` | 12/12 | complete / active | review findings 未修，不 ready to archive |
+| `g2-deep-investment-thesis` | 0/27 | in-progress | G2 umbrella，含 M4.5 |
+| `f3c-r1-crosstalk-root-cause` | 5/17 | in-progress | M0 前置未闭 |
+| `g1-4-data-source-resilience` | 0/48 | in-progress | P2 已映射到既有 D1/D6 |
+| `g1-fast-personal-value-screening` | 6/16 | in-progress | G1 umbrella 未通过 |
+| `g3-holding-discipline` | 0/29 | in-progress | design 可继续，runtime 锁定 |
+
+任务勾选只表示旧 tasks 已完成。独立 review 发现合同缺口后，必须先更新原 active
+change 的 spec/tasks，使 CLI 状态重新反映 repair 未完成事实。
+
+## 7. PR #1 独立审查结论
+
+### 7.1 审查边界
+
+- Base：`75c4a13`
+- Head：`2f13be9`
+- 35 commits
+- 117 files
+- 约 18,539 insertions / 109 deletions
+- 只读 review；
+- 无真实 provider/LLM；
+- 无 PR comment/merge；
+- findings 已由主线程使用 `/tmp` 最小 fixture 复核。
+
+### 7.2 Verdict
+
+```text
+P0: 0
+P1: 6
+P2: 2
+PR #1: REQUEST CHANGES
+```
+
+### 7.3 已通过的工程基础
+
+- health per-case subprocess、adapter load timeout、terminate/kill；
+- append-only events、partial manifest、incomplete run 禁止 aggregate artifact；
+- batch adapter malformed response、duplicate ticker、provider failure、conflict；
+- canonical writer 对实际收到的 failed/not-qualified evidence 能写 null/sidecar；
+- Council preflight 已阻断多数 empty/error-shell 输入；
+- fallback 保持单次 strong-agent + deterministic synthesis；
+- PR tree 未发现真实 `.env`、私钥、debate/watchlist/live raw evidence。
+
+这些是工程 checkpoint，不是 archive readiness 或 Capability Gate。
+
+## 8. 唯一 Repair Register
+
+### 8.1 PR-blocking Repair
+
+| ID | Milestone | Canonical owner | 状态 | Attempt | PR blocker |
+|---|---|---|---|---:|---|
+| `R-G1-001` | M1/M2 | `g1-field-qualification-canonical-promotion` | identified | 0 | 是 |
+| `R-G1-002` | M1/M2 | `g1-field-qualification-canonical-promotion` | identified | 0 | 是 |
+| `R-G1-003` | M2 | `g1-field-qualification-canonical-promotion` | identified | 0 | 是 |
+| `R-G1-004` | M1/M2 | `g1-provider-health-and-failure-visibility` | identified | 0 | 是 |
+| `R-G2-001` | M0/M5 foundation | `g2-strong-single-agent-fallback` | identified | 0 | 是 |
+| `R-G2-002` | M0/M5 foundation | `g2-strong-single-agent-fallback` | identified | 0 | 是 |
+| `R-G2-003` | M0/M5 foundation | `g2-strong-single-agent-fallback` | identified | 0 | 是 |
+
+独立 review 有 6 个 P1 finding。Production-path finding 跨 G1/G2 合同，为保持
+单 owner 和不跨 Goal 实现，拆成 `R-G1-004` 与 `R-G2-003` 两个执行 ID；二者共享
+同一 validator interface，但各自只负责自己的入口和测试。
+
+### 8.2 Existing work links，不新建重复 Repair
+
+| Existing ID | OpenSpec | 状态 | PR / Gate 影响 |
+|---|---|---|---|
+| `G1-4-D1` | `g1-4-data-source-resilience` | active 既有任务 | 不新增 ID；阻塞可信 coverage/G1 Gate |
+| `G1-4-D6` | `g1-4-data-source-resilience` | active 既有任务 | 不新增 ID；阻塞 missing-data 语义/G1 Gate |
+
+### 8.3 非功能性 PR hygiene
+
+| ID | Owner | 状态 | 阻塞 |
+|---|---|---|---|
+| `R-DOC-001` | 当前 planning governance checkpoint | verified / integration pending | 不阻塞 capability；PR Ready 前关闭 |
+
+`R-DOC-001` 对应：
+
+- `design/growth-expectation-capitalization-prd-2026-08-04.md` EOF blank line；
+- `design/tradingagents-cn-comparative-assessment-2026-08-03.md` Markdown trailing spaces。
+
+它不得与任何 runtime repair 打包为“顺手重构”；只在 planning/docs commit 中原子
+处理。
+
+## 9. Repair 详细合同
+
+### R-G1-001：Qualification runner provenance compatibility
+
+**Root cause**
+
+`provider_qualification._field_evidence()` 只在 evidence 顶层写
+`market/ticker/raw_field/response_hash`，provenance 内缺失这些字段；
+`validate_field_evidence()` 要求两处同时存在。
+
+**Verified symptom**
+
+```text
+runner status=available
+→ validate_field_evidence
+→ status=not_evaluated
+→ missing provenance:
+   market, ticker, raw_field, response_hash
+```
+
+**Exit**
+
+- runner 直接生成符合 canonical provenance contract 的 evidence；
+- 真实 `QualificationRunner output → evaluator → promotion` fixture 通过；
+- source evidence 不被 promotion 修改；
+- independent re-review closed。
+
+### R-G1-002：Source plan/hash/matrix completeness
+
+**Root cause**
+
+Promotion loader 只要求 `manifest.json + evidence.json` 和 evidence count；
+不验证 `plan.json`、plan/ticker/evidence hash，也只遍历实际出现的 field group。
+
+**Verified symptom**
+
+```text
+policy requires:
+  last_price + previous_close
+source:
+  no plan.json
+  only last_price
+result:
+  qualified
+  previous_close absent from decisions
+```
+
+**Exit**
+
+- completed source 必须有有效 frozen plan artifact；
+- manifest/plan/run/ticker/evidence identity 可重算并一致；
+- policy required matrix 的整个缺失 group 形成 rejected decision；
+- CLI 明确绑定 probe plan version；
+- truncation/tamper/missing-group tests 通过。
+
+### R-G1-003：Rejected canonical visibility
+
+**Root cause**
+
+Promotion 只把 `decision["promoted_evidence"]` 传给 snapshot writer。
+
+**Verified symptom**
+
+```text
+last_price qualified
+previous_close source_failed
+→ decision contains rejection
+→ records has no previous_close:null
+→ provenance has no previous_close status/reason/provenance
+```
+
+**Exit**
+
+- snapshot writer 接收全部 in-policy evaluated evidence；
+- qualified → `production_eligible` + value；
+- rejected → `not_qualified` + explicit null + sidecar；
+- mixed qualified/rejected integration test 通过；
+- reader 不需要额外猜测 `decision.json`。
+
+### R-G1-004：Production-path isolation
+
+**Root cause**
+
+Health/promotion path validator 以 repo root 拼接 `watchlist/debate`，但真实 runtime
+目录位于 `value-screener/watchlist`、`value-screener/debate`。
+
+**Verified symptom**
+
+```text
+health accepts value-screener/watchlist
+promotion accepts value-screener/watchlist
+```
+
+**Exit**
+
+- 一个 shared resolved-path validator；
+- 覆盖真实 cache/watchlist/debate/ranking/canonical/diagnostic roots；
+- 拒绝 exact、descendant、ancestor misuse 和 symlink escape；
+- health/promotion/batch/canonical G1 入口复用；
+- 不扩大到无关 filesystem sandbox 重构。
+
+`R-G1-004` 只负责 G1 entrypoints，并产出稳定的 shared validator interface。
+G2 fallback 是否正确采用该 interface 由 `R-G2-003` 单独验收。
+
+### R-G2-001：Explicit dossier ticker identity
+
+**Root cause**
+
+Council preflight 只校验已声明的 ticker/code/symbol，不要求
+`core_snapshot.ticker` 存在。
+
+**Verified symptom**
+
+```text
+explicit dossier has required facts
+but no ticker/code/symbol
+→ accepted for requested 600009.SH
+```
+
+**Exit**
+
+- explicit dossier 必须有 canonical `core_snapshot.ticker`；
+- optional section identity 若存在必须一致；
+- missing/mismatch 在 artifact、cache、LLM 前 fail closed；
+- regression tests 覆盖 Council 和 fallback。
+
+### R-G2-002：Fallback secret redaction
+
+**Root cause**
+
+Fallback 私有 `_redact_error()` 未复用 shared recursive redactor，不能处理
+`api_key=...`、`token=...`、`Authorization=Bearer ...`。
+
+**Verified symptom**
+
+上述 secret pattern 原样进入 error string，并可能写入 `result.json`。
+
+**Exit**
+
+- 复用 `redact_sensitive_text()`；
+- 覆盖 mapping/header/query/URL credential；
+- fallback 默认 output root 明确且不污染 runtime success path；
+- `fallback_runs/` repo hygiene 明确；
+- tests 不包含真实 secret。
+
+### R-G2-003：Fallback production-path adoption
+
+**Root cause**
+
+Fallback `_resolve_run_dir()` 只阻止 `run_id` 逃逸 caller-provided root，没有拒绝
+真实 Council cache/watchlist/debate 等 production roots。
+
+**Verified symptom**
+
+```text
+output_root=value-screener/watchlist
+run_id=review-probe
+→ accepted
+→ run_dir under real watchlist
+```
+
+**Dependency**
+
+- 消费 `R-G1-004` 产出的 shared resolved-path validator interface；
+- 不在 G2 change 中复制路径列表或重新实现 validator。
+
+**Exit**
+
+- fallback 在 artifact 创建和 LLM 前拒绝 protected roots；
+- 覆盖 exact、descendant、ancestor misuse 和 symlink；
+- 默认 `fallback_runs` 与 Council success path 物理隔离；
+- focused fallback tests 和 independent re-review closed。
+
+### G1-4-D1：Industry partial cache
+
+已有 owner：`g1-4-data-source-resilience`。
+
+现状：partial mapping 写缓存时只保存 mapping，下次 cache hit 无条件恢复为
+`available`。
+
+不得新建 repair；在既有 D1 tasks 中保留 status、covered/failed industries 和
+attempted sources，或禁止 partial 作为 clean cache。
+
+### G1-4-D6：Financials missing semantics
+
+已有 owner：`g1-4-data-source-resilience`。
+
+现状：`f_score=None` 已实现，但 quality 仍为 `0.0`，最终结果没有
+`degraded/missing_reasons`。
+
+不得新建 repair；继续完成既有 D6 的 factor-level `None/not_evaluable` 和结果层
+degraded 聚合。
+
+## 10. Repair 执行队列
+
+### Queue 0：规划治理 checkpoint
+
+```text
+唯一 CURRENT master
+→ stable pointer
+→ 旧 master historical marker
+→ 用户 review
+```
+
+本 checkpoint 不更新 repair OpenSpec、不写 runtime。
+
+### Queue 1：G1 trust chain
+
+严格顺序：
+
+```text
+R-G1-001
+→ R-G1-002
+→ R-G1-003
+→ R-G1-004
+→ focused/full tests
+→ strict validation
+→ independent re-review
+→ health/promotion archive decision
+```
+
+这四项可以在一个 G1 rolling Handoff 中编排，但每个 ID 保持独立 RED/commit/review
+证据。
+
+### Queue 2：G2 fallback foundation
+
+```text
+R-G2-001
+→ R-G2-002
+→ R-G2-003
+→ focused tests
+→ full tests
+→ strict validation
+→ independent re-review
+→ fallback archive decision
+```
+
+不与 Queue 1 共用 implementation child。
+
+### Queue 3：既有 G1-4
+
+```text
+G1-4-D1
+→ G1-4-D6
+→ 其余 active tasks
+→ 真实 sample/provider Gate
+```
+
+不因 PR #1 review 重建 change 或重复 tasks。
+
+### PR #1 Ready 条件
+
+```text
+R-G1-001..004 = closed
+R-G2-001..003 = closed
+R-DOC-001 = closed
+relevant active changes strict valid
+full suite pass on final head
+no generated runtime artifacts
+independent overall re-review = approve
+```
+
+PR Ready / merge 仍不表示 G1 或 G2 Capability passed。
+
+## 11. M0–M7 总览
+
+| Milestone | 当前状态 | Repair / 缺口 | 放行 |
+|---|---|---|---|
+| M0 G2 前置可信基础 | partial | f3c 5/17；R-G2-001/002/003 | 否 |
+| M1 Provider Qualification | engineering partial | R-G1-001/002/004；当前 completed live run 缺失 | 否 |
+| M2 Canonical Runtime | engineering partial | R-G1-003/004；consumer/staged runtime 缺失 | 否 |
+| M3 G1 Capability Gate | not started | 300+、全市场、成本/性能、Top 20 | 否 |
+| M4 G2 Dossier Quality | planned | source-aware dossier、单位/报告期/状态 | 否 |
+| M4.5 Growth Diagnostic V0 | planned | contract、engine、dossier integration | 否 |
+| M5 Thesis 与 A/B | foundation only | stable Thesis、同输入 A/B、盲评 | 否 |
+| M6 G3 Runtime | locked | 等 G2 passed | 否 |
+| M7 产品化/V1 | not started | 等各 capability passed | 否 |
+
+## 12. M0：G2 前置可信基础
+
+### 已有
+
+- G2 fallback clean integration 已进入 main；
+- strong single-agent fallback foundation；
+- f3c/f3e 独立 worktree 历史产物。
+
+### 缺口
+
+- `f3c-r1-crosstalk-root-cause` 5/17；
+- dirty f3c mainline closure；
+- 当前代码对应的受控 live root-cause evidence；
+- R-G2-001 / R-G2-002 / R-G2-003。
+
+### 状态
+
+```text
+M0: not passed
+```
+
+G1 repair 前进不等于 M0 closure。
+
+## 13. M1：Provider Qualification
+
+### 已有
+
+- provider qualification/provenance contract；
+- 固定五只 A 股 probe plan；
+- health failure-visible engineering foundation；
+- historical incomplete runtime evidence。
+
+### 缺口
+
+- R-G1-001 / R-G1-002 / R-G1-004；
+- 当前 code version 的 completed live qualification；
+- provider/field eligibility decision；
+- baseline/candidate field coverage；
+- LongPort/Longbridge qualification；
+- M4.5 shadow fields。
+
+### 状态
+
+```text
+M1: not passed
+```
+
+## 14. M2：Canonical Runtime
+
+### 已有
+
+- canonical snapshot writer/reader foundation；
+- batch adapter foundation；
+- active health/promotion changes。
+
+### 缺口
+
+- R-G1-003 / R-G1-004；
+- active child repair/re-review/archive；
+- 真实 qualified snapshot；
+- `g1-canonical-snapshot-consumer`；
+- `g1-staged-screening-runtime`；
+- Stage A/B/C ticker set 和 provider call 单调下降 evidence。
+
+### 状态
+
+```text
+M2: not passed
+```
+
+## 15. M3：G1 Capability Gate
+
+独立 children：
+
+1. `g1-300-sample-validation`
+2. `g1-full-market-performance-cost`
+3. `g1-top20-style-review`
+
+Gate：
+
+```text
+300+ 多行业样本
+warm-cache 全市场 ≤15 分钟
+关键字段可用率 ≥95%
+L2 成本 ≤¥2
+未处理异常 = 0
+Top 20 用户复核 ≥70% 值得进一步研究
+```
+
+```text
+M3/G1 capability: not passed
+```
+
+## 16. M4：G2 Evidence Dossier Quality
+
+目标：
+
+- source/status/provenance；
+- report period/unit/freshness；
+- facts/market expectations/user assumptions 分区；
+- immutable dossier；
+- degraded/insufficient/not_evaluable。
+
+后续：
+
+1. `g2-evidence-dossier-quality`
+2. `g2-source-aware-dossier`
+3. `g2-diagnostic-input-contract-foundation`
+
+```text
+M4: not started as current execution milestone
+```
+
+## 17. M4.5：Growth Expectation Diagnostic V0
+
+顺序：
+
+1. `g2-growth-expectation-contract`
+2. `g2-growth-expectation-v0-engine`
+3. `g2-growth-expectation-dossier-integration`
+
+约束：
+
+- deterministic，无 LLM；
+- EPV proxy + 成熟期估值交叉锚；
+- fixed growth/duration reverse modes；
+- sensitivity、assumptions、provenance、calculation status；
+- 两条 A/B 路径共享同一 diagnostic/assumption snapshot；
+- 不进入 G1 ranking/hard gate。
+
+```text
+M4.5: planned, no child started
+```
+
+## 18. M5：InvestmentThesis 与 A/B
+
+必须完成：
+
+- strong-single-agent baseline；
+- Council A/B harness；
+- 8–10 只固定样本；
+- 同 model/dossier/diagnostic/tools/comparable budget；
+- anonymous rubric + cost；
+- stable InvestmentThesis。
+
+Gate：
+
+```text
+Council 实质增量 ≥70%
+用户盲评 Council 更好 ≥60%
+Council 明显更差 ≤20%
+审计对齐率 100%
+高严重度凭空数字 0
+关键事实追溯率 ≥95%
+```
+
+失败则回退 strong single-agent + independent DA/fact checker + synthesizer。
+
+```text
+M5/G2 capability: not passed
+```
+
+## 19. M6：G3 Runtime
+
+前置：
+
+- G2 passed；
+- stable InvestmentThesis；
+- versioned valuation expectation；
+- 用户保留最终判断。
+
+后续：
+
+1. `g3-holding-domain-model`
+2. `g3-contract-lifecycle`
+3. `g3-monitor-signal-and-evaluator`
+4. `g3-shadow-mode`
+
+```text
+M6 runtime: locked
+```
+
+## 20. M7：Gate 后产品化
+
+只在相应 capability passed 后推进：
+
+- funnel observability UI；
+- provider/data health ops；
+- Thesis history/export；
+- growth diagnostic interaction；
+- G3 holding review UI；
+- task progress/run history。
+
+产品壳、前端、队列或 dashboard 不能反向证明 capability。
+
+## 21. 测试与证据基线
+
+### 当前自动化
+
+```text
+latest full suite:
+  651 passed in 52.75s
+
+independent review safe focused suite:
+  135 passed in 6.60s
+
+active OpenSpec strict validation:
+  previously passed
+  repair tasks 尚未同步，因此不能作为 archive readiness
+```
+
+### Whitespace
+
+```text
+existing PR head 2f13be9:
+  exit 2
+
+governance checkpoint working tree against origin/main:
+  passed
+```
+
+仅涉及历史 Markdown whitespace/EOF；已在当前 governance checkpoint 修复并通过
+prospective range check。`R-DOC-001` 在该 checkpoint 集成到 PR head 后改为
+`closed`。它不是 runtime Capability blocker，但必须在 PR Ready 前关闭。
+
+### GitNexus
+
+GitNexus 索引落后当前 head 50 commits。尝试使用 `gitnexus 1.6.6
+--index-only` 刷新时，其发布包导入未声明/未构建的 `tree-sitter-swift` 而失败。
+
+因此本次 review 不使用 stale graph，findings 以实际 diff、源码、spec 和最小
+fixture reproduction 为证据。该外部工具问题不登记为项目 Repair ID。
+
+### Live evidence
+
+- historical health runs 均不足以作为当前 promotion/G1 Gate；
+- 当前 head 没有 completed live qualification/promotion；
+- fixture/reference 不替代 live evidence；
+- deterministic repair closed 前禁止新 live run。
+
+## 22. 当前唯一允许动作
+
+当前动作不是 runtime repair，而是：
+
+```text
+review MASTER-2026-08-06 governance checkpoint
+```
+
+用户确认本文件后，下一步才允许：
+
+1. 更新 M1/M2 rolling handoff r2，只引用 `R-G1-001..004`；
+2. 更新三个 active OpenSpec 的 repair specs/tasks；
+3. 使用 writing-plans 生成可执行 repair implementation plan；
+4. 用户选择 Subagent-Driven 或 Inline Execution；
+5. 开始 Queue 1。
+
+在上述 plan 被确认前，不写 runtime。
+
+## 23. 下一窗口启动方式
+
+### 必读顺序
+
+```text
+1. design/capability-gate-and-execution-handoff.md
+2. 该入口指向的唯一 CURRENT master
+3. 当前 Queue 对应 rolling handoff
+4. Repair ID 对应 OpenSpec
+```
+
+### 当前 checkpoint review 提示
+
+```text
+请只读审查 MASTER-2026-08-06：
+
+- 是否确实只有一个 CURRENT 大规划；
+- Repair ID 是否完整覆盖 PR #1 findings；
+- 是否存在重复 owner、孤儿 repair 或跨 Goal 偷带；
+- 两次 failed re-review → design_escalation 是否足以阻止无限 patch；
+- Queue 1/2/3 是否符合 G1→G2→G3 和当前开发状态；
+- PR Ready 与 Capability Gate 是否严格分开。
+
+本轮不修改 runtime、不调用 provider/LLM、不 archive、不 merge PR。
+```
+
+## 24. 当前禁止开始
+
+- PR #1 转 Ready 或 merge；
+- 未登记 Repair ID 的 patch；
+- 将 R-G1 与 R-G2 放入同一 implementation child；
+- 为 G1-4-D1/D6 新建重复 repair/change；
+- health/promotion/fallback archive；
+- completed live provider qualification；
+- final Council A/B；
+- growth diagnostic engine；
+- G3 runtime；
+- 为让 snapshot/Gate 通过而填默认值或放宽 policy；
+- 未授权 provider/LLM 重跑；
+- 第三次无设计批准的同 ID repair attempt。
+
+## 25. 大规划更新协议
+
+每次 milestone 状态变化时：
+
+1. 先更新 Repair Register/status/attempt/evidence；
+2. 再更新 milestone 表和当前 Queue；
+3. rolling 只引用 ID 和 exact execution state；
+4. OpenSpec 记录 requirement/tasks；
+5. code/tests/evidence 记录在对应 child；
+6. capability Gate 只由独立整体 review 更新；
+7. 新 dated master 必须迁移全部未关闭 ID；
+8. stable pointer 始终只指向一个 CURRENT master。
+
+任何无法在本文件定位 owner 和 exit condition 的工作都不得开始。

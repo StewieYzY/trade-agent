@@ -2,9 +2,12 @@
 
 > 日期：2026-08-04
 >
-> 类型：永久性总 Handoff
+> 类型：历史完整执行 Handoff
 >
-> 状态：取代 `capability-gate-and-execution-handoff-2026-08-03.md` 成为最新 dated 规划；旧文件保留为历史快照
+> 状态：`SUPERSEDED / HISTORICAL / READ-ONLY`
+>
+> 当前执行必须从 `design/capability-gate-and-execution-handoff.md` 进入，
+> 不得从本文件恢复工作。
 >
 > 适用范围：G1「快」→ G2「深」→ G3「拿得住」全部后续开发
 >
