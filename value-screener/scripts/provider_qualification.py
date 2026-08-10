@@ -149,6 +149,17 @@ def _sha256(value: Any) -> str:
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
+def _sha256_bytes(value: bytes) -> str:
+    return hashlib.sha256(value).hexdigest()
+
+
+def _manifest_hash(manifest: Mapping[str, Any]) -> str:
+    payload = dict(manifest)
+    payload.pop("manifest_hash", None)
+    payload.pop("artifact_hashes", None)
+    return _sha256(payload)
+
+
 def _code_provenance() -> dict[str, Any]:
     repo_root = Path(__file__).resolve().parents[2]
 
@@ -1147,6 +1158,7 @@ class QualificationRunner:
                 "raw": "raw.json",
                 "comparison": "comparison.json",
                 "method_results": "method-results.json",
+                "manifest": "manifest.json",
             },
         }
 
@@ -1169,7 +1181,12 @@ class QualificationRunner:
 
         _write_json(
             run_dir / "plan.json",
-            {"version": self.plan_version, "plan_hash": plan_hash, "cases": plan},
+            {
+                "run_id": safe_id,
+                "version": self.plan_version,
+                "plan_hash": plan_hash,
+                "cases": plan,
+            },
         )
         _write_json(run_dir / "manifest.json", manifest)
 
@@ -1458,6 +1475,11 @@ class QualificationRunner:
             _write_json(run_dir / "raw.json", {"run_id": safe_id, "responses": list(raw_by_hash.values())})
             _write_json(run_dir / "comparison.json", {"run_id": safe_id, "comparison": comparison})
             _write_json(run_dir / "method-results.json", {"run_id": safe_id, "results": method_results})
+            manifest["artifact_hashes"] = {
+                "plan": _sha256_bytes((run_dir / "plan.json").read_bytes()),
+                "evidence": _sha256_bytes((run_dir / "evidence.json").read_bytes()),
+            }
+            manifest["manifest_hash"] = _manifest_hash(manifest)
         _write_json(run_dir / "manifest.json", manifest)
         return {
             "run_id": safe_id,

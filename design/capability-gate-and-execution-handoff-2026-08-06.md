@@ -26,7 +26,7 @@
 > `PR #1 codex/mainline-sync-2026-08-05 → main`
 >
 > 当前直接执行阶段：
-> Queue 1：`R-G1-001` 已 closed；当前下一项为 `R-G1-002`
+> Queue 1：`R-G1-001`、`R-G1-002` 已 closed；当前下一项为 `R-G1-003`
 
 ## 1. 本文件的唯一权威地位
 
@@ -278,7 +278,8 @@ scope:
 | Change | Tasks | CLI 状态 | 大规划真实状态 |
 |---|---:|---|---|
 | `g1-provider-health-and-failure-visibility` | 19/19 | complete / active | review finding 未修，不 ready to archive |
-| `g1-field-qualification-canonical-promotion` | 22/22 | archived / integrated at `main@0d0b0f4` | R-G1-001 closed；R-G1-002/003 仍未关闭 |
+| `g1-field-qualification-canonical-promotion` | 22/22 | archived / integrated at `main@0d0b0f4` | R-G1-001/R-G1-002 closed；R-G1-003 仍未关闭 |
+| `g1-r-g1-002-source-plan-matrix-completeness` | 14/14 | complete / ready to archive | R-G1-002 closed after independent review；待 merge |
 | `g2-strong-single-agent-fallback` | 12/12 | complete / active | review findings 未修，不 ready to archive |
 | `g2-deep-investment-thesis` | 0/27 | in-progress | G2 umbrella，含 M4.5 |
 | `f3c-r1-crosstalk-root-cause` | 5/17 | in-progress | M0 前置未闭 |
@@ -331,7 +332,7 @@ PR #1: REQUEST CHANGES
 | ID | Milestone | Canonical owner | 状态 | Attempt | PR blocker |
 |---|---|---|---|---:|---|
 | `R-G1-001` | M1/M2 | `g1-field-qualification-canonical-promotion` | closed | 3 | 否 |
-| `R-G1-002` | M1/M2 | `g1-field-qualification-canonical-promotion` | identified | 0 | 是 |
+| `R-G1-002` | M1/M2 | `g1-r-g1-002-source-plan-matrix-completeness` | closed | 1 | 否 |
 | `R-G1-003` | M2 | `g1-field-qualification-canonical-promotion` | identified | 0 | 是 |
 | `R-G1-004` | M1/M2 | `g1-provider-health-and-failure-visibility` | identified | 0 | 是 |
 | `R-G2-001` | M0/M5 foundation | `g2-strong-single-agent-fallback` | identified | 0 | 是 |
@@ -462,6 +463,28 @@ result:
 - policy required matrix 的整个缺失 group 形成 rejected decision；
 - CLI 明确绑定 probe plan version；
 - truncation/tamper/missing-group tests 通过。
+
+**Implementation / verification evidence (2026-08-10)**
+
+- Implementation carrier：`g1-r-g1-002-source-plan-matrix-completeness`，复用本
+  Repair ID，不创建新的 Repair。
+- RED→GREEN：新增 plan 缺失/截断、artifact hash、manifest/plan hash cross
+  identity、run/ticker/field identity、evidence tamper、planned identity 缺失、
+  required matrix partial/missing、CLI plan version、合法 source run、source
+  byte immutability tests。
+- Implementation：completed source 强制 `manifest.json + plan.json +
+  evidence.json`、artifact hashes、manifest/plan/run/identity 完整性；runner
+  写入 hashes；promotion CLI 绑定 `PROBE_PLAN_VERSION`；不修改 provider
+  eligibility、canonical policy 或下游 ranking。
+- Verification：相关 suite `107 passed`；independent review first
+  `REQUEST CHANGES` 后已修复并 fresh review `PASS`；OpenSpec strict `29 passed,
+  0 failed`、compileall 与 `git diff --check` 通过。
+- Full pytest 受环境依赖缺失阻塞：`495 items / 18 collection errors`
+  （`akshare`、`typer`、`pandas` 未安装），不是本 child 测试 body failure。
+- 未调用真实 provider/LLM，未生成 live/cache/watchlist/debate/canonical
+  runtime artifacts。
+- **Next state：** `R-G1-003`；本 child 已完成 independent review 并关闭
+  R-G1-002，carrier archive 后待 merge，且不代表 G1/G2 Capability passed。
 
 ### R-G1-003：Rejected canonical visibility
 
@@ -620,7 +643,7 @@ degraded 聚合。
 
 ```text
 R-G1-001 (closed)
-→ R-G1-002 (current)
+→ R-G1-002 (closed)
 → R-G1-003
 → R-G1-004
 → focused/full tests
@@ -928,9 +951,10 @@ fixture reproduction 为证据。该外部工具问题不登记为项目 Repair 
 
 ## 22. 当前唯一允许动作
 
-当前 Queue 1 入口为 `R-G1-002`。开始前仍需从最新 main 建单一独立 worktree，
+当前 Queue 1 入口为 `R-G1-003`。开始前仍需从最新 main 建单一独立 worktree，
 更新其 owner OpenSpec/rolling handoff，并以 RED→最小修复→focused/full tests→strict
-validation→independent re-review 的顺序执行。
+validation→independent re-review 的顺序执行。`R-G1-002` 已完成 independent review
+并关闭，active implementation carrier 已准备 archive。
 
 ## 23. 下一窗口启动方式
 

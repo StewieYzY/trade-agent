@@ -128,40 +128,131 @@ class FieldQualificationPolicy:
 class QualificationRun:
     source_dir: Path
     manifest: Mapping[str, Any]
+    plan: Mapping[str, Any]
     evidence: tuple[Mapping[str, Any], ...]
     evidence_hash: str
+    artifact_hashes: Mapping[str, str]
+
+
+def _sha256_bytes(value: bytes) -> str:
+    return hashlib.sha256(value).hexdigest()
+
+
+def _canonical_json_bytes(value: Any) -> bytes:
+    return json.dumps(
+        value,
+        ensure_ascii=False,
+        indent=2,
+        sort_keys=True,
+        default=str,
+    ).encode("utf-8")
+
+
+def _manifest_hash(manifest: Mapping[str, Any]) -> str:
+    payload = copy.deepcopy(dict(manifest))
+    payload.pop("manifest_hash", None)
+    payload.pop("artifact_hashes", None)
+    return _hash(payload)
 
 
 def load_qualification_run(source_dir: str | Path) -> QualificationRun:
     root = Path(source_dir).resolve()
     manifest_path = root / "manifest.json"
+    plan_path = root / "plan.json"
     evidence_path = root / "evidence.json"
-    if not manifest_path.is_file() or not evidence_path.is_file():
+    if (
+        not manifest_path.is_file()
+        or not plan_path.is_file()
+        or not evidence_path.is_file()
+    ):
         raise QualificationSourceError(
-            "qualification source requires manifest.json and evidence.json"
+            "qualification source requires manifest.json, plan.json, and evidence.json"
         )
     try:
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        payload = json.loads(evidence_path.read_text(encoding="utf-8"))
+        manifest_bytes = manifest_path.read_bytes()
+        plan_bytes = plan_path.read_bytes()
+        evidence_bytes = evidence_path.read_bytes()
+        manifest = json.loads(manifest_bytes)
+        plan = json.loads(plan_bytes)
+        payload = json.loads(evidence_bytes)
     except (OSError, json.JSONDecodeError) as exc:
-        raise QualificationSourceError(f"cannot read qualification source: {exc}") from exc
+        raise QualificationSourceError(
+            f"cannot read qualification source artifact (manifest/plan/evidence): {exc}"
+        ) from exc
     if not isinstance(manifest, Mapping):
         raise QualificationSourceError("qualification manifest must be an object")
+    if not isinstance(plan, Mapping):
+        raise QualificationSourceError("qualification plan must be an object")
     if manifest.get("completion_status") != "completed":
         raise QualificationSourceError("qualification source must be completed")
     artifact_status = manifest.get("artifact_status") or {}
-    if artifact_status.get("evidence") not in {None, "written"}:
-        raise QualificationSourceError("qualification evidence artifact is not written")
-    if isinstance(payload, Mapping):
-        run_id = payload.get("run_id")
-        evidence = payload.get("evidence")
-    else:
-        run_id = None
-        evidence = payload
+    if any(
+        artifact_status.get(name) != "written"
+        for name in ("plan", "evidence")
+    ):
+        raise QualificationSourceError("qualification source artifacts are not written")
+    artifact_hashes = manifest.get("artifact_hashes")
+    if not isinstance(artifact_hashes, Mapping):
+        raise QualificationSourceError("qualification source artifact hashes are missing")
+    for name, actual_hash in {
+        "plan": _sha256_bytes(plan_bytes),
+        "evidence": _sha256_bytes(evidence_bytes),
+    }.items():
+        if artifact_hashes.get(name) != actual_hash:
+            raise QualificationSourceError(f"qualification {name} hash mismatch")
+    if manifest.get("manifest_hash") != _manifest_hash(manifest):
+        raise QualificationSourceError("qualification manifest hash mismatch")
+    if manifest_bytes != _canonical_json_bytes(manifest):
+        raise QualificationSourceError(
+            "qualification manifest hash/serialization mismatch"
+        )
+
+    manifest_run_id = manifest.get("run_id")
+    if not isinstance(manifest_run_id, str) or plan.get("run_id") != manifest_run_id:
+        raise QualificationSourceError("qualification plan run identity mismatch")
+    if plan.get("version") != manifest.get("plan_version"):
+        raise QualificationSourceError("qualification plan version mismatch")
+    cases = plan.get("cases")
+    if not isinstance(cases, list) or not cases:
+        raise QualificationSourceError("qualification plan cases are missing")
+    if plan.get("plan_hash") != _hash(
+        {"version": plan.get("version"), "cases": cases}
+    ):
+        raise QualificationSourceError("qualification plan hash mismatch")
+    if manifest.get("plan_hash") != plan.get("plan_hash"):
+        raise QualificationSourceError("qualification manifest/plan hash mismatch")
+    expected_fields: set[tuple[str, str, str]] = set()
+    expected_tickers: set[str] = set()
+    for case in cases:
+        if not isinstance(case, Mapping):
+            raise QualificationSourceError("qualification plan case is malformed")
+        try:
+            ticker = _canonical_a_share(case.get("ticker"))
+        except (TypeError, ValueError) as exc:
+            raise QualificationSourceError("qualification plan ticker is invalid") from exc
+        method = case.get("method")
+        fields = case.get("fields")
+        if not isinstance(method, str) or not method.strip():
+            raise QualificationSourceError("qualification plan method is invalid")
+        if not isinstance(fields, list) or not fields or any(
+            not isinstance(field, str) or not field.strip() for field in fields
+        ):
+            raise QualificationSourceError("qualification plan fields are invalid")
+        expected_tickers.add(ticker)
+        for field in fields:
+            identity = (ticker, method, field)
+            if identity in expected_fields:
+                raise QualificationSourceError(
+                    "qualification plan contains duplicate identity"
+                )
+            expected_fields.add(identity)
+    if not isinstance(payload, Mapping):
+        raise QualificationSourceError("qualification evidence payload must be an object")
+    run_id = payload.get("run_id")
+    evidence = payload.get("evidence")
     if not isinstance(evidence, list) or any(not isinstance(item, Mapping) for item in evidence):
         raise QualificationSourceError("qualification evidence must be a list of objects")
-    manifest_run_id = manifest.get("run_id")
-    if run_id is not None and manifest_run_id is not None and run_id != manifest_run_id:
+    if run_id != manifest_run_id:
         raise QualificationSourceError("qualification run_id mismatch")
     expected_count = manifest.get("evidence_count")
     if expected_count is None:
@@ -175,10 +266,34 @@ def load_qualification_run(source_dir: str | Path) -> QualificationRun:
         raise QualificationSourceError(
             f"qualification evidence count mismatch: expected {expected_count}, got {len(evidence)}"
         )
+    if manifest.get("ticker_set_hash") != _hash(sorted(expected_tickers)):
+        raise QualificationSourceError("qualification ticker identity hash mismatch")
+    observed_fields: set[tuple[str, str, str]] = set()
+    for item in evidence:
+        try:
+            ticker = _canonical_a_share(item.get("ticker"))
+        except (TypeError, ValueError) as exc:
+            raise QualificationSourceError("qualification evidence ticker is invalid") from exc
+        identity = (ticker, item.get("method"), item.get("field"))
+        if identity not in expected_fields:
+            raise QualificationSourceError(
+                "qualification evidence identity is outside frozen plan"
+            )
+        if identity in observed_fields:
+            raise QualificationSourceError(
+                "qualification evidence contains duplicate identity"
+            )
+        observed_fields.add(identity)
+    missing_fields = expected_fields.difference(observed_fields)
+    if missing_fields:
+        raise QualificationSourceError(
+            "qualification evidence is missing frozen plan identity"
+        )
     normalized = tuple(copy.deepcopy(item) for item in evidence)
     return QualificationRun(
         source_dir=root,
         manifest=copy.deepcopy(dict(manifest)),
+        plan=copy.deepcopy(dict(plan)),
         evidence=normalized,
         evidence_hash=_hash(
             sorted(
@@ -186,6 +301,7 @@ def load_qualification_run(source_dir: str | Path) -> QualificationRun:
                 key=lambda item: json.dumps(item, ensure_ascii=False, sort_keys=True, default=str),
             )
         ),
+        artifact_hashes=copy.deepcopy(dict(artifact_hashes)),
     )
 
 
@@ -236,6 +352,8 @@ def _blocked_decision(
         "source_run_id": run.manifest.get("run_id"),
         "source_dir": str(run.source_dir),
         "source_evidence_hash": run.evidence_hash,
+        "source_artifact_hashes": dict(run.artifact_hashes),
+        "source_plan_hash": run.plan.get("plan_hash"),
         "policy": policy.to_dict(),
         "policy_hash": policy.policy_hash,
         "evaluated_at": None,
@@ -294,12 +412,36 @@ def evaluate_qualification_run(
 
     decisions: list[dict[str, Any]] = []
     promoted: list[dict[str, Any]] = []
+    provider_keys = {
+        (str(item.get("provider_family")), str(item.get("provider")))
+        for item in run.evidence
+    }
+    if not provider_keys:
+        provider_keys = {("unknown", provider) for provider in policy.allowed_providers}
+    required_matrix = policy.matrix
+    complete_providers: set[tuple[str, str]] = set()
+    for provider_key in provider_keys:
+        observed_matrix = {
+            (str(item.get("method")), str(item.get("field")))
+            for item in run.evidence
+            if (
+                str(item.get("provider_family")),
+                str(item.get("provider")),
+            )
+            == provider_key
+        }
+        if required_matrix.issubset(observed_matrix):
+            complete_providers.add(provider_key)
+
     for key in sorted(groups):
         items = groups[key]
+        provider_key = key[:2]
         provider = key[1]
         reasons: list[str] = []
         if provider not in policy.allowed_providers:
             reasons.append("provider_not_allowed")
+        if provider_key not in complete_providers:
+            reasons.append("missing_field_group")
         by_ticker: dict[str, list[Mapping[str, Any]]] = {}
         for item in items:
             ticker = _canonical_a_share(item.get("ticker"))
@@ -353,6 +495,29 @@ def evaluate_qualification_run(
                 promoted_item["eligibility"] = "production_eligible"
                 promoted.append(promoted_item)
 
+    for provider_family, provider in sorted(provider_keys):
+        if (provider_family, provider) in complete_providers:
+            continue
+        observed = {
+            (str(item.get("method")), str(item.get("field")))
+            for item in run.evidence
+            if (
+                str(item.get("provider_family")),
+                str(item.get("provider")),
+            )
+            == (provider_family, provider)
+        }
+        for method, field in sorted(required_matrix - observed):
+            decisions.append(
+                _decision(
+                    key=(provider_family, provider, method, field),
+                    items=[],
+                    policy=policy,
+                    reason_codes=["missing_field_group"],
+                    source_hash=run.evidence_hash,
+                )
+            )
+
     status = "qualified" if promoted else "blocked"
     evaluated = reference.isoformat()
     decision = {
@@ -361,6 +526,8 @@ def evaluate_qualification_run(
         "source_run_id": run.manifest.get("run_id"),
         "source_dir": str(run.source_dir),
         "source_evidence_hash": run.evidence_hash,
+        "source_artifact_hashes": dict(run.artifact_hashes),
+        "source_plan_hash": run.plan.get("plan_hash"),
         "policy": policy.to_dict(),
         "policy_hash": policy.policy_hash,
         "evaluated_at": evaluated,
