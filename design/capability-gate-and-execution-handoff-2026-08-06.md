@@ -26,7 +26,8 @@
 > `PR #1 codex/mainline-sync-2026-08-05 → main`
 >
 > 当前直接执行阶段：
-> Queue 1：`R-G1-001`、`R-G1-002`、`R-G1-003` 已 closed；当前下一项为 `R-G1-004`
+> Queue 1 repair closure complete：`R-G1-001`、`R-G1-002`、`R-G1-003`、
+> `R-G1-004` 已 closed；下一阶段为 Track A `g1-canonical-snapshot-consumer`
 
 ## 1. 本文件的唯一权威地位
 
@@ -277,7 +278,7 @@ scope:
 
 | Change | Tasks | CLI 状态 | 大规划真实状态 |
 |---|---:|---|---|
-| `g1-provider-health-and-failure-visibility` | 19/19 | complete / active | review finding 未修，不 ready to archive |
+| `g1-provider-health-and-failure-visibility` | 25/25 | archived / integrated at `main@f1ea010` | R-G1-004 closed |
 | `g1-field-qualification-canonical-promotion` | 22/22 | archived / integrated at `main@1ff6678` | R-G1-001/R-G1-002 closed |
 | `g1-r-g1-002-source-plan-matrix-completeness` | 14/14 | archived / integrated at `main@1ff6678` | R-G1-002 closed after independent review |
 | `g1-r-g1-003-rejected-canonical-visibility` | 4/4 | archived / integrated at `main@98570a1` | R-G1-003 closed after independent re-review |
@@ -771,7 +772,6 @@ G1 repair 前进不等于 M0 closure。
 
 ### 缺口
 
-- R-G1-004；
 - 当前 code version 的 completed live qualification；
 - provider/field eligibility decision；
 - baseline/candidate field coverage；
@@ -790,11 +790,10 @@ M1: not passed
 
 - canonical snapshot writer/reader foundation；
 - batch adapter foundation；
-- active health/promotion changes。
+- archived health/promotion Change；canonical snapshot writer/reader foundation。
 
 ### 缺口
 
-- R-G1-004；
 - 真实 qualified snapshot；
 - `g1-canonical-snapshot-consumer`；
 - `g1-staged-screening-runtime`；
@@ -978,10 +977,10 @@ fixture reproduction 为证据。该外部工具问题不登记为项目 Repair 
 
 ## 22. 当前唯一允许动作
 
-当前 Queue 1 入口为 `R-G1-004`。开始前仍需从最新 main 建单一独立 worktree，
-更新其 owner OpenSpec/rolling handoff，并以 RED→最小修复→focused/full tests→strict
-validation→independent re-review 的顺序执行。`R-G1-001`、`R-G1-002`、`R-G1-003`
-均已完成 independent review、归档并合入 main；当前没有 R-G1-003 active carrier。
+Queue 1 repair closure 已完成：`R-G1-001`、`R-G1-002`、`R-G1-003`、
+`R-G1-004` 均已完成 independent review、归档并合入 `main@f1ea010`。
+下一步按 Track A 进入 `g1-canonical-snapshot-consumer` 的只读 preflight/规划；
+该 Change 尚未开始，不在本次 docs-only sync 中实现。
 
 ## 23. 下一窗口启动方式
 
