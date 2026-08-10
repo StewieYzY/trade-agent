@@ -20,13 +20,13 @@
 > `bce6bc6 merge: integrate g1 field qualification canonical promotion`
 >
 > 当前 main/docs baseline：
-> `2f13be9 docs: add 2026-08-05 capability execution handoff`
+> `0d0b0f4 chore(openspec): archive g1 field qualification change`
 >
 > 当前 GitHub 审查入口：
 > `PR #1 codex/mainline-sync-2026-08-05 → main`
 >
 > 当前直接执行阶段：
-> Queue 1：`R-G1-001` repair attempt 3，已完成定向验证，等待重新 independent review
+> Queue 1：`R-G1-001` 已 closed；当前下一项为 `R-G1-002`
 
 ## 1. 本文件的唯一权威地位
 
@@ -278,7 +278,7 @@ scope:
 | Change | Tasks | CLI 状态 | 大规划真实状态 |
 |---|---:|---|---|
 | `g1-provider-health-and-failure-visibility` | 19/19 | complete / active | review finding 未修，不 ready to archive |
-| `g1-field-qualification-canonical-promotion` | 12/12 | complete / active | review findings 未修，不 ready to archive |
+| `g1-field-qualification-canonical-promotion` | 22/22 | archived / integrated at `main@0d0b0f4` | R-G1-001 closed；R-G1-002/003 仍未关闭 |
 | `g2-strong-single-agent-fallback` | 12/12 | complete / active | review findings 未修，不 ready to archive |
 | `g2-deep-investment-thesis` | 0/27 | in-progress | G2 umbrella，含 M4.5 |
 | `f3c-r1-crosstalk-root-cause` | 5/17 | in-progress | M0 前置未闭 |
@@ -330,7 +330,7 @@ PR #1: REQUEST CHANGES
 
 | ID | Milestone | Canonical owner | 状态 | Attempt | PR blocker |
 |---|---|---|---|---:|---|
-| `R-G1-001` | M1/M2 | `g1-field-qualification-canonical-promotion` | verified | 3 | 是 |
+| `R-G1-001` | M1/M2 | `g1-field-qualification-canonical-promotion` | closed | 3 | 否 |
 | `R-G1-002` | M1/M2 | `g1-field-qualification-canonical-promotion` | identified | 0 | 是 |
 | `R-G1-003` | M2 | `g1-field-qualification-canonical-promotion` | identified | 0 | 是 |
 | `R-G1-004` | M1/M2 | `g1-provider-health-and-failure-visibility` | identified | 0 | 是 |
@@ -429,9 +429,11 @@ runner status=available
   metadata 仍保留。
 - Verification：R-G1-001 定向测试 `49 passed`；本次按用户要求不运行 repository-wide
   pytest；strict OpenSpec、compileall、`git diff --check` 通过。
-- Next state：重新进行 independent review；本次 archive 已按用户指示执行，但
-  R-G1-001 仍未 closed，不能据此宣称 independent review 通过或 G1/G2 Capability
-  passed。
+- Closure（2026-08-10）：独立 re-review 未发现新的 R-G1-001 缺陷；在
+  `main@0d0b0f4` 上，focused suite `49 passed`、完整 pytest `656 passed`、
+  `openspec validate --all --strict` `28 passed, 0 failed`、compileall 与
+  `git diff --check` 均通过。该结论只关闭 deterministic provenance repair，
+  不代表 M1/M2/M3 或 G1/G2 Capability passed。
 
 ### R-G1-002：Source plan/hash/matrix completeness
 
@@ -617,8 +619,8 @@ degraded 聚合。
 严格顺序：
 
 ```text
-R-G1-001
-→ R-G1-002
+R-G1-001 (closed)
+→ R-G1-002 (current)
 → R-G1-003
 → R-G1-004
 → focused/full tests
@@ -718,7 +720,7 @@ G1 repair 前进不等于 M0 closure。
 
 ### 缺口
 
-- R-G1-001 / R-G1-002 / R-G1-004；
+- R-G1-002 / R-G1-004；
 - 当前 code version 的 completed live qualification；
 - provider/field eligibility decision；
 - baseline/candidate field coverage；
@@ -926,21 +928,9 @@ fixture reproduction 为证据。该外部工具问题不登记为项目 Repair 
 
 ## 22. 当前唯一允许动作
 
-当前动作不是 runtime repair，而是：
-
-```text
-review MASTER-2026-08-06 governance checkpoint
-```
-
-用户确认本文件后，下一步才允许：
-
-1. 更新 M1/M2 rolling handoff r2，只引用 `R-G1-001..004`；
-2. 更新三个 active OpenSpec 的 repair specs/tasks；
-3. 使用 writing-plans 生成可执行 repair implementation plan；
-4. 用户选择 Subagent-Driven 或 Inline Execution；
-5. 开始 Queue 1。
-
-在上述 plan 被确认前，不写 runtime。
+当前 Queue 1 入口为 `R-G1-002`。开始前仍需从最新 main 建单一独立 worktree，
+更新其 owner OpenSpec/rolling handoff，并以 RED→最小修复→focused/full tests→strict
+validation→independent re-review 的顺序执行。
 
 ## 23. 下一窗口启动方式
 
