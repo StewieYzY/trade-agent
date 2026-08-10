@@ -55,11 +55,17 @@ python3 -m compileall -q value-screener: passed
 git diff --check: passed
 ```
 
-Repository-wide `python3 -m pytest` was also attempted as part of branch
-closeout, but collection stopped at `495 items / 18 errors` because this
-environment lacks existing project dependencies including `akshare`, `typer`,
-and `pandas`. No test body failure was observed in that run; the focused
-qualification/promotion suite above is the verified evidence for this child.
+Repository-wide pytest was rerun with the project's shared virtual environment
+at `/Users/admin/Documents/trade-agent/value-screener/.venv`:
+
+```text
+674 passed in 52.40s
+```
+
+The system-Python attempt that produced `495 items / 18 collection errors` was
+an environment mistake, not a project dependency gap. The full suite generated
+three test runtime files under `debate/` and `watchlist/`; they were removed
+from this worktree and are not part of the commit.
 
 No live provider or LLM was called. The artifact scan found no newly generated
 cache, watchlist, debate, canonical snapshot, or other production runtime output.
