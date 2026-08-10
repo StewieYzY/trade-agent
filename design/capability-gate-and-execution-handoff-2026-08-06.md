@@ -17,16 +17,16 @@
 > 架构决策：`design/architecture-decisions.md`
 >
 > runtime/integration baseline：
-> `bce6bc6 merge: integrate g1 field qualification canonical promotion`
+> `98570a1 merge: integrate R-G1-003 rejected canonical visibility`
 >
 > 当前 main/docs baseline：
-> `0d0b0f4 chore(openspec): archive g1 field qualification change`
+> `98570a1 merge: integrate R-G1-003 rejected canonical visibility`
 >
 > 当前 GitHub 审查入口：
 > `PR #1 codex/mainline-sync-2026-08-05 → main`
 >
 > 当前直接执行阶段：
-> Queue 1：`R-G1-001`、`R-G1-002` 已 closed；当前下一项为 `R-G1-003`
+> Queue 1：`R-G1-001`、`R-G1-002`、`R-G1-003` 已 closed；当前下一项为 `R-G1-004`
 
 ## 1. 本文件的唯一权威地位
 
@@ -278,8 +278,9 @@ scope:
 | Change | Tasks | CLI 状态 | 大规划真实状态 |
 |---|---:|---|---|
 | `g1-provider-health-and-failure-visibility` | 19/19 | complete / active | review finding 未修，不 ready to archive |
-| `g1-field-qualification-canonical-promotion` | 22/22 | archived / integrated at `main@0d0b0f4` | R-G1-001/R-G1-002 closed；R-G1-003 仍未关闭 |
-| `g1-r-g1-002-source-plan-matrix-completeness` | 14/14 | complete / ready to archive | R-G1-002 closed after independent review；待 merge |
+| `g1-field-qualification-canonical-promotion` | 22/22 | archived / integrated at `main@1ff6678` | R-G1-001/R-G1-002 closed |
+| `g1-r-g1-002-source-plan-matrix-completeness` | 14/14 | archived / integrated at `main@1ff6678` | R-G1-002 closed after independent review |
+| `g1-r-g1-003-rejected-canonical-visibility` | 4/4 | archived / integrated at `main@98570a1` | R-G1-003 closed after independent re-review |
 | `g2-strong-single-agent-fallback` | 12/12 | complete / active | review findings 未修，不 ready to archive |
 | `g2-deep-investment-thesis` | 0/27 | in-progress | G2 umbrella，含 M4.5 |
 | `f3c-r1-crosstalk-root-cause` | 5/17 | in-progress | M0 前置未闭 |
@@ -333,7 +334,7 @@ PR #1: REQUEST CHANGES
 |---|---|---|---|---:|---|
 | `R-G1-001` | M1/M2 | `g1-field-qualification-canonical-promotion` | closed | 3 | 否 |
 | `R-G1-002` | M1/M2 | `g1-r-g1-002-source-plan-matrix-completeness` | closed | 1 | 否 |
-| `R-G1-003` | M2 | `g1-field-qualification-canonical-promotion` | identified | 0 | 是 |
+| `R-G1-003` | M2 | `g1-r-g1-003-rejected-canonical-visibility` | closed | 1 | 否 |
 | `R-G1-004` | M1/M2 | `g1-provider-health-and-failure-visibility` | identified | 0 | 是 |
 | `R-G2-001` | M0/M5 foundation | `g2-strong-single-agent-fallback` | identified | 0 | 是 |
 | `R-G2-002` | M0/M5 foundation | `g2-strong-single-agent-fallback` | identified | 0 | 是 |
@@ -483,8 +484,8 @@ result:
   （`akshare`、`typer`、`pandas` 未安装），不是本 child 测试 body failure。
 - 未调用真实 provider/LLM，未生成 live/cache/watchlist/debate/canonical
   runtime artifacts。
-- **Next state：** `R-G1-003`；本 child 已完成 independent review 并关闭
-  R-G1-002，carrier archive 后待 merge，且不代表 G1/G2 Capability passed。
+- **Next state：** `R-G1-003`；本 child 已完成 independent review、归档并以
+  `main@1ff6678` 集成，且不代表 G1/G2 Capability passed。
 
 ### R-G1-003：Rejected canonical visibility
 
@@ -509,6 +510,15 @@ previous_close source_failed
 - rejected → `not_qualified` + explicit null + sidecar；
 - mixed qualified/rejected integration test 通过；
 - reader 不需要额外猜测 `decision.json`。
+
+**Closure（2026-08-10）**
+
+- child `g1-r-g1-003-rejected-canonical-visibility` 已归档并以
+  `main@98570a1` 集成；
+- independent re-review 未发现新的 P0/P1/P2/P3；
+- focused `76 passed`、完整 pytest `699 passed`、OpenSpec strict `29 passed,
+  0 failed`、compileall 与 `git diff --check` 均通过；
+- 该 repair closure 不代表 G1/G2 Capability passed。
 
 ### R-G1-004：Production-path isolation
 
@@ -743,7 +753,7 @@ G1 repair 前进不等于 M0 closure。
 
 ### 缺口
 
-- R-G1-002 / R-G1-004；
+- R-G1-004；
 - 当前 code version 的 completed live qualification；
 - provider/field eligibility decision；
 - baseline/candidate field coverage；
@@ -766,8 +776,7 @@ M1: not passed
 
 ### 缺口
 
-- R-G1-003 / R-G1-004；
-- active child repair/re-review/archive；
+- R-G1-004；
 - 真实 qualified snapshot；
 - `g1-canonical-snapshot-consumer`；
 - `g1-staged-screening-runtime`；
@@ -951,10 +960,10 @@ fixture reproduction 为证据。该外部工具问题不登记为项目 Repair 
 
 ## 22. 当前唯一允许动作
 
-当前 Queue 1 入口为 `R-G1-003`。开始前仍需从最新 main 建单一独立 worktree，
+当前 Queue 1 入口为 `R-G1-004`。开始前仍需从最新 main 建单一独立 worktree，
 更新其 owner OpenSpec/rolling handoff，并以 RED→最小修复→focused/full tests→strict
-validation→independent re-review 的顺序执行。`R-G1-002` 已完成 independent review
-并关闭，active implementation carrier 已准备 archive。
+validation→independent re-review 的顺序执行。`R-G1-001`、`R-G1-002`、`R-G1-003`
+均已完成 independent review、归档并合入 main；当前没有 R-G1-003 active carrier。
 
 ## 23. 下一窗口启动方式
 
