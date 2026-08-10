@@ -3,7 +3,7 @@
 > 类型：Repair attempt rolling handoff
 > Repair ID：`R-G1-004`
 > Owner Change：`g1-provider-health-and-failure-visibility`
-> 状态：`closed`（independent review completed）
+> 状态：`independent_review`
 > 分支：`codex/r-g1-004-production-path-isolation-mainline`
 > Worktree：`.worktrees/r-g1-004-production-path-isolation-mainline`
 > 基线：`main@b6db756`
@@ -34,14 +34,15 @@ health/promotion path validator 以 repo root 拼接 `watchlist`/`debate`，但�
 ## Evidence
 
 - RED：共享模块缺失时 focused tests 在 collection 阶段失败；
-- focused related tests：`153 passed`；
-- full pytest：`715 passed in 54.93s`；
+- focused related tests：`157 passed`；
+- full pytest：`719 passed in 53.97s`；
 - strict OpenSpec：`28 passed, 0 failed`；
 - compileall、diff check：通过；
 - 目标 worktree runtime artifacts 已清理；主 worktree 三个指定未跟踪内容保持不变。
 
 ## Remaining state
 
-Independent review 已完成，P0/P1/P2 均为 0；R-G1-004 已 closed。TOCTOU 窗口仍为
-剩余风险，G2 fallback 仍由 R-G2-003 消费该 interface。Owner Change 不 archive、不
-push，该 repair 不代表 G1/G2 Capability passed。
+后续独立 CR 发现遗漏历史 `data/snapshots` 与 `snapshots` production roots；本次已
+补充 shared protected set 与回归测试，当前等待 fresh verification 和 review。R-G1-004
+暂不 closed。TOCTOU 窗口仍为剩余风险，G2 fallback 仍由 R-G2-003 消费该 interface。
+Owner Change 不 archive、不 push，该 repair 不代表 G1/G2 Capability passed。

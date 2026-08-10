@@ -146,6 +146,47 @@ def test_production_path_error_does_not_expose_absolute_paths():
     )
 
 
+@pytest.mark.parametrize(
+    "relative_root",
+    ["data/snapshots", "snapshots"],
+)
+def test_legacy_snapshot_roots_are_protected(relative_root):
+    protected = _repo_root() / "value-screener" / relative_root
+
+    with pytest.raises(ProductionPathViolation):
+        validate_g1_output_root(protected)
+    with pytest.raises(ProductionPathViolation):
+        validate_g1_output_root(protected / "run-001")
+    with pytest.raises(ProductionPathViolation):
+        validate_g1_output_root(protected.parent)
+
+
+@pytest.mark.parametrize(
+    "relative_root",
+    ["data/snapshots", "snapshots"],
+)
+def test_canonical_entrypoint_rejects_legacy_snapshot_roots(relative_root):
+    protected = _repo_root() / "value-screener" / relative_root
+    evidence = [
+        {
+            "ticker": "600519.SH",
+            "field": "last_price",
+            "value": 1.0,
+            "status": "available",
+            "eligibility": "production_eligible",
+        }
+    ]
+
+    with pytest.raises(ProductionPathViolation):
+        write_snapshot(
+            evidence,
+            tickers=["600519.SH"],
+            plan_version="test",
+            output_root=protected,
+            run_id="legacy-snapshot-rejected",
+        )
+
+
 def test_health_runner_rejects_before_provider_or_artifact_creation(tmp_path):
     invoke = Mock(return_value={"last_price": 1.0})
     protected = _repo_root() / "value-screener" / "watchlist"

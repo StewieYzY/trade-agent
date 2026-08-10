@@ -40,8 +40,8 @@ existing behavior.
 ## Verification
 
 - R-G1-004 + related provider health/qualification/promotion/canonical/batch and prior
-  G1 repair tests: `153 passed`;
-- repository-wide pytest: `715 passed in 54.93s`;
+  G1 repair tests: `157 passed`;
+- repository-wide pytest: `719 passed in 53.97s`;
 - `value-screener/.venv/bin/python -m compileall -q value-screener`: passed using the
   main project venv because the linked worktree has no separate `.venv`;
 - `openspec validate --all --strict`: `28 passed, 0 failed`;
@@ -50,9 +50,11 @@ existing behavior.
   inspected and removed; the main worktree's three protected untracked assets were not
   touched.
 
-Independent read-only re-review found no P0/P1/P2 findings after the symlink-loop,
-absolute-path, and relative-target-parent-component fixes. Residual risk is the normal
-post-validation TOCTOU window; G2 fallback consumption remains R-G2-003 scope.
+The subsequent independent CR found one P1: the historical `data/snapshots` and
+`snapshots` roots were omitted from the shared protected set. This follow-up adds both
+roots and regression tests. R-G1-004 remains in `independent_review` pending fresh
+review. The normal post-validation TOCTOU window remains a residual risk; G2 fallback
+consumption remains R-G2-003 scope.
 
-No real provider or LLM was called. No G1/G2 Capability was passed. R-G1-004 is closed
-after independent review, while the owner Change remains active and is not archived.
+No real provider or LLM was called. No G1/G2 Capability was passed. The owner Change
+remains active and is not archived.
