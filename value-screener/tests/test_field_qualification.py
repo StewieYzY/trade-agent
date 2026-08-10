@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 import sys
 from datetime import datetime, timezone
@@ -91,20 +92,84 @@ def _write_source_run(
     source = tmp_path / "qualification" / "source-run"
     source.mkdir(parents=True)
     count = len(evidence) if evidence_count is None else evidence_count
-    (source / "manifest.json").write_text(
-        json.dumps(
+    cases_by_identity: dict[tuple[str, str], dict] = {}
+    for item in evidence:
+        key = (item["ticker"], item["method"])
+        case = cases_by_identity.setdefault(
+            key,
             {
-                "run_id": "source-run",
-                "plan_version": "test-plan-v1",
-                "completion_status": completion_status,
-                "evidence_count": count,
-                "field_status_counts": {"available": len(evidence)},
-            }
-        ),
+                "ticker": item["ticker"],
+                "market": item.get("market"),
+                "security_type": item.get("security_type"),
+                "method": item["method"],
+                "fields": [],
+            },
+        )
+        if item["field"] not in case["fields"]:
+            case["fields"].append(item["field"])
+    cases = list(cases_by_identity.values())
+    plan = {
+        "run_id": "source-run",
+        "version": "test-plan-v1",
+        "plan_hash": hashlib.sha256(
+            json.dumps(
+                {"version": "test-plan-v1", "cases": cases},
+                ensure_ascii=False,
+                sort_keys=True,
+            ).encode("utf-8")
+        ).hexdigest(),
+        "cases": cases,
+    }
+    (source / "manifest.json").write_text(
+        json.dumps({}, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
+    (source / "plan.json").write_text(
+        json.dumps(plan, ensure_ascii=False, indent=2, sort_keys=True),
         encoding="utf-8",
     )
     (source / "evidence.json").write_text(
-        json.dumps({"run_id": "source-run", "evidence": evidence}),
+        json.dumps(
+            {"run_id": "source-run", "evidence": evidence},
+            ensure_ascii=False,
+            indent=2,
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
+    manifest = {
+        "run_id": "source-run",
+        "plan_version": "test-plan-v1",
+        "plan_hash": plan["plan_hash"],
+        "ticker_set_hash": hashlib.sha256(
+            json.dumps(
+                sorted({item["ticker"] for item in evidence}),
+                ensure_ascii=False,
+                sort_keys=True,
+            ).encode("utf-8")
+        ).hexdigest(),
+        "completion_status": completion_status,
+        "evidence_count": count,
+        "field_status_counts": {"available": len(evidence)},
+        "artifact_status": {"plan": "written", "evidence": "written"},
+        "artifacts": {"plan": "plan.json", "evidence": "evidence.json"},
+    }
+    manifest["artifact_hashes"] = {
+        "plan": hashlib.sha256((source / "plan.json").read_bytes()).hexdigest(),
+        "evidence": hashlib.sha256((source / "evidence.json").read_bytes()).hexdigest(),
+    }
+    manifest_for_hash = copy.deepcopy(manifest)
+    manifest_for_hash.pop("artifact_hashes")
+    manifest["manifest_hash"] = hashlib.sha256(
+        json.dumps(
+            manifest_for_hash,
+            ensure_ascii=False,
+            sort_keys=True,
+            default=str,
+        ).encode("utf-8")
+    ).hexdigest()
+    (source / "manifest.json").write_text(
+        json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True),
         encoding="utf-8",
     )
     return source

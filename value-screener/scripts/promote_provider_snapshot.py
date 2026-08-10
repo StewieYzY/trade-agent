@@ -13,6 +13,7 @@ from data.lib.field_qualification import (
     FieldQualificationPolicy,
     evaluate_qualification_run,
 )
+from scripts.provider_qualification import PROBE_PLAN_VERSION
 
 PROTECTED_RELATIVE_PATHS = (
     ("data", "cache"),
@@ -167,6 +168,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--freshness-seconds", type=_positive_or_zero_int)
     parser.add_argument("--policy-version", default="g1-field-qualification-policy-v1")
+    parser.add_argument(
+        "--probe-plan-version",
+        default=PROBE_PLAN_VERSION,
+        choices=(PROBE_PLAN_VERSION,),
+        help="Frozen provider qualification probe plan version.",
+    )
     return parser
 
 
@@ -184,6 +191,7 @@ def main(argv: list[str] | None = None) -> None:
         methods=methods,
         allowed_providers=args.provider,
         freshness_seconds=args.freshness_seconds,
+        probe_plan_version=args.probe_plan_version,
     )
     result = promote_provider_snapshot(
         args.source_dir,
