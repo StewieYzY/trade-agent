@@ -17,17 +17,19 @@
 > 架构决策：`design/architecture-decisions.md`
 >
 > runtime/integration baseline：
-> `b6db756 docs(g1): sync R-G1-003 handoff closure`
+> `2777e7e feat(g1): add canonical snapshot consumer`
 >
 > 当前 main/docs baseline：
-> `b6db756 docs(g1): sync R-G1-003 handoff closure`
+> `2777e7e feat(g1): add canonical snapshot consumer`
 >
 > 当前 GitHub 审查入口：
 > `PR #1 codex/mainline-sync-2026-08-05 → main`
 >
 > 当前直接执行阶段：
 > Queue 1 repair closure complete：`R-G1-001`、`R-G1-002`、`R-G1-003`、
-> `R-G1-004` 已 closed；下一阶段为 Track A `g1-canonical-snapshot-consumer`
+> `R-G1-004` 已 closed；`g1-canonical-snapshot-consumer` 已 archived /
+> integrated at `main@2777e7e`，consumer capability child = closed；
+> 下一阶段为 Track A `g1-staged-screening-runtime`
 
 ## 1. 本文件的唯一权威地位
 
@@ -287,6 +289,7 @@ scope:
 | `f3c-r1-crosstalk-root-cause` | 5/17 | in-progress | M0 前置未闭 |
 | `g1-4-data-source-resilience` | 0/48 | in-progress | P2 已映射到既有 D1/D6 |
 | `g1-fast-personal-value-screening` | 6/16 | in-progress | G1 umbrella 未通过 |
+| `g1-canonical-snapshot-consumer` | 10/10 | archived / integrated at `main@2777e7e` | consumer capability child closed |
 | `g3-holding-discipline` | 0/29 | in-progress | design 可继续，runtime 锁定 |
 
 任务勾选只表示旧 tasks 已完成。独立 review 发现合同缺口后，必须先更新原 active
@@ -336,7 +339,7 @@ PR #1: REQUEST CHANGES
 | `R-G1-001` | M1/M2 | `g1-field-qualification-canonical-promotion` | closed | 3 | 否 |
 | `R-G1-002` | M1/M2 | `g1-r-g1-002-source-plan-matrix-completeness` | closed | 1 | 否 |
 | `R-G1-003` | M2 | `g1-r-g1-003-rejected-canonical-visibility` | closed | 1 | 否 |
-| `R-G1-004` | M1/M2 | `g1-provider-health-and-failure-visibility` | closed | 1 | 是 |
+| `R-G1-004` | M1/M2 | `g1-provider-health-and-failure-visibility` | closed | 1 | 否 |
 | `R-G2-001` | M0/M5 foundation | `g2-strong-single-agent-fallback` | identified | 0 | 是 |
 | `R-G2-002` | M0/M5 foundation | `g2-strong-single-agent-fallback` | identified | 0 | 是 |
 | `R-G2-003` | M0/M5 foundation | `g2-strong-single-agent-fallback` | identified | 0 | 是 |
@@ -729,8 +732,8 @@ PR Ready / merge 仍不表示 G1 或 G2 Capability passed。
 | Milestone | 当前状态 | Repair / 缺口 | 放行 |
 |---|---|---|---|
 | M0 G2 前置可信基础 | partial | f3c 5/17；R-G2-001/002/003 | 否 |
-| M1 Provider Qualification | engineering partial | R-G1-001/002/004；当前 completed live run 缺失 | 否 |
-| M2 Canonical Runtime | engineering partial | R-G1-003/004；consumer/staged runtime 缺失 | 否 |
+| M1 Provider Qualification | engineering partial | 当前 code version 的 completed live run、provider/field eligibility decision、baseline/candidate field coverage 缺失 | 否 |
+| M2 Canonical Runtime | engineering partial | 真实 qualified snapshot；`g1-staged-screening-runtime`；Stage A/B/C ticker set 和 provider call 单调下降 evidence | 否 |
 | M3 G1 Capability Gate | not started | 300+、全市场、成本/性能、Top 20 | 否 |
 | M4 G2 Dossier Quality | planned | source-aware dossier、单位/报告期/状态 | 否 |
 | M4.5 Growth Diagnostic V0 | planned | contract、engine、dossier integration | 否 |
@@ -795,7 +798,6 @@ M1: not passed
 ### 缺口
 
 - 真实 qualified snapshot；
-- `g1-canonical-snapshot-consumer`；
 - `g1-staged-screening-runtime`；
 - Stage A/B/C ticker set 和 provider call 单调下降 evidence。
 
@@ -979,8 +981,9 @@ fixture reproduction 为证据。该外部工具问题不登记为项目 Repair 
 
 Queue 1 repair closure 已完成：`R-G1-001`、`R-G1-002`、`R-G1-003`、
 `R-G1-004` 均已完成 independent review、归档并合入 `main@f1ea010`。
-下一步按 Track A 进入 `g1-canonical-snapshot-consumer` 的只读 preflight/规划；
-该 Change 尚未开始，不在本次 docs-only sync 中实现。
+`g1-canonical-snapshot-consumer` 已完成 independent review、归档并合入
+`main@2777e7e`，consumer capability child = closed。
+下一步按 Track A 进入 `g1-staged-screening-runtime`。
 
 ## 23. 下一窗口启动方式
 
