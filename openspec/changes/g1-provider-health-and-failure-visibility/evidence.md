@@ -51,10 +51,11 @@ existing behavior.
   touched.
 
 The subsequent independent CR found one P1: the historical `data/snapshots` and
-`snapshots` roots were omitted from the shared protected set. This follow-up adds both
-roots and regression tests. R-G1-004 remains in `independent_review` pending fresh
-review. The normal post-validation TOCTOU window remains a residual risk; G2 fallback
+`snapshots` roots were omitted from the shared protected set. This follow-up added both
+roots and regression tests. The fresh independent re-CR found no P0/P1/P2/P3 findings.
+The normal post-validation TOCTOU window remains a residual risk; G2 fallback
 consumption remains R-G2-003 scope.
 
-No real provider or LLM was called. No G1/G2 Capability was passed. The owner Change
-remains active and is not archived.
+No real provider or LLM was called. No G1/G2 Capability was passed.
+R-G1-004 is closed after fresh independent re-CR. The owner Change is now ready for
+archive.

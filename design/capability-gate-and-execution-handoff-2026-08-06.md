@@ -335,7 +335,7 @@ PR #1: REQUEST CHANGES
 | `R-G1-001` | M1/M2 | `g1-field-qualification-canonical-promotion` | closed | 3 | 否 |
 | `R-G1-002` | M1/M2 | `g1-r-g1-002-source-plan-matrix-completeness` | closed | 1 | 否 |
 | `R-G1-003` | M2 | `g1-r-g1-003-rejected-canonical-visibility` | closed | 1 | 否 |
-| `R-G1-004` | M1/M2 | `g1-provider-health-and-failure-visibility` | independent_review | 1 | 是 |
+| `R-G1-004` | M1/M2 | `g1-provider-health-and-failure-visibility` | closed | 1 | 是 |
 | `R-G2-001` | M0/M5 foundation | `g2-strong-single-agent-fallback` | identified | 0 | 是 |
 | `R-G2-002` | M0/M5 foundation | `g2-strong-single-agent-fallback` | identified | 0 | 是 |
 | `R-G2-003` | M0/M5 foundation | `g2-strong-single-agent-fallback` | identified | 0 | 是 |
@@ -556,8 +556,9 @@ promotion accepts value-screener/watchlist
   四个 G1 entrypoint fail-closed，以及拒绝时不调用 provider/evaluation、不创建 artifact；
 - 后续独立 CR 发现遗漏历史 `data/snapshots` 与 `snapshots` production roots；已补充
   shared protected set 与回归测试；
-- 当前状态回到 `independent_review`，owner Change 未 archive；本 repair 不代表
-  G1/G2 Capability passed。待 fresh verification 和 review 后再决定关闭。
+- fresh independent re-CR：P0/P1/P2/P3 均为 0；
+- 当前状态为 `closed`，owner Change 可 archive；本 repair 不代表 G1/G2 Capability
+  passed。
 
 `R-G1-004` 只负责 G1 entrypoints，并产出稳定的 shared validator interface。
 G2 fallback 是否正确采用该 interface 由 `R-G2-003` 单独验收。

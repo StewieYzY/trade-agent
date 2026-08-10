@@ -3,7 +3,7 @@
 > 类型：Repair attempt rolling handoff
 > Repair ID：`R-G1-004`
 > Owner Change：`g1-provider-health-and-failure-visibility`
-> 状态：`independent_review`
+> 状态：`closed`（fresh independent re-CR completed）
 > 分支：`codex/r-g1-004-production-path-isolation-mainline`
 > Worktree：`.worktrees/r-g1-004-production-path-isolation-mainline`
 > 基线：`main@b6db756`
@@ -43,6 +43,6 @@ health/promotion path validator 以 repo root 拼接 `watchlist`/`debate`，但�
 ## Remaining state
 
 后续独立 CR 发现遗漏历史 `data/snapshots` 与 `snapshots` production roots；本次已
-补充 shared protected set 与回归测试，当前等待 fresh verification 和 review。R-G1-004
-暂不 closed。TOCTOU 窗口仍为剩余风险，G2 fallback 仍由 R-G2-003 消费该 interface。
-Owner Change 不 archive、不 push，该 repair 不代表 G1/G2 Capability passed。
+补充 shared protected set 与回归测试；fresh independent re-CR 为 P0/P1/P2/P3 均为 0。
+R-G1-004 已 closed。TOCTOU 窗口仍为剩余风险，G2 fallback 仍由 R-G2-003 消费该
+interface。Owner Change 尚未 archive，该 repair 不代表 G1/G2 Capability passed。
