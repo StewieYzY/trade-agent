@@ -306,7 +306,7 @@ def test_redaction_covers_assignment_style_credentials(message):
 
 
 def test_production_output_roots_are_rejected(tmp_path):
-    production_root = Path(__file__).resolve().parents[2] / "watchlist"
+    production_root = Path(__file__).resolve().parents[1] / "watchlist"
     runner = QualificationRunner(
         adapters=[
             ProviderAdapter(
@@ -324,7 +324,7 @@ def test_production_output_roots_are_rejected(tmp_path):
 
 
 def test_run_id_cannot_resolve_to_production_output_root(monkeypatch):
-    repo_root = Path(__file__).resolve().parents[2]
+    repo_root = Path(__file__).resolve().parents[1]
     protected_run_dir = repo_root / "watchlist"
     original_mkdir = Path.mkdir
 

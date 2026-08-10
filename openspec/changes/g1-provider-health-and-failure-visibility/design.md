@@ -78,6 +78,22 @@ responses continue to use the existing bounded serialization and redaction rules
 Parent-side timeout/termination paths create only metadata events; they never copy
 untrusted child exceptions into unsanitized manifest fields.
 
+### D6. Share one resolved production-path validator across G1 entrypoints
+
+The G1 path boundary SHALL live in a standard-library-only shared module under
+`value-screener/data/lib`. It SHALL resolve the real `value-screener` runtime roots for
+cache, watchlist, debate, ranking, canonical snapshot, and growth diagnostic outputs.
+Validation SHALL compare both absolute lexical paths and `realpath` paths, rejecting an
+exact protected root, any descendant, any ancestor that could contain a protected root,
+and any symlink path that resolves into one of those relationships.
+
+The validator SHALL return the resolved caller-owned root when it is outside the protected
+set, and SHALL raise one stable `ProductionPathViolation` with a non-sensitive message
+before creating a run directory, invoking a provider, evaluating a qualification run, or
+writing a snapshot. G1 health, qualification/promotion, batch, and canonical entrypoints
+SHALL reuse this interface. G2 fallback consumption remains the separate `R-G2-003`
+scope.
+
 ## Risks / Trade-offs
 
 - [Risk] Process startup makes live probes slower → Mitigation: default serial mode is

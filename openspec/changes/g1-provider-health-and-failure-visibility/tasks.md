@@ -31,3 +31,12 @@
 - [x] 5.2 Run full pytest with the project venv, compileall, diff check, and strict OpenSpec validation.
 - [x] 5.3 Execute one bounded real baseline probe using the approved project venv and inspect completed/partial artifacts.
 - [x] 5.4 Record runtime result, timeout behavior, remaining field-level qualification status, and next handoff without claiming G1 pass.
+
+## 6. R-G1-004 repair: production-path isolation
+
+- [x] 6.1 Record the R-G1-004 root cause, scope boundary, shared validator interface, and protected G1 production roots in the active proposal/design/spec.
+- [x] 6.2 Add RED tests for exact root, descendant, ancestor, symlink escape, external run-scoped acceptance, four G1 entrypoint reuse, and fail-closed side effects.
+- [x] 6.3 Implement the minimal shared resolved-path validator and integrate it into the health runner, qualification/promotion, batch adapter, and canonical snapshot writer.
+- [x] 6.4 Run focused R-G1-004 and related provider health, qualification, promotion, canonical, batch, and prior G1 repair tests.
+- [x] 6.5 Run repository-wide pytest, compileall, strict OpenSpec validation, and diff check; inspect and clean target-worktree runtime artifacts.
+- [x] 6.6 Perform an independent read-only review of the diff, tests, OpenSpec contract, and path-side-effect semantics; leave R-G1-004 unclosed until review is complete.

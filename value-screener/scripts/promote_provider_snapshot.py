@@ -13,22 +13,8 @@ from data.lib.field_qualification import (
     FieldQualificationPolicy,
     evaluate_qualification_run,
 )
+from data.lib.production_paths import validate_g1_output_root
 from scripts.provider_qualification import PROBE_PLAN_VERSION
-
-PROTECTED_RELATIVE_PATHS = (
-    ("data", "cache"),
-    ("data", "canonical_snapshots"),
-    ("data", "canonical-snapshots"),
-    ("data", "snapshots"),
-    ("watchlist",),
-    ("debate",),
-    ("ranking",),
-    ("rankings",),
-    ("canonical_snapshots",),
-    ("canonical-snapshots",),
-    ("snapshots",),
-)
-
 
 def _safe_run_id(run_id: str | None) -> str:
     value = run_id or datetime.now(timezone.utc).strftime("promotion-%Y%m%dT%H%M%SZ")
@@ -54,18 +40,7 @@ def _write_json(path: Path, payload: Any) -> None:
 
 
 def _validate_output_root(output_root: Path, source_dir: Path) -> None:
-    repo_root = Path(__file__).resolve().parents[2]
-    protected_roots = [
-        repo_root.joinpath(*relative_path)
-        for relative_path in PROTECTED_RELATIVE_PATHS
-    ]
-    protected_roots.append(repo_root / "value-screener" / "data" / "cache")
-    for protected_root in protected_roots:
-        try:
-            output_root.relative_to(protected_root.resolve())
-        except ValueError:
-            continue
-        raise ValueError(f"protected production output root: {output_root}")
+    validate_g1_output_root(output_root)
     try:
         output_root.relative_to(source_dir)
     except ValueError:
@@ -83,7 +58,7 @@ def promote_provider_snapshot(
 ) -> dict[str, Any]:
     safe_id = _safe_run_id(run_id)
     source = Path(source_dir).resolve()
-    root = Path(output_root).resolve()
+    root = validate_g1_output_root(output_root)
     _validate_output_root(root, source)
     root.mkdir(parents=True, exist_ok=True)
     run_dir = (root / safe_id).resolve()

@@ -78,3 +78,27 @@ snapshots, debate outputs, watchlist outputs, or growth diagnostic inputs.
 - **WHEN** a candidate LongPort or Longbridge adapter is used in shadow/qualification mode
 - **THEN** its evidence SHALL remain outside production data paths and its eligibility
   SHALL remain non-qualified until a later explicit decision
+
+### Requirement: G1 entrypoints share resolved production-path isolation
+
+The G1 health runner, qualification/promotion entrypoint, batch adapter, and canonical snapshot writer MUST reuse one shared resolved-path validator.
+The validator SHALL cover
+the actual `value-screener/data/cache`, `watchlist`, `debate`, ranking, canonical
+snapshot, and growth diagnostic production roots.
+
+#### Scenario: Protected path relationship is supplied
+- **WHEN** a caller supplies an exact protected root, a descendant, an ancestor, or a
+  path whose `realpath` resolves to one of those relationships
+- **THEN** the validator SHALL raise the stable `ProductionPathViolation` before any
+  provider, qualification evaluation, LLM, run-directory, or artifact side effect
+
+#### Scenario: External run-scoped root is supplied
+- **WHEN** a caller supplies a run-scoped output root outside all resolved production
+  roots
+- **THEN** the validator SHALL return its resolved path and the G1 entrypoint MAY write
+  only beneath that caller-owned root
+
+#### Scenario: G1 entrypoint is rejected
+- **WHEN** health, qualification/promotion, batch, or canonical output validation fails
+- **THEN** no provider/evaluation call SHALL occur and no cache, watchlist, debate,
+  ranking, canonical, or diagnostic artifact SHALL be created

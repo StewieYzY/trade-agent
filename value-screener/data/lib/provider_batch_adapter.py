@@ -12,6 +12,7 @@ from typing import Any, Callable, Iterable, Mapping
 
 from .canonical_snapshot import build_snapshot, write_snapshot
 from .identity import canonical_ticker
+from .production_paths import validate_g1_output_root
 from .provenance import ELIGIBILITIES, STATUSES, redact_sensitive_text
 
 
@@ -164,6 +165,11 @@ class BatchAdapter:
         if not requested_fields:
             raise ValueError("field set must not be empty")
 
+        validated_output_root = (
+            validate_g1_output_root(output_root)
+            if output_root is not None
+            else None
+        )
         evidence: list[dict[str, Any]] = []
         stats: dict[str, int] = {}
         provider_summaries: list[dict[str, Any]] = []
@@ -378,7 +384,7 @@ class BatchAdapter:
                     evidence,
                     tickers=canonical_tickers,
                     plan_version=plan_version,
-                    output_root=output_root,
+                    output_root=validated_output_root,
                     run_id=safe_id,
                     freshness_seconds=freshness_seconds,
                     freshness_as_of=(

@@ -15,6 +15,9 @@ non-auditable.
   times out, or is interrupted.
 - Preserve existing field statuses and add non-sensitive failure metadata such as
   `failure_class`, `terminated`, `elapsed_seconds`, and `stop_reason`.
+- Add a shared resolved-path validator for G1 production roots. Health,
+  qualification/promotion, batch, and canonical entrypoints must reject protected roots,
+  descendants, ancestors, and symlink escapes before provider/evaluation/artifact work.
 - Keep retry policy, provider eligibility, canonical promotion, ranking, cache, and
   LongPort/Longbridge production integration out of scope.
 
@@ -32,7 +35,10 @@ non-auditable.
 
 ## Impact
 
-- Affects `value-screener/scripts/provider_qualification.py` and its qualification tests.
+- Affects `value-screener/scripts/provider_qualification.py`,
+  `value-screener/scripts/promote_provider_snapshot.py`,
+  `value-screener/data/lib/provider_batch_adapter.py`,
+  `value-screener/data/lib/canonical_snapshot.py`, and their boundary tests.
 - Adds run-scoped event/partial-manifest artifacts under the caller-provided qualification
   output root.
 - Uses only Python standard-library process, timing, and JSON facilities; no new dependency.

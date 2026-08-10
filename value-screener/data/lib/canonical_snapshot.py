@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping
 
 from .identity import canonical_ticker
+from .production_paths import validate_g1_output_root
 from .provenance import detect_conflicts, validate_field_evidence
 
 
@@ -216,7 +217,7 @@ def write_snapshot(
         freshness_seconds=freshness_seconds,
         freshness_as_of=freshness_as_of,
     )
-    root = Path(output_root).resolve()
+    root = validate_g1_output_root(output_root)
     run_dir = (root / snapshot["run_id"]).resolve()
     try:
         run_dir.relative_to(root)

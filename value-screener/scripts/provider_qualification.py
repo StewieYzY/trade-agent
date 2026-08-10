@@ -32,6 +32,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping
 
+from data.lib.production_paths import validate_g1_output_root
+
 PROBE_PLAN_VERSION = "a-share-provider-qualification-v1"
 RAW_MAX_BYTES = 200_000
 EXECUTION_MODES = {"direct", "isolated"}
@@ -39,19 +41,6 @@ STOP_POLICIES = {"continue", "stop_on_timeout"}
 DEFAULT_CASE_TIMEOUT_SECONDS = 60.0
 DEFAULT_ADAPTER_LOAD_TIMEOUT_SECONDS = 5.0
 TERMINATION_GRACE_SECONDS = 0.2
-PROTECTED_OUTPUT_RELATIVE_PATHS = (
-    ("data", "cache"),
-    ("data", "canonical_snapshots"),
-    ("data", "canonical-snapshots"),
-    ("data", "snapshots"),
-    ("watchlist",),
-    ("debate",),
-    ("ranking",),
-    ("rankings",),
-    ("canonical_snapshots",),
-    ("canonical-snapshots",),
-    ("snapshots",),
-)
 RUNTIME_CODE_ROOTS = (
     "value-screener/scripts",
     "value-screener/data",
@@ -239,20 +228,7 @@ def _safe_run_id(run_id: str | None) -> str:
 
 
 def _validate_output_root(root: Path) -> None:
-    repo_root = Path(__file__).resolve().parents[2]
-    protected_roots = [
-        repo_root.joinpath(*relative_path)
-        for relative_path in PROTECTED_OUTPUT_RELATIVE_PATHS
-    ]
-    protected_roots.append(repo_root / "value-screener" / "data" / "cache")
-    for protected_root in protected_roots:
-        try:
-            root.relative_to(protected_root.resolve())
-        except ValueError:
-            continue
-        raise ValueError(
-            f"production output root is not allowed: {root}"
-        )
+    validate_g1_output_root(root)
 
 
 def _redact_text(message: str) -> str:
@@ -1076,16 +1052,14 @@ class QualificationRunner:
         run_id: str | None = None,
     ) -> dict[str, Any]:
         safe_id = _safe_run_id(run_id)
+        root = validate_g1_output_root(output_root)
         if not self.adapters and not self.adapter_module:
             raise ValueError("at least one provider adapter must be configured")
-        root = Path(output_root).resolve()
-        _validate_output_root(root)
         run_dir = (root / safe_id).resolve()
         try:
             run_dir.relative_to(root)
         except ValueError as exc:
             raise ValueError("run_id escapes output_root") from exc
-        _validate_output_root(run_dir)
         run_dir.mkdir(parents=True, exist_ok=False)
 
         plan = [case.to_dict() for case in self.cases]
