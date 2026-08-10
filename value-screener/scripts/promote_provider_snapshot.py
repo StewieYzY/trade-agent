@@ -102,7 +102,8 @@ def promote_provider_snapshot(
     decision["promotion_run_id"] = safe_id
     decision["output_root"] = str(root)
 
-    if decision["status"] != "qualified":
+    evaluated_evidence = decision.get("evaluated_evidence", [])
+    if not evaluated_evidence:
         run_dir.mkdir(parents=True)
         _write_json(run_dir / "decision.json", decision)
         return {
@@ -114,7 +115,7 @@ def promote_provider_snapshot(
         }
 
     snapshot_dir = write_snapshot(
-        decision["promoted_evidence"],
+        evaluated_evidence,
         tickers=policy.required_tickers,
         plan_version=policy.version,
         output_root=root,

@@ -359,6 +359,7 @@ def _blocked_decision(
         "evaluated_at": None,
         "decisions": [],
         "promoted_evidence": [],
+        "evaluated_evidence": [],
         "unexpected_evidence": [],
     }
 
@@ -412,6 +413,7 @@ def evaluate_qualification_run(
 
     decisions: list[dict[str, Any]] = []
     promoted: list[dict[str, Any]] = []
+    evaluated_evidence: list[dict[str, Any]] = []
     provider_keys = {
         (str(item.get("provider_family")), str(item.get("provider")))
         for item in run.evidence
@@ -490,10 +492,22 @@ def evaluate_qualification_run(
         )
         decisions.append(record)
         if record["decision"] == "qualified":
-            for item in validated:
-                promoted_item = copy.deepcopy(item)
-                promoted_item["eligibility"] = "production_eligible"
-                promoted.append(promoted_item)
+            promoted_items = copy.deepcopy(validated)
+            for item in promoted_items:
+                item["eligibility"] = "production_eligible"
+            promoted.extend(promoted_items)
+            evaluated_evidence.extend(copy.deepcopy(promoted_items))
+        else:
+            rejected_items = copy.deepcopy(validated)
+            for item in rejected_items:
+                item["eligibility"] = "not_qualified"
+                item["qualification_reason_codes"] = record["reason_codes"]
+                if not item.get("reason"):
+                    item["reason"] = (
+                        "qualification rejected: "
+                        + ", ".join(record["reason_codes"])
+                    )
+            evaluated_evidence.extend(rejected_items)
 
     for provider_family, provider in sorted(provider_keys):
         if (provider_family, provider) in complete_providers:
@@ -533,6 +547,7 @@ def evaluate_qualification_run(
         "evaluated_at": evaluated,
         "decisions": decisions,
         "promoted_evidence": promoted,
+        "evaluated_evidence": evaluated_evidence,
         "unexpected_evidence": unexpected,
     }
     decision["status_summary"] = {

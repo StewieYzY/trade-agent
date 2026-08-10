@@ -356,7 +356,7 @@ def test_promotion_writes_decision_and_canonical_snapshot_without_mutating_sourc
     } == source_before
 
 
-def test_blocked_promotion_writes_decision_but_no_canonical_records(tmp_path):
+def test_blocked_promotion_writes_rejected_canonical_snapshot(tmp_path):
     source = _write_source_run(tmp_path / "source", [_evidence("600519.SH")])
 
     result = promote_provider_snapshot(
@@ -370,7 +370,9 @@ def test_blocked_promotion_writes_decision_but_no_canonical_records(tmp_path):
     run_dir = tmp_path / "promotions" / "blocked-promotion"
     assert result["status"] == "blocked"
     assert (run_dir / "decision.json").exists()
-    assert not (run_dir / "records.json").exists()
+    assert json.loads((run_dir / "records.json").read_text())["600519.SH"][
+        "last_price"
+    ] is None
 
 
 def test_promotion_rejects_duplicate_run_and_protected_output_root(tmp_path):
