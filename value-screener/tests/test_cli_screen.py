@@ -72,6 +72,75 @@ def test_cli_screen_payload_carries_run_identity():
         assert l1_data.get("input_ticker_set_hash"), "SHALL 含 input_ticker_set_hash"
 
 
+def test_cli_screen_staged_flag_uses_staged_runtime():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tickers_path = Path(tmpdir) / "tickers.txt"
+        tickers_path.write_text("600519\n", encoding="utf-8")
+        output_path = Path(tmpdir) / "staged.json"
+
+        class FakeResult:
+            def to_dict(self):
+                return {
+                    "run_id": "staged-run",
+                    "input_ticker_set_hash": "hash",
+                    "stages": {},
+                    "ticker_evidence": {},
+                    "candidates": [],
+                }
+
+        with patch("data.lib.batch_fetcher.BatchFetcher") as fetcher_cls, \
+             patch("screener.staged_runtime.run_staged_screening", return_value=FakeResult()) as run:
+            result = runner.invoke(app, [
+                "screen",
+                "--tickers",
+                str(tickers_path),
+                "--output",
+                str(output_path),
+                "--staged",
+            ])
+
+        assert result.exit_code == 0, result.stdout
+        run.assert_called_once()
+        assert run.call_args.kwargs["fetcher"] is fetcher_cls.return_value
+        assert json.loads(output_path.read_text(encoding="utf-8"))["run_id"] == "staged-run"
+
+
+def test_cli_screen_staged_debug_uses_stage_counts():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tickers_path = Path(tmpdir) / "tickers.txt"
+        tickers_path.write_text("600519\n", encoding="utf-8")
+
+        class FakeResult:
+            def to_dict(self):
+                return {
+                    "run_id": "staged-debug",
+                    "input_ticker_set_hash": "hash",
+                    "stages": {
+                        "A": {"input_tickers": ["600519"], "output_tickers": ["600519"]},
+                        "B": {"input_tickers": ["600519"], "output_tickers": ["600519"]},
+                        "C": {"input_tickers": ["600519"], "output_tickers": []},
+                    },
+                    "ticker_evidence": {},
+                    "candidates": [],
+                }
+
+        with patch("data.lib.batch_fetcher.BatchFetcher"), \
+             patch("screener.staged_runtime.run_staged_screening", return_value=FakeResult()):
+            result = runner.invoke(app, [
+                "screen",
+                "--tickers",
+                str(tickers_path),
+                "--staged",
+                "--debug",
+            ])
+
+        assert result.exit_code == 0, result.stdout
+        assert "总数: 1" in result.stdout
+        assert "通过 Hard Gates: 1" in result.stdout
+        assert "通过 Factor Scores (top 300): 1" in result.stdout
+        assert "通过 Heat Filter: 0" in result.stdout
+
+
 def test_cli_screen_output_run_scoped_same_day_not_overwrite():
     """g1-canonical-run-identity: 同日多次 screen 运行 SHALL 不互相覆盖（run-scoped 命名）.
 

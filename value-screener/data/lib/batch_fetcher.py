@@ -41,6 +41,42 @@ _DIM_FETCHERS: dict[str, type] = {
 }
 
 
+class FetchTelemetry:
+    """Optional per-run fetch boundary telemetry."""
+
+    def __init__(self) -> None:
+        self.requests: list[dict] = []
+        self.provider_calls: list[dict] = []
+        self.cache_hits: list[dict] = []
+        self.failures: list[dict] = []
+
+    def record_request(self, tickers: list[str], dimensions: tuple[str, ...]) -> None:
+        self.requests.append({"tickers": list(tickers), "dimensions": tuple(dimensions)})
+
+    def record_provider_call(self, ticker: str, dimension: str) -> None:
+        self.provider_calls.append({"ticker": ticker, "dimension": dimension})
+
+    def record_cache_hit(self, ticker: str, dimension: str) -> None:
+        self.cache_hits.append({"ticker": ticker, "dimension": dimension})
+
+    def record_failure(
+        self,
+        ticker: str,
+        dimension: str,
+        *,
+        status: str,
+        reason: str,
+    ) -> None:
+        self.failures.append(
+            {
+                "ticker": ticker,
+                "dimension": dimension,
+                "status": status,
+                "reason": reason,
+            }
+        )
+
+
 class BatchFetcher:
     """批量采集 wrapper，封装并发控制."""
 
@@ -53,6 +89,7 @@ class BatchFetcher:
         tickers: list[str],
         dimensions: list[str] | None = None,
         dim_max_workers: dict[str, int] | None = None,
+        telemetry: FetchTelemetry | None = None,
     ) -> dict[str, dict]:
         """对每只股票并行采集所有维度（同步接口）.
 
@@ -73,28 +110,50 @@ class BatchFetcher:
             fetcher = fetcher_cls()
             fetcher.cache = self.cache  # 注入缓存，供跨维度读取（risk goodwill 读 financials）
             workers = min(self.max_workers, dim_workers.get(dim, self.max_workers))
+            if telemetry is not None:
+                telemetry.record_request(list(tickers), (dim,))
             # financials 维度单独限流（分页接口，反爬压力大）
             with ThreadPoolExecutor(max_workers=workers) as pool:
-                futures = {pool.submit(self._fetch_one, fetcher, t, dim): t for t in tickers}
+                futures = {
+                    pool.submit(self._fetch_one, fetcher, t, dim, telemetry): t
+                    for t in tickers
+                }
                 for fut in as_completed(futures):
                     t = futures[fut]
                     results[t][dim] = fut.result()
 
         return results
 
-    def _fetch_one(self, fetcher, ticker: str, dim: str) -> dict:
+    def _fetch_one(
+        self,
+        fetcher,
+        ticker: str,
+        dim: str,
+        telemetry: FetchTelemetry | None = None,
+    ) -> dict:
         """单只单维度：查缓存→未过期复用→否则采集+写缓存。失败返 error 结构."""
         # Resume：缓存未过期直接复用（跳过采集，含上次成功的维度）
         cached = self.cache.get(ticker, dim)
         if cached is not None:
+            if telemetry is not None:
+                telemetry.record_cache_hit(ticker, dim)
             return cached
 
         # 反爬：同 provider 请求间随机延迟 0.5-2s
         time.sleep(random.uniform(0.5, 2.0))
 
+        if telemetry is not None:
+            telemetry.record_provider_call(ticker, dim)
         data = fetcher.fetch_with_fallback(ticker)
         # fetch_with_fallback 全失败时返带 __error__ 标记的结构 → 不写缓存，下次 resume 重试
         if isinstance(data, dict) and data.get("__error__") is True:
+            if telemetry is not None:
+                telemetry.record_failure(
+                    ticker,
+                    dim,
+                    status="source_failed",
+                    reason=str(data.get("error") or f"fetch failed: {dim}"),
+                )
             return data
         # 成功 → 写缓存
         self.cache.set(ticker, dim, data)

@@ -245,6 +245,7 @@ def screen(
     output: str = typer.Option(None, "--output", help="输出 JSON 文件路径，缺省输出到 stdout"),
     debug: bool = typer.Option(False, "--debug", help="调试模式，输出每道漏斗的中间结果"),
     exclude_cyclicals: bool = typer.Option(False, "--exclude-cyclicals", help="排除周期股"),
+    staged: bool = typer.Option(False, "--staged", help="使用 G1 Stage A/B/C staged runtime"),
 ):
     """L1 量化筛选：全市场 A 股 → ~200 只候选池."""
     from data.fetchers.basic import BasicFetcher
@@ -266,9 +267,23 @@ def screen(
 
     typer.echo(f"开始筛选 {len(ticker_list)} 只股票...")
 
-    # 2. 调用 screen_a_shares
-    from screener.main import screen_a_shares
-    result = screen_a_shares(ticker_list, exclude_cyclicals=exclude_cyclicals)
+    # 2. 调用筛选 runtime
+    if staged:
+        from data.lib.batch_fetcher import BatchFetcher
+        from screener.staged_runtime import run_staged_screening
+
+        result = run_staged_screening(
+            ticker_list,
+            fetcher=BatchFetcher(),
+            exclude_cyclicals=exclude_cyclicals,
+        ).to_dict()
+    else:
+        from screener.main import screen_a_shares
+
+        result = screen_a_shares(
+            ticker_list,
+            exclude_cyclicals=exclude_cyclicals,
+        )
 
     # 3. 输出结果
     output_json = json.dumps(result, ensure_ascii=False, default=str, indent=2)
@@ -285,7 +300,19 @@ def screen(
 
     # 4. 调试模式输出统计
     if debug:
-        stats = result.get("stats", {})
+        if staged and "stages" in result:
+            stage_a = result["stages"].get("A", {})
+            stage_b = result["stages"].get("B", {})
+            stage_c = result["stages"].get("C", {})
+            stats = {
+                "total": len(stage_a.get("input_tickers", [])),
+                "after_hard_gates": len(stage_b.get("output_tickers", [])),
+                "after_factors": len(stage_c.get("input_tickers", [])),
+                "after_heat_filter": len(stage_c.get("output_tickers", [])),
+                "excluded_by_gates": {},
+            }
+        else:
+            stats = result.get("stats", {})
         typer.echo("\n=== 筛选统计 ===")
         typer.echo(f"总数: {stats.get('total', 0)}")
         typer.echo(f"通过 Hard Gates: {stats.get('after_hard_gates', 0)}")
