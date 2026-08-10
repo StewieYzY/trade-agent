@@ -99,6 +99,52 @@ def test_missing_provenance_and_production_promotion_fail_closed():
         validate_field_evidence(_evidence(eligibility="production_eligible"))
 
 
+@pytest.mark.parametrize(
+    "identity_key",
+    [
+        "provider_family",
+        "provider",
+        "method",
+        "market",
+        "ticker",
+        "raw_field",
+        "response_hash",
+        "retrieved_at",
+    ],
+)
+def test_top_level_and_provenance_identity_mismatch_fails_closed(identity_key):
+    evidence = _evidence()
+    evidence["provenance"] = {
+        **evidence["provenance"],
+        identity_key: f"mismatched-{identity_key}",
+    }
+
+    result = validate_field_evidence(evidence)
+
+    assert result["status"] == "not_evaluated"
+    assert result["eligibility"] == "not_qualified"
+    assert f"provenance mismatch: {identity_key}" in result["reason"]
+
+
+def test_rejected_status_preserves_original_status_when_identity_mismatches():
+    evidence = _evidence(
+        status="source_failed",
+        value=None,
+        reason="provider unavailable",
+    )
+    evidence["provenance"] = {
+        **evidence["provenance"],
+        "response_hash": "mismatched-response-hash",
+    }
+
+    result = validate_field_evidence(evidence)
+
+    assert result["status"] == "source_failed"
+    assert result["eligibility"] == "not_qualified"
+    assert "provider unavailable" in result["reason"]
+    assert "provenance mismatch: response_hash" in result["reason"]
+
+
 def test_sensitive_reason_is_redacted_and_sidecar_is_json_safe():
     result = validate_field_evidence(
         _evidence(

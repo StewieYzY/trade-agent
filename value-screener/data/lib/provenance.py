@@ -174,6 +174,29 @@ def validate_field_evidence(
     if missing and status == "available":
         status = "not_evaluated"
         reason = f"missing provenance: {', '.join(missing)}"
+    identity_mismatches = [
+        key
+        for key in required_provenance
+        if (
+            isinstance(provenance, Mapping)
+            and result.get(key)
+            and provenance.get(key)
+            and result.get(key) != provenance.get(key)
+        )
+    ]
+    if identity_mismatches:
+        mismatch_reason = (
+            f"provenance mismatch: {', '.join(identity_mismatches)}"
+        )
+        if status == "available":
+            status = "not_evaluated"
+            reason = mismatch_reason
+        else:
+            reason = (
+                f"{reason}; {mismatch_reason}"
+                if reason
+                else mismatch_reason
+            )
     freshness_status = result.get("freshness_status")
     if (
         status == "available"

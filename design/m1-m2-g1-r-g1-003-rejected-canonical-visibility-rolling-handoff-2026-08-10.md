@@ -10,7 +10,7 @@
 
 ## 当前状态
 
-- 状态：`verified / independent_review_passed / closure_pending`
+- 状态：`verified / re-review_passed / closure_pending`
 - 本窗口只处理 R-G1-003；不处理 R-G1-004、`g1-canonical-snapshot-consumer`、G1-300 sample、G2 或任何 live provider/LLM。
 - 不 archive；不宣称 G1/G2 Capability passed。
 - 主 worktree 的 3 个未跟踪内容保持不变，未复制、stage、移动或清理。
@@ -45,15 +45,19 @@ base:    main@1ff6678
 
 ## Independent review
 
-独立只读 review 结论：无 P0/P1；初始 P2 为身份一致性测试证据不足、decision-v1 增字段兼容性未明确、handoff 尚未完成。
+上一次独立只读 review 结论：`REQUEST CHANGES`，发现 1 个 P1 identity mismatch 缺口，以及 P2/P3 验证与状态问题。
 
-处理结果：
+本轮处理：
 
-- 增加 source response identity、ticker/field、`source_set_hash` 与 canonical sidecar 的回归断言；
-- design 明确 `g1-field-qualification-decision-v1` 仅增加 additive `evaluated_evidence`，未来不兼容变更需新 schema version；
-- 更新本 handoff 与 active child tasks。
+- 在 `validate_field_evidence()` 比较 top-level 与 provenance 的 provider_family/provider/method/market/ticker/raw_field/response_hash/retrieved_at；
+- available mismatch 降级为 `not_evaluated`，已有 rejected status 保留原 status 并追加 mismatch reason；
+- 增加 8 个 identity mismatch regression tests，并扩展所有现有 rejected status enum 覆盖；
+- 增加 promotion 端到端 regression，确认 identity mismatch 不会进入 canonical value；
+- 更新 active child spec/tasks；
+- 最终独立 re-review：未发现新的 P0/P1/P2/P3；
+- fresh verification：focused `76 passed`，full pytest `699 passed in 54.17s`，OpenSpec strict `29 passed, 0 failed`，compileall 与 diff-check 通过。
 
-当前仍保留 `closure_pending`，不执行 archive；后续 closure 需要用户/治理流程确认并以 fresh Git baseline 重新核验。
+当前保持 `closure_pending`，不执行 archive、不标记 closed；后续 closure 仍需要单独治理确认。
 
 ## Residual risk / next scope
 

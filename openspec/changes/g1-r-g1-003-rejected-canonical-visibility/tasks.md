@@ -17,3 +17,8 @@
 - [x] 3.2 Run the relevant full pytest scope, `compileall`, `git diff --check`, and `openspec validate --all --strict`; record exact results.
 - [x] 3.3 Perform an independent read-only review of diff, tests, OpenSpec contract, and output semantics; resolve findings before changing R-G1-003 status.
 - [x] 3.4 Update the R-G1-003 rolling handoff/evidence with branch, worktree, commit, tests, residual risks, and the fact that archive and closure remain pending review.
+
+## 4. Review follow-up
+
+- [x] 4.1 Add fail-closed top-level/provenance identity mismatch validation and rejected-status coverage for all existing non-available status enums.
+- [x] 4.2 Run fresh full verification and complete a new independent read-only review before any closure/archive decision.

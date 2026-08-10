@@ -41,3 +41,8 @@ Promotion SHALL not modify source qualification artifacts. Snapshot identity, ti
 
 - **WHEN** promotion writes a canonical snapshot
 - **THEN** its `run_id`, ticker set hash, source evidence hash, and provenance identities match the evaluated source evidence and promotion decision
+
+#### Scenario: Top-level and provenance identities disagree
+
+- **WHEN** an evidence item has different values for any of `provider_family`, `provider`, `method`, `market`, `ticker`, `raw_field`, `response_hash`, or `retrieved_at` between its top-level fields and `provenance`
+- **THEN** an available item is downgraded to `not_evaluated` and cannot be promoted, while an already rejected item retains its original rejection status and receives an explicit provenance mismatch reason

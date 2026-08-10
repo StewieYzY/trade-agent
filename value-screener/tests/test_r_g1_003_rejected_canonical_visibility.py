@@ -229,7 +229,19 @@ def test_group_rejection_reason_is_visible_for_available_item_in_rejected_group(
     assert snapshot["records"]["600519.SH"]["turnover_rate"] is None
 
 
-@pytest.mark.parametrize("status", ["record_not_found", "invalid_value", "not_evaluated"])
+@pytest.mark.parametrize(
+    "status",
+    [
+        "record_not_found",
+        "invalid_value",
+        "not_evaluated",
+        "partial",
+        "permission_denied",
+        "rate_limited",
+        "not_supported_for_market",
+        "conflict",
+    ],
+)
 def test_rejection_statuses_are_not_silently_available(tmp_path, status):
     result = _promote(
         tmp_path,
@@ -362,3 +374,25 @@ def test_snapshot_identity_and_provenance_bind_to_source_run(tmp_path):
         freshness_seconds=_policy().freshness_seconds,
         freshness_evaluated_at=EVALUATED_AT.isoformat(),
     )
+
+
+def test_identity_mismatch_cannot_enter_canonical_value_through_promotion(tmp_path):
+    evidence = [
+        _evidence("600519.SH"),
+        _evidence("600009.SH"),
+        _evidence("600519.SH", field="turnover_rate", status="source_failed"),
+        _evidence("600009.SH", field="turnover_rate", status="source_failed"),
+    ]
+    evidence[0]["provenance"]["response_hash"] = "mismatched-response-hash"
+    result = _promote(tmp_path, evidence)
+
+    snapshot = read_snapshot(result["snapshot_output"])
+    assert snapshot["records"]["600519.SH"]["last_price"] is None
+    mismatched = next(
+        item
+        for item in snapshot["provenance"]["fields"]
+        if item["ticker"] == "600519.SH" and item["field"] == "last_price"
+    )
+    assert mismatched["status"] == "not_evaluated"
+    assert mismatched["eligibility"] == "not_qualified"
+    assert "provenance mismatch: response_hash" in mismatched["reason"]
