@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
-from .identity import canonical_ticker
+from .identity import canonical_ticker, compute_snapshot_ticker_set_hash
 from .production_paths import validate_g1_output_root
 from .provenance import detect_conflicts, validate_field_evidence
 
@@ -80,11 +80,6 @@ def _source_set_hash(
             "freshness_evaluated_at": freshness_evaluated_at,
         }
     )
-
-
-def _ticker_set_hash(tickers: Iterable[str]) -> str:
-    canonical = sorted(canonical_ticker(ticker) for ticker in tickers)
-    return _hash(canonical)
 
 
 def _status_summary(evidence: Iterable[Mapping[str, Any]]) -> dict[str, int]:
@@ -181,7 +176,7 @@ def build_snapshot(
         "schema_version": "g1-canonical-snapshot-v1",
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "as_of": as_of,
-        "ticker_set_hash": _ticker_set_hash(ticker_list),
+        "ticker_set_hash": compute_snapshot_ticker_set_hash(ticker_list),
         "source_set_hash": _source_set_hash(
             normalized,
             freshness_seconds=freshness_seconds,

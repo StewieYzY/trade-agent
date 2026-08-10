@@ -23,6 +23,7 @@ D2 纠正后的职责分离：
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 import uuid
 
@@ -105,6 +106,18 @@ def compute_input_ticker_set_hash(tickers: list[str]) -> str:
     canonical_sorted = sorted(canonical_ticker(t) for t in tickers)
     joined = "|".join(canonical_sorted)
     return hashlib.sha256(joined.encode("utf-8")).hexdigest()[:12]
+
+
+def compute_snapshot_ticker_set_hash(tickers: list[str]) -> str:
+    """Canonical snapshot ticker-set hash.
+
+    This is deliberately distinct from ``compute_input_ticker_set_hash``:
+    snapshot manifests use the full canonical JSON-array digest, while the
+    input identity contract uses a short pipe-joined digest.
+    """
+    canonical_sorted = sorted({canonical_ticker(ticker) for ticker in tickers})
+    payload = json.dumps(canonical_sorted, ensure_ascii=False, sort_keys=True)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 def generate_run_id() -> str:
