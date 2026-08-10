@@ -69,12 +69,12 @@ from this worktree and are not part of the commit.
 
 No live provider or LLM was called. The artifact scan found no newly generated
 cache, watchlist, debate, canonical snapshot, or other production runtime output.
-`R-G1-002` remains open for independent review; this child is not archived and no
-G1/G2 Capability is claimed.
+`R-G1-002` passed independent review and is ready for archive; no G1/G2
+Capability is claimed.
 
 ## Independent review follow-up
 
 The first independent review returned `REQUEST CHANGES` for two concrete gaps:
 missing evidence for plan-declared identities and missing manifest/plan hash
 cross-validation. Both were verified and fixed with focused regression tests.
-The repair remains open pending a fresh independent review.
+The fresh independent review returned `PASS`.

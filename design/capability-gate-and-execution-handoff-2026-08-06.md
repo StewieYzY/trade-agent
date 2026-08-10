@@ -279,7 +279,7 @@ scope:
 |---|---:|---|---|
 | `g1-provider-health-and-failure-visibility` | 19/19 | complete / active | review finding 未修，不 ready to archive |
 | `g1-field-qualification-canonical-promotion` | 22/22 | archived / integrated at `main@0d0b0f4` | R-G1-001/R-G1-002 closed；R-G1-003 仍未关闭 |
-| `g1-r-g1-002-source-plan-matrix-completeness` | 14/14 | complete / active | R-G1-002 closed after independent review；carrier 未 archive |
+| `g1-r-g1-002-source-plan-matrix-completeness` | 14/14 | complete / ready to archive | R-G1-002 closed after independent review；待 merge |
 | `g2-strong-single-agent-fallback` | 12/12 | complete / active | review findings 未修，不 ready to archive |
 | `g2-deep-investment-thesis` | 0/27 | in-progress | G2 umbrella，含 M4.5 |
 | `f3c-r1-crosstalk-root-cause` | 5/17 | in-progress | M0 前置未闭 |
@@ -466,8 +466,8 @@ result:
 
 **Implementation / verification evidence (2026-08-10)**
 
-- Active carrier：`g1-r-g1-002-source-plan-matrix-completeness`，复用本 Repair
-  ID，不创建新的 Repair。
+- Implementation carrier：`g1-r-g1-002-source-plan-matrix-completeness`，复用本
+  Repair ID，不创建新的 Repair。
 - RED→GREEN：新增 plan 缺失/截断、artifact hash、manifest/plan hash cross
   identity、run/ticker/field identity、evidence tamper、planned identity 缺失、
   required matrix partial/missing、CLI plan version、合法 source run、source
@@ -484,7 +484,7 @@ result:
 - 未调用真实 provider/LLM，未生成 live/cache/watchlist/debate/canonical
   runtime artifacts。
 - **Next state：** `R-G1-003`；本 child 已完成 independent review 并关闭
-  R-G1-002，但 active carrier 暂不 archive，且不代表 G1/G2 Capability passed。
+  R-G1-002，carrier archive 后待 merge，且不代表 G1/G2 Capability passed。
 
 ### R-G1-003：Rejected canonical visibility
 
@@ -954,7 +954,7 @@ fixture reproduction 为证据。该外部工具问题不登记为项目 Repair 
 当前 Queue 1 入口为 `R-G1-003`。开始前仍需从最新 main 建单一独立 worktree，
 更新其 owner OpenSpec/rolling handoff，并以 RED→最小修复→focused/full tests→strict
 validation→independent re-review 的顺序执行。`R-G1-002` 已完成 independent review
-并关闭，但其 active implementation carrier 暂不 archive。
+并关闭，active implementation carrier 已准备 archive。
 
 ## 23. 下一窗口启动方式
 
