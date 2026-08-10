@@ -17,10 +17,10 @@
 > 架构决策：`design/architecture-decisions.md`
 >
 > runtime/integration baseline：
-> `2777e7e feat(g1): add canonical snapshot consumer`
+> `9a3a779 feat(g1): add staged screening runtime`
 >
 > 当前 main/docs baseline：
-> `2777e7e feat(g1): add canonical snapshot consumer`
+> `9a3a779 feat(g1): add staged screening runtime`
 >
 > 当前 GitHub 审查入口：
 > `PR #1 codex/mainline-sync-2026-08-05 → main`
@@ -29,7 +29,9 @@
 > Queue 1 repair closure complete：`R-G1-001`、`R-G1-002`、`R-G1-003`、
 > `R-G1-004` 已 closed；`g1-canonical-snapshot-consumer` 已 archived /
 > integrated at `main@2777e7e`，consumer capability child = closed；
-> 下一阶段为 Track A `g1-staged-screening-runtime`
+> `g1-staged-screening-runtime` 已 archived / integrated at `main@9a3a779`，
+> staged runtime child = closed；下一阶段为 Track A
+> `g1-300-sample-validation`
 
 ## 1. 本文件的唯一权威地位
 
@@ -290,6 +292,7 @@ scope:
 | `g1-4-data-source-resilience` | 0/48 | in-progress | P2 已映射到既有 D1/D6 |
 | `g1-fast-personal-value-screening` | 6/16 | in-progress | G1 umbrella 未通过 |
 | `g1-canonical-snapshot-consumer` | 10/10 | archived / integrated at `main@2777e7e` | consumer capability child closed |
+| `g1-staged-screening-runtime` | complete | archived / integrated at `main@9a3a779` | staged runtime child closed |
 | `g3-holding-discipline` | 0/29 | in-progress | design 可继续，runtime 锁定 |
 
 任务勾选只表示旧 tasks 已完成。独立 review 发现合同缺口后，必须先更新原 active
@@ -733,7 +736,7 @@ PR Ready / merge 仍不表示 G1 或 G2 Capability passed。
 |---|---|---|---|
 | M0 G2 前置可信基础 | partial | f3c 5/17；R-G2-001/002/003 | 否 |
 | M1 Provider Qualification | engineering partial | 当前 code version 的 completed live run、provider/field eligibility decision、baseline/candidate field coverage 缺失 | 否 |
-| M2 Canonical Runtime | engineering partial | 真实 qualified snapshot；`g1-staged-screening-runtime`；Stage A/B/C ticker set 和 provider call 单调下降 evidence | 否 |
+| M2 Canonical Runtime | engineering partial | 真实 qualified snapshot；Stage A/B/C 的真实 provider runtime evidence | 否 |
 | M3 G1 Capability Gate | not started | 300+、全市场、成本/性能、Top 20 | 否 |
 | M4 G2 Dossier Quality | planned | source-aware dossier、单位/报告期/状态 | 否 |
 | M4.5 Growth Diagnostic V0 | planned | contract、engine、dossier integration | 否 |
@@ -798,8 +801,7 @@ M1: not passed
 ### 缺口
 
 - 真实 qualified snapshot；
-- `g1-staged-screening-runtime`；
-- Stage A/B/C ticker set 和 provider call 单调下降 evidence。
+- Stage A/B/C 的真实 provider runtime evidence。
 
 ### 状态
 
@@ -983,7 +985,9 @@ Queue 1 repair closure 已完成：`R-G1-001`、`R-G1-002`、`R-G1-003`、
 `R-G1-004` 均已完成 independent review、归档并合入 `main@f1ea010`。
 `g1-canonical-snapshot-consumer` 已完成 independent review、归档并合入
 `main@2777e7e`，consumer capability child = closed。
-下一步按 Track A 进入 `g1-staged-screening-runtime`。
+`g1-staged-screening-runtime` 已完成实现、验证、归档并合入
+`main@9a3a779`，staged runtime child = closed。
+下一步按 Track A 处理现有 `g1-300-sample-validation` WIP。
 
 ## 23. 下一窗口启动方式
 
