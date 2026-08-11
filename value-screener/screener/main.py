@@ -145,7 +145,12 @@ def screen_a_shares(tickers: list[str], exclude_cyclicals: bool = False) -> dict
             "graham_number": valuation.get("graham_number"),
             "pe_ttm": valuation.get("pe_ttm"),
             "pb": valuation.get("pb"),
-            "pledge_ratio": risk.get("pledge_ratio")
+            # g1-full-market-performance-cost (review P1-1 方案 A): pledge_ratio 保持
+            # canonical「None + status」契约（data-minimum-contract: MUST NOT 用"视为 0"
+            # 掩盖）。投影额外携带 pledge_status，保留 record_not_found（known-zero）
+            # 与 source_failed（provider 失败）的 provenance。
+            "pledge_ratio": risk.get("pledge_ratio"),
+            "pledge_status": risk.get("pledge_status")
         })
 
     # g1-canonical-run-identity: L1 唯一生成 run_id（uuid4 每次唯一，D2 纠正）+

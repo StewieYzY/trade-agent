@@ -30,6 +30,8 @@ from .parse import parse_scout_output, apply_buffer_zone
 from .prompt import SCOUT_SYSTEM_PROMPT, format_snapshot
 from .quality import ScoutCache
 
+SCOUT_CONCURRENCY = 20
+
 
 # call_llm_snapshot 已迁至 council/llm.py 并重命名为 call_llm_light（f1-deviation-fix §7）。
 # council.llm 作为 L2/L3 共享的 LLM 调用层，统一 token usage 采集（AD-03）。
@@ -82,7 +84,7 @@ async def scout_batch(
     """
     cache = ScoutCache()
     today = date.today().isoformat()
-    semaphore = asyncio.Semaphore(20)
+    semaphore = asyncio.Semaphore(SCOUT_CONCURRENCY)
 
     # g1-canonical-run-identity: 解析/生成 run identity。
     # L1 传入 → 继承（MUST NOT 重新生成）；None → fallback 生成 + 标注 scout_fallback。

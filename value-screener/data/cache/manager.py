@@ -45,14 +45,18 @@ class CacheManager:
         self.base.mkdir(parents=True, exist_ok=True)
 
     @staticmethod
-    def _normalize_ticker(ticker: str) -> str:
+    def normalize_ticker(ticker: str) -> str:
         """统一 normalize ticker key 为纯 6 位数字（去除 .SH / .SZ 后缀）."""
         return ticker.split(".")[0]
 
+    @staticmethod
+    def _normalize_ticker(ticker: str) -> str:
+        """向后兼容的私有别名；新代码使用 normalize_ticker."""
+        return CacheManager.normalize_ticker(ticker)
+
     def _path(self, ticker: str, dim: str) -> Path:
-        directory = self.base / self._normalize_ticker(ticker)
-        directory.mkdir(parents=True, exist_ok=True)
-        return directory / f"{dim}.json"
+        """返回缓存路径，不创建目录。读路径和预检必须无副作用。"""
+        return self.base / self.normalize_ticker(ticker) / f"{dim}.json"
 
     def _ttl(self, dim: str) -> int:
         if dim == "financials" and _is_report_season():
@@ -80,6 +84,7 @@ class CacheManager:
     def set(self, ticker: str, dim: str, data: dict) -> None:
         """原子写：json.dump 到 .tmp → os.replace 到目标路径."""
         path = self._path(ticker, dim)
+        path.parent.mkdir(parents=True, exist_ok=True)
         temporary = path.with_suffix(".tmp")
         try:
             with temporary.open("w", encoding="utf-8") as handle:

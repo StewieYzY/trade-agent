@@ -5,3 +5,4 @@ debate/
 watchlist/
 *.pyc
 .env
+data/evidence/
