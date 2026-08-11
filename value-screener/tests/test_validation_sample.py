@@ -69,6 +69,84 @@ def _run(records: list[dict], industries: dict, **kwargs) -> dict:
     )
 
 
+class _IndustryMapResult(dict):
+    """当前 main data.lib.industry_mapper.IndustryMapResult 的最小形状。"""
+
+    def __init__(self, mapping, *, status="available", attempted_sources=None):
+        super().__init__(mapping)
+        self.status = status
+        self.attempted_sources = attempted_sources or []
+
+
+def test_selector_accepts_industry_map_result_and_preserves_canonical_statuses():
+    """Bug caught: current status vocabulary/direct mapper shape are coerced away."""
+    records = [
+        _record(
+            "600001",
+            market_cap=40e8,
+            pe_ttm=-2.0,
+            chg_60d=5.0,
+            status="available",
+            field_statuses={
+                "market_cap": "available",
+                "pe_ttm": "available",
+                "chg_60d": "available",
+            },
+        ),
+        _record(
+            "000002",
+            market_cap=40e8,
+            pe_ttm=-2.0,
+            chg_60d=5.0,
+            status="partial",
+            field_statuses={
+                "market_cap": "partial",
+                "pe_ttm": "partial",
+                "chg_60d": "partial",
+            },
+        ),
+        _record(
+            "000003",
+            market_cap=40e8,
+            pe_ttm=-2.0,
+            chg_60d=5.0,
+            status="permission_denied",
+            field_statuses={
+                "market_cap": "permission_denied",
+                "pe_ttm": "permission_denied",
+                "chg_60d": "permission_denied",
+            },
+        ),
+        _record("000004", market_cap=40e8, pe_ttm=-2.0, chg_60d=5.0),
+    ]
+    industries = _IndustryMapResult(
+        {
+            "600001.SH": "银行",
+            "000002.SZ": "白酒",
+            "000003.SZ": "白酒",
+        },
+        status="partial",
+        attempted_sources=["eastmoney"],
+    )
+
+    result = _run(records, industries, seed=3)
+
+    selected = {item["ticker"]: item for item in result["sample"]}
+    assert selected["600001.SH"]["status"] == "available"
+    assert selected["600001.SH"]["industry_status"] == "complete"
+    assert selected["000002.SZ"]["status"] == "partial"
+    assert selected["000002.SZ"]["industry_status"] == "complete"
+    assert selected["000003.SZ"]["status"] == "permission_denied"
+    assert selected["000003.SZ"]["industry_status"] == "complete"
+    assert selected["000004.SZ"]["industry_status"] == "partial"
+    assert result["design"]["industry_mapping_status"] == "partial"
+    assert result["provenance"]["attempted_sources"] == ["eastmoney"]
+    assert result["design"]["strata"]["risk:smallcap_h3"]["unavailable_reasons"] == {
+        "partial": 1,
+        "permission_denied": 1,
+    }
+
+
 def test_selector_is_deterministic_and_merges_duplicate_strata():
     """Bug caught: reader order or overlapping strata changes output/duplicates ticker."""
     records = [

@@ -13,16 +13,12 @@ import random
 from typing import Any, Iterable, Mapping
 
 from data.lib.identity import canonical_ticker, compute_input_ticker_set_hash
+from data.lib.provenance import STATUSES as _PROVENANCE_STATUSES
 
 
-_FIELD_STATUSES = {
-    "complete",
-    "degraded",
-    "source_failed",
-    "record_not_found",
-    "invalid_value",
-}
-_EVALUABLE_FIELD_STATUSES = {"complete", "degraded"}
+_FIELD_STATUSES = _PROVENANCE_STATUSES | {"complete", "degraded"}
+_EVALUABLE_FIELD_STATUSES = {"complete", "degraded", "available"}
+_USABLE_MAPPING_STATUSES = {"complete", "available", "partial", "degraded"}
 
 
 @dataclass(frozen=True)
@@ -223,22 +219,41 @@ def _normalize_records(spot_records: Iterable[Mapping[str, Any]]) -> list[dict[s
 
 
 def _normalize_industry_mapping(raw: Mapping[str, Any]) -> dict[str, Any]:
-    status = _normalize_status(raw.get("status", "complete"))
+    raw_mapping = raw.get("mapping")
+    is_envelope = isinstance(raw_mapping, Mapping)
+    status_value = (
+        raw.get("status", "complete")
+        if is_envelope
+        else getattr(raw, "status", "complete")
+    )
+    status = _normalize_status(status_value)
     normalized_mapping: dict[str, str] = {}
-    source_mapping = raw.get("mapping", {})
+    invalid_mapping: dict[str, str] = {}
+    source_mapping = raw_mapping if is_envelope else raw
     if not isinstance(source_mapping, Mapping):
         status = "invalid_value"
         source_mapping = {}
     for raw_ticker, industry in source_mapping.items():
-        if not isinstance(industry, str) or not industry.strip():
+        try:
+            ticker = canonical_ticker(str(raw_ticker))
+        except ValueError:
+            invalid_mapping[str(raw_ticker)] = "invalid_value"
             continue
-        normalized_mapping[canonical_ticker(str(raw_ticker))] = industry.strip()
-    attempted_sources = raw.get("attempted_sources", [])
+        if isinstance(industry, str) and industry.strip():
+            normalized_mapping[ticker] = industry.strip()
+        else:
+            invalid_mapping[ticker] = "invalid_value"
+    attempted_sources = (
+        raw.get("attempted_sources", [])
+        if is_envelope
+        else getattr(raw, "attempted_sources", [])
+    )
     if not isinstance(attempted_sources, list):
         attempted_sources = []
     return {
         "status": status,
         "mapping": normalized_mapping,
+        "invalid_mapping": invalid_mapping,
         "attempted_sources": [str(value) for value in attempted_sources],
     }
 
@@ -252,14 +267,21 @@ def _deduplicate_records(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 def _attach_industries(records: list[dict[str, Any]], mapping: dict[str, Any]) -> None:
     for record in records:
+        invalid_status = mapping["invalid_mapping"].get(record["ticker"])
+        if invalid_status:
+            record["industry"] = "_unmapped"
+            record["industry_status"] = invalid_status
+            continue
         industry = mapping["mapping"].get(record["ticker"])
-        if industry:
+        if industry and mapping["status"] in _USABLE_MAPPING_STATUSES:
             record["industry"] = industry
             record["industry_status"] = "complete"
         else:
             record["industry"] = "_unmapped"
             record["industry_status"] = (
-                mapping["status"] if mapping["status"] != "complete" else "record_not_found"
+                mapping["status"]
+                if mapping["status"] not in {"complete", "available"}
+                else "record_not_found"
             )
 
 
