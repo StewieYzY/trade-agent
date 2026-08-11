@@ -10,3 +10,4 @@ data/evidence_smoke/
 data/universe_full.json
 data/prewarm_driver.log
 data/prewarm_driver.nohup.log
+data/prewarm_shsz.log
