@@ -11,3 +11,7 @@ data/universe_full.json
 data/prewarm_driver.log
 data/prewarm_driver.nohup.log
 data/prewarm_shsz.log
+data/driver.pid
+data/watchdog.pid
+data/health_watchdog.log
+data/health_watchdog.nohup.log

@@ -123,6 +123,43 @@ def fetch_subset(tickers: list[str], dims: tuple[str, ...]) -> None:
             log(f"  failure: {failure}")
 
 
+def spot_available() -> bool:
+    """探测东财 spot_em 全市场快照是否可用（basic 主选数据源）."""
+    try:
+        import akshare as ak  # noqa: PLC0415
+        started = time.monotonic()
+        df = ak.stock_zh_a_spot_em()
+        log(f"spot_em available: {len(df)} rows in {time.monotonic() - started:.1f}s")
+        return df is not None and len(df) > 0
+    except Exception as exc:  # noqa: BLE001 - 探测失败即视为不可用
+        log(f"spot_em unavailable: {type(exc).__name__}: {exc}")
+        return False
+
+
+def fetch_basic_with_retry(tickers: list[str]) -> None:
+    """basic 最后刷新：spot_em 限流时等待重试，超时后走 per-ticker 兜底（慢但真实）."""
+    gaps = cache_report(tickers)
+    if not gaps["basic"]:
+        return
+    for attempt in range(1, 5):
+        if spot_available():
+            fetch_subset(cache_report(tickers)["basic"], ("basic",))
+            gaps = cache_report(tickers)
+            if not gaps["basic"]:
+                return
+            log(f"basic still has {len(gaps['basic'])} gaps after spot fetch; will retry")
+        else:
+            log(f"spot_em throttled (attempt {attempt}/4); sleep 600s")
+        time.sleep(600)
+    remaining = cache_report(tickers)["basic"]
+    if remaining:
+        log(
+            f"spot_em still unavailable after retries; fetching {len(remaining)} basic "
+            "via per-ticker fallback (Tencent backup; slower, data recorded as-is)"
+        )
+        fetch_subset(remaining, ("basic",))
+
+
 def main() -> None:
     # 防休眠唤醒后半开 TCP 连接挂死：driver 自身采集全部受 90s socket 超时约束
     socket.setdefaulttimeout(90)
@@ -138,10 +175,8 @@ def main() -> None:
         if gaps[dim]:
             fetch_subset(gaps[dim], (dim,))
 
-    # basic 最后刷新（此时基本全过期 → 真实重取）
-    gaps = cache_report(tickers)
-    if gaps["basic"]:
-        fetch_subset(gaps["basic"], ("basic",))
+    # basic 最后刷新（此时基本全过期 → 真实重取；spot 限流则重试/兜底）
+    fetch_basic_with_retry(tickers)
 
     # 终检
     gaps = cache_report(tickers)
