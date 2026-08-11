@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 import sys
 import time
 from pathlib import Path
@@ -25,11 +26,20 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 
 def get_full_market_tickers(max_n: int | None = None) -> tuple[list[str], str]:
-    """获取全市场 A 股 ticker 列表，返回 (tickers, source)."""
+    """获取沪深 A 股 ticker 列表，排除北交所，返回 (tickers, source)."""
     import akshare as ak
+    from data.lib.market_router import parse_ticker
+
     df = ak.stock_info_a_code_name()
-    tickers = [str(c).zfill(6) for c in df["code"].tolist()]
-    source = f"akshare.stock_info_a_code_name({len(tickers)} total)"
+    all_tickers = [str(c).zfill(6) for c in df["code"].tolist()]
+    tickers = [
+        ticker for ticker in all_tickers
+        if parse_ticker(ticker).full.endswith((".SH", ".SZ"))
+    ]
+    source = (
+        f"akshare.stock_info_a_code_name({len(all_tickers)} total)"
+        f" filtered SH/SZ ({len(tickers)} total); BJ excluded by scope"
+    )
     if max_n and max_n < len(tickers):
         tickers = tickers[:max_n]
         source += f"[--max {max_n}]"
@@ -45,6 +55,19 @@ def get_cached_tickers() -> tuple[list[str], str]:
     ])
     return tickers, f"cached_subset(data/cache, {len(tickers)} dirs)"
 
+def load_universe_file(path: str) -> tuple[list[str], str]:
+    """读取 universe 快照文件（{source, generated_at, tickers[]}），返回 (tickers, source).
+
+    用于断网场景：universe 列表可离线复用已生成快照，口径记录在 ticker_source 中。
+    """
+    payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    tickers = [str(t) for t in payload.get("tickers", [])]
+    provenance = payload.get("source", "unknown provenance")
+    generated_at = payload.get("generated_at", "unknown")
+    source = f"universe_file:{path}; {provenance}; generated_at={generated_at}"
+    return tickers, source
+
+
 
 async def main():
     parser = argparse.ArgumentParser(description="Warm-cache L1+L2 evidence run")
@@ -56,25 +79,37 @@ async def main():
     parser.add_argument("--coverage", type=str, default=None,
                         choices=["partial_market", "full_market"],
                         help="Coverage label; default derived from source")
+    parser.add_argument("--tickers-file", type=str, default=None,
+                        help="Universe 快照 JSON（{source, generated_at, tickers[]}），优先于 --source")
     args = parser.parse_args()
 
     from performance.run_evidence import run_full_market_evidence, save_evidence_bundle, build_failure_bundle
 
-    if args.source == "full":
-        tickers, source = get_full_market_tickers(max_n=args.max)
-        coverage = args.coverage or ("full_market" if args.max is None else "partial_market")
-    else:
-        tickers, source = get_cached_tickers()
-        coverage = args.coverage or "partial_market"
-
-    print("=== Warm-cache L1+L2 Evidence Run ===")
-    print(f"  source:   {source}")
-    print(f"  coverage: {coverage}")
-    print(f"  tickers:  {len(tickers)}")
-    print()
+    tickers: list[str] = []
+    source = "unspecified"
+    coverage = args.coverage or "partial_market"
 
     run_start = time.monotonic()
     try:
+        if args.tickers_file:
+            tickers, source = load_universe_file(args.tickers_file)
+            if args.max and args.max < len(tickers):
+                tickers = tickers[: args.max]
+                source += f"[--max {args.max}]"
+            coverage = args.coverage or ("full_market" if args.max is None else "partial_market")
+        elif args.source == "full":
+            tickers, source = get_full_market_tickers(max_n=args.max)
+            coverage = args.coverage or ("full_market" if args.max is None else "partial_market")
+        else:
+            tickers, source = get_cached_tickers()
+            coverage = args.coverage or "partial_market"
+
+        print("=== Warm-cache L1+L2 Evidence Run ===")
+        print(f"  source:   {source}")
+        print(f"  coverage: {coverage}")
+        print(f"  tickers:  {len(tickers)}")
+        print()
+
         bundle = await run_full_market_evidence(
             tickers, exclude_cyclicals=False, force_l2=False,
             coverage=coverage, ticker_source=source,

@@ -124,11 +124,12 @@ Evidence bundle 必须记录：
 5. 运行 focused pytest 使测试转绿。
 6. 在共享 venv 下用已缓存子集执行一次明确标记为 `partial_market` 的 warm-cache 验证。
 7. 只有完整可交易集合缓存预热完成后，才执行 `coverage=full_market` 的最终 Gate 运行。
+   - universe 获取支持离线兜底：实时 akshare 重试 3 次，失败兜底已生成快照文件；证据脚本支持 `--tickers-file` 显式传入 universe（口径含快照生成时间与来源，写入 `ticker_source`），保证 basic TTL=2h 约束下「最后刷 basic → 立即运行」的编排可离线复现。
 8. 保存 evidence bundle 到 `data/evidence/` 路径。
 9. 运行回归测试、`openspec validate --strict`、`compileall` 和 `git diff --check`。
 
 ## Open Questions
 
-- 完整可交易集合的 ticker 列表来源（`stock_info_a_code_name()` 或 `stock_zh_a_spot_em()`）取决于 provider 可用性，运行时确定，并必须写入 `ticker_source`。
+- 本 child 的 full-market scope 固定为沪深 A 股（`.SH`/`.SZ`）；北交所 `.BJ` 不纳入本 Gate。ticker 列表来源（`stock_info_a_code_name()` 或 `stock_zh_a_spot_em()`）取决于 provider 可用性，运行时确定，并必须写入 `ticker_source`。
 - cold-cache SLA 是否需要单独设 Gate，在 warm-cache Gate 通过后另行决定。
-- 全 5542 只 ticker 的 warm-cache 运行需要先完成一次完整冷缓存采集（预估 2+ 小时）；当前已缓存子集只作为 partial-market pipeline evidence，不关闭 umbrella 5.2。
+- 约 5208 只沪深 ticker 的 warm-cache 运行需要先完成一次完整冷缓存采集（预估 2+ 小时）；北交所 334 只不在本 child scope 内。当前已缓存子集只作为 partial-market pipeline evidence，不关闭 umbrella 5.2。

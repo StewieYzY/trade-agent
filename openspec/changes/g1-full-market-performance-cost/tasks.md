@@ -36,7 +36,8 @@
 - [x] 4.2 evidence bundle 实现明确保存 `schema_version`、精确 `input_tickers`、`coverage`、`ticker_source`、`cache_status`、L2 cache-hit 口径和 `evidence_notes`。
 - [x] 4.3 首次运行失败证据保留；此前 `2026-08-11_2b861f26.json` 的 560 只结论降级为历史 partial-market 证据，不作为修复后或 full-market Gate 通过证据。
 - [ ] 4.4a 缓存刷新后重新生成修复后 partial-market evidence bundle；未完成前不引用旧 bundle 的 Gate 数字。
-- [ ] 4.4 完整可交易集合（预计约 5542 只）缓存预热完成后，执行 `coverage=full_market` warm-cache L1+L2 运行。
+- [ ] 4.4 完整沪深集合（预计约 5208 只，北交所不在本 child scope）缓存预热完成后，执行 `coverage=full_market` warm-cache L1+L2 运行。
+- [x] 4.4b 预热编排脚本（`scripts/prewarm_driver.py`）：主预热退出后补缺口 → 最后真实重取 basic（basic TTL=2h，先刷会在运行前过期）→ 全暖终检通过后执行证据运行；不暖则中止并记录缺口，不跑污染运行。universe 实时 akshare 重试 3 次，失败兜底已生成快照（`data/universe_full.json`），口径写入日志与 `ticker_source`。
 - [ ] 4.5 以 full-market bundle 独立验证耗时、可用率、L2 首次调用成本/等效成本和未处理异常；未满足时保留失败证据，不勾选 umbrella 5.2。
 
 ## 5. 验证与收口
