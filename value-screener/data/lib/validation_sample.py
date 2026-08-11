@@ -16,7 +16,7 @@ from data.lib.identity import canonical_ticker, compute_input_ticker_set_hash
 from data.lib.provenance import STATUSES as _PROVENANCE_STATUSES
 
 
-_FIELD_STATUSES = _PROVENANCE_STATUSES | {"complete", "degraded"}
+_FIELD_STATUSES = _PROVENANCE_STATUSES | {"complete", "degraded", "stale"}
 _EVALUABLE_FIELD_STATUSES = {"complete", "degraded", "available"}
 _USABLE_MAPPING_STATUSES = {"complete", "available", "partial", "degraded"}
 

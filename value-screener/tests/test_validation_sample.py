@@ -147,6 +147,35 @@ def test_selector_accepts_industry_map_result_and_preserves_canonical_statuses()
     }
 
 
+def test_selector_preserves_stale_field_status():
+    """Bug caught: staged runtime/canonical consumer treat stale as explicit unavailable."""
+    records = [
+        _record(
+            "600001",
+            market_cap=40e8,
+            pe_ttm=-2.0,
+            chg_60d=5.0,
+            field_statuses={
+                "market_cap": "stale",
+                "pe_ttm": "stale",
+                "chg_60d": "stale",
+            },
+        )
+    ]
+
+    result = _run(
+        records,
+        _industry_mapping({"600001.SH": "银行"}),
+        seed=3,
+    )
+
+    selected = {item["ticker"]: item for item in result["sample"]}
+    assert selected["600001.SH"]["field_statuses"]["market_cap"] == "stale"
+    assert result["design"]["strata"]["risk:smallcap_h3"]["unavailable_reasons"] == {
+        "stale": 1
+    }
+
+
 def test_selector_is_deterministic_and_merges_duplicate_strata():
     """Bug caught: reader order or overlapping strata changes output/duplicates ticker."""
     records = [
