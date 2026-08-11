@@ -176,6 +176,34 @@ def test_selector_preserves_stale_field_status():
     }
 
 
+def test_source_failed_mapping_entries_do_not_promote_industry_identity():
+    """Bug caught: a failed industry source is not rescued by stale/present entries."""
+    records = [_record("600001"), _record("000002")]
+    industries = _industry_mapping({"600001.SH": "银行"}, status="source_failed")
+
+    result = _run(records, industries, seed=3)
+
+    selected = {item["ticker"]: item for item in result["sample"]}
+    assert selected["600001.SH"]["industry"] == "_unmapped"
+    assert selected["600001.SH"]["industry_status"] == "source_failed"
+    assert result["design"]["real_industry_coverage"] == 0
+    assert result["design"]["full_market_qualified_size"] == 0
+
+
+def test_invalid_industry_value_is_not_record_not_found():
+    """Bug caught: blank/non-string industry is invalid, not a clean record absence."""
+    records = [_record("600001"), _record("000002")]
+    industries = _industry_mapping({"600001.SH": "", "000002.SZ": None})
+
+    result = _run(records, industries, seed=3)
+
+    selected = {item["ticker"]: item for item in result["sample"]}
+    assert selected["600001.SH"]["industry_status"] == "invalid_value"
+    assert selected["000002.SZ"]["industry_status"] == "invalid_value"
+    assert result["design"]["real_industry_coverage"] == 0
+    assert result["design"]["full_market_qualified_size"] == 0
+
+
 def test_selector_is_deterministic_and_merges_duplicate_strata():
     """Bug caught: reader order or overlapping strata changes output/duplicates ticker."""
     records = [
