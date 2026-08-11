@@ -204,6 +204,147 @@ def test_invalid_industry_value_is_not_record_not_found():
     assert result["design"]["full_market_qualified_size"] == 0
 
 
+def test_st_risk_requires_st_prefix():
+    """Bug caught: substring matching classifies BEST/WESTERN as ST."""
+    records = [
+        _record("600001", name="BEST 科技"),
+        _record("000002", name="WESTERN 材料"),
+        _record("000003", name="*ST 风险"),
+        _record("000004", name="ST 退市"),
+    ]
+
+    result = _run(
+        records,
+        _industry_mapping(
+            {
+                "600001.SH": "银行",
+                "000002.SZ": "白酒",
+                "000003.SZ": "白酒",
+                "000004.SZ": "白酒",
+            }
+        ),
+        seed=3,
+    )
+
+    assert result["design"]["strata"]["risk:st_h1"]["eligible"] == 2
+    selected = {item["ticker"]: item for item in result["sample"]}
+    assert "risk:st_h1" not in selected["600001.SH"]["strata"]
+    assert "risk:st_h1" not in selected["000002.SZ"]["strata"]
+    assert "risk:st_h1" in selected["000003.SZ"]["strata"]
+    assert "risk:st_h1" in selected["000004.SZ"]["strata"]
+
+
+def test_degraded_industry_mapping_is_unmapped_and_not_full_market_qualified():
+    """Bug caught: degraded industry mapping was promoted to complete."""
+    records = [_record("600001"), _record("000002")]
+    industries = _IndustryMapResult(
+        {"600001.SH": "银行", "000002.SZ": "白酒"},
+        status="degraded",
+        attempted_sources=["eastmoney"],
+    )
+
+    result = _run(records, industries, seed=3)
+
+    selected = {item["ticker"]: item for item in result["sample"]}
+    assert {item["industry_status"] for item in selected.values()} == {"degraded"}
+    assert {item["industry"] for item in selected.values()} == {"_unmapped"}
+    assert result["design"]["real_industry_coverage"] == 0
+    assert result["design"]["full_market_qualified_size"] == 0
+
+
+def test_overheat_summary_reports_evaluated_and_candidate_pool_separately():
+    """Bug caught: top-decile pool was reported as the whole eligible population."""
+    records = [_record(f"{600000 + index:06d}", chg_60d=float(index)) for index in range(20)]
+
+    result = _run(
+        records,
+        _industry_mapping({f"{600000 + index:06d}.SH": "银行" for index in range(20)}),
+        config=_selector_module().SampleSelectionConfig(
+            industry_quota_total=0,
+            industry_cap=0,
+            risk_st_max=0,
+            risk_smallcap_max=0,
+            risk_negative_pe_max=0,
+            risk_overheat_max=2,
+        ),
+        seed=3,
+    )
+
+    summary = result["design"]["strata"]["risk:overheat_60d"]
+    assert summary["eligible"] == 20
+    assert summary["candidate_pool"] == 2
+    assert summary["selected"] == 2
+    assert summary["unavailable"] == 0
+
+
+def test_overheat_cap_zero_disables_candidate_pool():
+    """Bug caught: cap=0 still created a one-record overheat candidate pool."""
+    records = [_record(f"{600000 + index:06d}", chg_60d=float(index)) for index in range(20)]
+
+    result = _run(
+        records,
+        _industry_mapping({f"{600000 + index:06d}.SH": "银行" for index in range(20)}),
+        config=_selector_module().SampleSelectionConfig(
+            industry_quota_total=0,
+            industry_cap=0,
+            risk_st_max=0,
+            risk_smallcap_max=0,
+            risk_negative_pe_max=0,
+            risk_overheat_max=0,
+        ),
+        seed=3,
+    )
+
+    summary = result["design"]["strata"]["risk:overheat_60d"]
+    assert summary["eligible"] == 20
+    assert summary["candidate_pool"] == 0
+    assert summary["selected"] == 0
+
+
+def test_provenance_distinguishes_raw_and_unique_input_counts():
+    """Bug caught: input_record_count silently reported canonical unique count."""
+    records = [_record("600001"), _record("600001.SH"), _record("000002")]
+
+    result = _run(
+        records,
+        _industry_mapping({"600001.SH": "银行", "000002.SZ": "白酒"}),
+        seed=3,
+    )
+
+    assert result["provenance"]["input_record_count"] == 3
+    assert result["provenance"]["unique_record_count"] == 2
+
+
+def test_duplicate_canonical_records_merge_complementary_risk_fields():
+    """Bug caught: first-wins dedup dropped risk fields from a duplicate row."""
+    records = [
+        _record(
+            "600001",
+            market_cap=None,
+            field_statuses={"market_cap": "record_not_found"},
+        ),
+        _record("600001.SH", market_cap=40e8),
+    ]
+
+    result = _run(
+        records,
+        _industry_mapping({"600001.SH": "银行"}),
+        config=_selector_module().SampleSelectionConfig(
+            industry_quota_total=0,
+            industry_cap=0,
+            risk_st_max=0,
+            risk_negative_pe_max=0,
+            risk_overheat_max=0,
+            risk_smallcap_max=1,
+        ),
+        seed=3,
+    )
+
+    selected = {item["ticker"]: item for item in result["sample"]}
+    assert selected["600001.SH"]["field_statuses"]["market_cap"] == "complete"
+    assert "risk:smallcap_h3" in selected["600001.SH"]["strata"]
+
+
 def test_selector_is_deterministic_and_merges_duplicate_strata():
     """Bug caught: reader order or overlapping strata changes output/duplicates ticker."""
     records = [

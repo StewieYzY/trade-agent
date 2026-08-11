@@ -18,7 +18,7 @@ from data.lib.provenance import STATUSES as _PROVENANCE_STATUSES
 
 _FIELD_STATUSES = _PROVENANCE_STATUSES | {"complete", "degraded", "stale"}
 _EVALUABLE_FIELD_STATUSES = {"complete", "degraded", "available"}
-_USABLE_MAPPING_STATUSES = {"complete", "available", "partial", "degraded"}
+_USABLE_MAPPING_STATUSES = {"complete", "available", "partial"}
 
 
 @dataclass(frozen=True)
@@ -153,7 +153,8 @@ def select_validation_sample(
             "source": "fixture/reference",
             "attempted_sources": list(mapping["attempted_sources"]),
             "not_live_provider_evidence": True,
-            "input_record_count": len(records),
+            "input_record_count": len(normalized_records),
+            "unique_record_count": len(records),
             "industry_mapping_status": mapping["status"],
         },
         "sample": sample,
@@ -261,8 +262,39 @@ def _normalize_industry_mapping(raw: Mapping[str, Any]) -> dict[str, Any]:
 def _deduplicate_records(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
     deduplicated: dict[str, dict[str, Any]] = {}
     for record in sorted(records, key=lambda item: (item["ticker"], item["_sort_key"])):
-        deduplicated.setdefault(record["ticker"], record)
+        existing = deduplicated.get(record["ticker"])
+        if existing is None:
+            deduplicated[record["ticker"]] = record
+        else:
+            deduplicated[record["ticker"]] = _merge_duplicate_records(existing, record)
     return [deduplicated[ticker] for ticker in sorted(deduplicated)]
+
+
+def _merge_duplicate_records(
+    first: dict[str, Any],
+    second: dict[str, Any],
+) -> dict[str, Any]:
+    merged = dict(first)
+    merged["fields"] = dict(first["fields"])
+    merged["field_statuses"] = dict(first["field_statuses"])
+    for field_name, candidate in second["fields"].items():
+        current = merged["fields"][field_name]
+        if _prefer_field(candidate, current):
+            merged["fields"][field_name] = dict(candidate)
+            merged["field_statuses"][field_name] = candidate["status"]
+    if not merged["name"] and second["name"]:
+        merged["name"] = second["name"]
+    return merged
+
+
+def _prefer_field(candidate: Mapping[str, Any], current: Mapping[str, Any]) -> bool:
+    candidate_evaluable = candidate["status"] in _EVALUABLE_FIELD_STATUSES
+    current_evaluable = current["status"] in _EVALUABLE_FIELD_STATUSES
+    if candidate_evaluable != current_evaluable:
+        return candidate_evaluable
+    if candidate.get("value") is not None and current.get("value") is None:
+        return True
+    return False
 
 
 def _attach_industries(records: list[dict[str, Any]], mapping: dict[str, Any]) -> None:
@@ -308,7 +340,11 @@ def _select_st_risk(
     cap: int,
     summary: dict[str, Any],
 ) -> None:
-    pool = [record for record in records if "ST" in record["name"].upper()]
+    pool = [
+        record
+        for record in records
+        if record["name"].strip().upper().startswith(("ST", "*ST"))
+    ]
     summary["eligible"] = len(pool)
     picked = rng.sample(pool, min(cap, len(pool)))
     for record in picked:
@@ -360,8 +396,13 @@ def _select_overheat_risk(
             continue
         eligible.append(record)
     eligible.sort(key=lambda record: (-record["fields"]["chg_60d"]["value"], record["ticker"]))
-    pool = eligible[: max(1, len(eligible) // 10)] if eligible else []
-    summary["eligible"] = len(pool)
+    pool = (
+        eligible[: max(1, len(eligible) // 10)]
+        if eligible and cap > 0
+        else []
+    )
+    summary["eligible"] = len(eligible)
+    summary["candidate_pool"] = len(pool)
     summary["unavailable"] = sum(reasons.values())
     summary["unavailable_reasons"] = dict(sorted(reasons.items()))
     picked = rng.sample(pool, min(cap, len(pool)))
