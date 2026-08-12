@@ -80,9 +80,17 @@ class FetchTelemetry:
 class BatchFetcher:
     """批量采集 wrapper，封装并发控制."""
 
-    def __init__(self, max_workers: int = 10, cache: CacheManager | None = None):
+    def __init__(
+        self,
+        max_workers: int = 10,
+        cache: CacheManager | None = None,
+        freshness_policy: str = "require_fresh",
+    ):
+        if freshness_policy not in {"require_fresh", "allow_stale"}:
+            raise ValueError("freshness_policy must be require_fresh or allow_stale")
         self.max_workers = max_workers
         self.cache = cache or CacheManager()
+        self.freshness_policy = freshness_policy
 
     def fetch_all(
         self,
@@ -133,7 +141,12 @@ class BatchFetcher:
     ) -> dict:
         """单只单维度：查缓存→未过期复用→否则采集+写缓存。失败返 error 结构."""
         # Resume：缓存未过期直接复用（跳过采集，含上次成功的维度）
-        cached = self.cache.get(ticker, dim)
+        cached = self.cache.get(
+            ticker,
+            dim,
+            allow_stale=self.freshness_policy == "allow_stale",
+            validate=True,
+        )
         if cached is not None:
             if telemetry is not None:
                 telemetry.record_cache_hit(ticker, dim)

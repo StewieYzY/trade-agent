@@ -47,33 +47,43 @@ The evidence orchestrator SHALL independently calculate key field availability f
 - **WHEN** a candidate's `risk.pledge_status` is `record_found` or absent and `pledge_ratio` has a numeric value
 - **THEN** the candidate's `pledge_ratio` SHALL preserve the original numeric value
 
-### Requirement: Cache warmth pre-check
+### Requirement: Cache usability and data freshness are separate
 
-The evidence orchestrator SHALL perform a cache warmth pre-check before running the pipeline, counting cache hits, expired entries, and missing entries across all tickers and G1 quant dimensions. The pre-check result SHALL be persisted in the evidence bundle as `cache_status` with `warm_cache`, `cache_hits`, `cache_expired`, `cache_missing`, and `total_slots` fields. The pre-check MUST not create missing cache directories or call a private path helper with filesystem side effects. `warm_cache` SHALL describe L1 data-cache warmth only; L2 scout-cache hits SHALL be reported separately in `cost.cache_hits`.
+The evidence orchestrator SHALL report local cache usability separately from data freshness. `cache_warm` SHALL be true when every ticker-dimension entry exists, is valid JSON, and satisfies the minimum structural contract for that dimension; TTL expiry alone MUST NOT make `cache_warm` false. `data_freshness` SHALL classify each ticker-dimension entry as `fresh`, `stale`, `missing`, or `invalid`, and SHALL persist per-dimension counts, oldest/latest data age, and the freshness/TTL policy used. The pre-check MUST not create missing cache directories or call a private path helper with filesystem side effects.
 
-#### Scenario: All caches warm
+#### Scenario: Stale but structurally valid cache is usable
 
-- **WHEN** all ticker-dimension cache entries are unexpired
-- **THEN** `cache_status.warm_cache` SHALL be `true`, `cache_expired` and `cache_missing` SHALL be `0`
+- **WHEN** a ticker-dimension JSON file exists, is readable, and satisfies its minimum structural contract, but exceeds its TTL
+- **THEN** `cache_warm` SHALL be `true` for that entry and `data_freshness` SHALL count it as `stale`
 
-#### Scenario: Some caches expired or missing
+#### Scenario: Missing or invalid cache is not usable
 
-- **WHEN** some ticker-dimension cache entries are expired or missing
-- **THEN** `cache_status.warm_cache` SHALL be `false`, and `cache_expired` or `cache_missing` SHALL reflect the actual counts
+- **WHEN** a ticker-dimension file is missing, unreadable, invalid JSON, or fails its minimum structural contract
+- **THEN** `cache_warm` SHALL be `false` for that entry and `data_freshness` SHALL count it as `missing` or `invalid`
 
-### Requirement: L2 cost dual-oracle measurement
+#### Scenario: Controlled stale-read mode does not call providers
+
+- **WHEN** the pipeline runs with `freshness_policy=allow_stale`
+- **THEN** it SHALL read only existing structurally valid local cache entries and MUST NOT call a provider for stale entries
+
+#### Scenario: Production freshness policy remains strict
+
+- **WHEN** the pipeline runs with `freshness_policy=require_fresh`
+- **THEN** stale entries SHALL retain the current refresh behavior and may trigger provider calls, and JSON-readable payloads that fail the minimum structure contract SHALL be rejected and trigger provider calls
+
+### Requirement: L2 cost dual-oracle observation
 
 The evidence orchestrator SHALL record two cost measurements: measured cost based on actual `usage_summary.total_tokens` multiplied by the AD-03 token price, and equivalent full cost based on `(call_count + cache_hits)` multiplied by average tokens per call and the same price. Both measurements SHALL be in yuan and SHALL be persisted in the evidence bundle.
 
 #### Scenario: Dual cost is present
 
 - **WHEN** the evidence orchestrator completes an L2 run
-- **THEN** the output SHALL contain `cost.measured_yuan`, `cost.equivalent_full_yuan`, `cost.call_count`, `cost.cache_hits`, and `cost.total_tokens`
+- **THEN** the output SHALL contain `cost.measured_yuan`, `cost.equivalent_full_yuan`, `cost.call_count`, `cost.cache_hits`, and `cost.total_tokens`, and `observed_metrics` SHALL expose the timing and cost observations
 
-#### Scenario: Cost below gate threshold
+#### Scenario: Cost reference is recorded without hard-gate judgment
 
-- **WHEN** `cost.measured_yuan` is at or below the gate threshold of 2.0 yuan
-- **THEN** the cost dimension of `gate_passed` SHALL be satisfied
+- **WHEN** an L2 run completes
+- **THEN** `observed_metrics.l2_cost` SHALL contain the measured and equivalent costs, and the 2.0 yuan value SHALL be recorded only as a reference threshold; cost MUST NOT determine `hard_gate_passed`, `metrics_gate_passed`, or `gate_passed`
 
 #### Scenario: Equivalent cost is undefined without a real call
 
@@ -82,12 +92,12 @@ The evidence orchestrator SHALL record two cost measurements: measured cost base
 
 ### Requirement: Unhandled exception visibility
 
-The evidence orchestrator SHALL read `failure_summary["unhandled_exceptions"]` from the L2 output and persist it as `exceptions.unhandled_count`. When `unhandled_count` is greater than zero, `gate_passed` SHALL be `false`. Error details from `failure_summary["errors"]` SHALL be persisted in `exceptions.error_details`.
+The evidence orchestrator SHALL read `failure_summary["unhandled_exceptions"]` from the L2 output and persist it as `exceptions.unhandled_count`. When `unhandled_count` is greater than zero, `hard_gate_passed`, `metrics_gate_passed`, and `gate_passed` SHALL be `false`. Error details from `failure_summary["errors"]` SHALL be persisted in `exceptions.error_details`; `l2_error` and business errors MUST remain visible even when `unhandled_count` is zero.
 
 #### Scenario: Zero unhandled exceptions passes gate dimension
 
 - **WHEN** `failure_summary["unhandled_exceptions"]` is `0`
-- **THEN** `exceptions.unhandled_count` SHALL be `0` and the exception dimension of `gate_passed` SHALL be satisfied
+- **THEN** `exceptions.unhandled_count` SHALL be `0` and the exception hard-gate dimension SHALL be satisfied, without implying that `exceptions.error_details` is empty
 
 #### Scenario: Non-zero unhandled exceptions fail gate
 
@@ -96,36 +106,36 @@ The evidence orchestrator SHALL read `failure_summary["unhandled_exceptions"]` f
 
 ### Requirement: Evidence bundle completeness
 
-The evidence bundle SHALL contain `schema_version`, run identity (`run_id`, `profile_version`, `input_ticker_set_hash` inherited from L1), the exact `input_tickers` list, run metadata (`run_date`, `warm_cache`, `cache_status`, `coverage`, `mode`), timing, funnel (total, after_hard_gates, after_factors, after_heat_filter, l2_input, l2_deep_dive, l2_watch, l2_skip, l2_error, l2_degraded), field availability, cost, exceptions, run configuration (`exclude_cyclicals`, `force_l2`, `semaphore_concurrency`, `l2_timeout_seconds`, `ticker_count`, `ticker_source`), gate thresholds, `evidence_notes`, `metrics_gate_passed`, and `gate_passed`. The bundle SHALL be saveable as a JSON file to `data/evidence/`. `metrics_gate_passed` describes the four thresholds for the current input set; `gate_passed` SHALL be true only when `coverage=full_market` and all four thresholds pass.
+The evidence bundle SHALL contain `schema_version`, run identity (`run_id`, `profile_version`, `input_ticker_set_hash` inherited from L1), the exact `input_tickers` list, run metadata (`run_date`, `cache_warm`, `data_freshness`, `coverage`, `mode`), timing, funnel (total, after_hard_gates, after_factors, after_heat_filter, l2_input, l2_deep_dive, l2_watch, l2_skip, l2_error, l2_degraded), field availability, cost, `observed_metrics`, exceptions, run configuration (`exclude_cyclicals`, `force_l2`, `freshness_policy`, `semaphore_concurrency`, `l2_timeout_seconds`, `ticker_count`, `ticker_source`), gate thresholds, `evidence_notes`, `hard_gate_passed`, `metrics_gate_passed`, and `gate_passed`. The legacy `warm_cache` and `cache_status` fields MAY remain for backward compatibility, but are compatibility aliases only; new consumers MUST use `cache_warm` and `data_freshness`. The bundle SHALL be saveable as a JSON file to `data/evidence/`. `hard_gate_passed` SHALL be determined only by field availability and unhandled exceptions. `metrics_gate_passed` SHALL equal `hard_gate_passed` for compatibility. `gate_passed` SHALL be true only when `coverage=full_market` and `hard_gate_passed` is true.
 
 #### Scenario: Bundle contains all required top-level keys
 
 - **WHEN** the evidence orchestrator completes successfully
-- **THEN** the output SHALL contain `schema_version`, `run_id`, `profile_version`, `input_ticker_set_hash`, `input_tickers`, `run_date`, `warm_cache`, `cache_status`, `coverage`, `mode`, `timing`, `funnel`, `field_availability`, `cost`, `exceptions`, `run_config`, `gate_thresholds`, `evidence_notes`, `metrics_gate_passed`, and `gate_passed`
+- **THEN** the output SHALL contain `schema_version`, `run_id`, `profile_version`, `input_ticker_set_hash`, `input_tickers`, `run_date`, `cache_warm`, `data_freshness`, `coverage`, `mode`, `timing`, `funnel`, `field_availability`, `cost`, `observed_metrics`, `exceptions`, `run_config`, `gate_thresholds`, `evidence_notes`, `hard_gate_passed`, `metrics_gate_passed`, and `gate_passed`
 
 #### Scenario: Funnel contains complete distribution
 
 - **WHEN** the evidence orchestrator completes an L1+L2 run
 - **THEN** `funnel` SHALL contain `total`, `after_hard_gates`, `after_factors`, `after_heat_filter`, `l2_input`, `l2_deep_dive`, `l2_watch`, `l2_skip`, `l2_error`, and `l2_degraded`
 
-### Requirement: Gate judgment with four dimensions
+### Requirement: Gate judgment with hard conditions and observed metrics
 
-`metrics_gate_passed` SHALL be `true` only when all four dimensions are satisfied for the current input set: total elapsed time at or below 15 minutes, key field availability rate at or above 0.95, measured L2 cost at or below 2.0 yuan, and unhandled exceptions count at or below 0. `gate_passed` SHALL additionally require `coverage=full_market`; a partial-market run MUST NOT close the full-market Gate. Gate thresholds SHALL be explicitly recorded in the evidence bundle.
+`hard_gate_passed` SHALL be `true` only when key field availability rate is at or above 0.95 and unhandled exceptions count is at or below 0. Total elapsed time and L2 cost SHALL be recorded under `observed_metrics` with reference thresholds of 15 minutes and 2.0 yuan, but SHALL NOT determine `hard_gate_passed`, `metrics_gate_passed`, or `gate_passed`. `metrics_gate_passed` SHALL equal `hard_gate_passed` for compatibility. `gate_passed` SHALL additionally require `coverage=full_market`; a partial-market run MUST NOT close the full-market Gate. Hard and reference thresholds SHALL be explicitly recorded in the evidence bundle.
 
-#### Scenario: All dimensions pass on full market
+#### Scenario: Hard conditions pass on full market
 
-- **WHEN** timing, availability, cost, and exceptions all meet their thresholds and coverage is `full_market`
+- **WHEN** availability and unhandled exceptions meet their hard thresholds and coverage is `full_market`, regardless of observed timing or cost
 - **THEN** `gate_passed` SHALL be `true`
 
-#### Scenario: Metrics pass on partial market
+#### Scenario: Hard conditions pass on partial market
 
-- **WHEN** all four dimensions meet their thresholds but coverage is `partial_market`
+- **WHEN** availability and unhandled exceptions meet their hard thresholds but coverage is `partial_market`
 - **THEN** `metrics_gate_passed` SHALL be `true` and `gate_passed` SHALL be `false`
 
-#### Scenario: Any dimension fails
+#### Scenario: A hard condition fails
 
-- **WHEN** any one of the four dimensions does not meet its threshold
-- **THEN** `gate_passed` SHALL be `false`
+- **WHEN** availability is below 0.95 or unhandled exceptions exceed 0
+- **THEN** `hard_gate_passed`, `metrics_gate_passed`, and `gate_passed` SHALL be `false`, regardless of observed timing or cost
 
 ### Requirement: Real run failure evidence preservation
 

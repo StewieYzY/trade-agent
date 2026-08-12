@@ -1,20 +1,22 @@
 ## Context
 
-G1 umbrella tasks 5.1/5.2/5.3 要求对完整可交易 A 股集合执行的 performance/cost Gate 证据。`g1-300-sample-validation` 已建立离线 fixture/contract foundation 并合入 main，但 fixture 不是真实全市场证据。当前 `screen_a_shares` 和 `scout_batch` 已具备完整漏斗输出（stats 含 after_hard_gates/after_factors/after_heat_filter/input_scale/industry_pe_degraded）、L2 full-result 契约（full_results/usage_summary/failure_summary），但缺少端到端运行的分阶段耗时采集、关键字段可用率统计、成本口径归一和可复核 evidence bundle 输出。
+G1 umbrella tasks 5.1/5.2/5.3 要求对完整可交易 A 股集合执行真实 L1+L2 证据。`g1-300-sample-validation` 已建立离线 fixture/contract foundation 并合入 main，但 fixture 不是真实全市场证据。当前 `screen_a_shares` 和 `scout_batch` 已具备完整漏斗输出（stats 含 after_hard_gates/after_factors/after_heat_filter/input_scale/industry_pe_degraded）、L2 full-result 契约（full_results/usage_summary/failure_summary），但需要明确硬性 Gate 与观测指标的边界，并将本地缓存可用性与数据新鲜度拆分。
 
-本 child 补 performance/cost 证据采集层，并修复真实运行暴露的证据口径问题：可用率按 canonical field status 判定、缓存温暖度可验证、子集/全市场 coverage 明确区分。不修改 L1 筛选规则、L2 scout 逻辑、provider adapter 或 ScreeningProfile。
+本 child 补 performance/cost 证据采集层，并修复真实运行暴露的证据口径问题：可用率按 canonical field status 判定、缓存可用性与数据新鲜度分离、子集/全市场 coverage 明确区分。真实全市场运行还暴露了 malformed LLM JSON 导致 `one_liner` KeyError 的 L2 full-result contract 缺口，本 child 同步修复该证据可见性问题。不修改 L1 筛选规则、provider adapter 或 ScreeningProfile；L2 仅作 full-result contract repair，不改变 scout 筛选逻辑。
 
 ## Goals / Non-Goals
 
 **Goals:**
 
-- 编排真实 L1+L2 运行，记录总耗时和分阶段耗时；完整可交易集合运行才可关闭 full-market Gate。
-- 统计关键字段可用率（单独计算，不从 stats 派生），低于 95% 时显式标记不达标。
-- 归一 L2 成本口径：实测 token usage × 单价 + 等效全量调用推算，预算 ≤¥2。
-- 暴露未处理异常计数（必须为 0）。
-- 输出可复核的 evidence bundle JSON，含漏斗、降级分布、失败分布、成本、缓存状态和运行配置。
+- 编排真实 L1+L2 运行，记录总耗时和分阶段耗时；耗时 15 分钟为参考阈值，不参与硬性 Gate。
+- 统计关键字段可用率（单独计算，不从 stats 派生），必须至少 95%。
+- 归一 L2 成本口径：实测 token usage × 单价 + 等效全量调用推算；¥2 为参考阈值，不参与硬性 Gate。
+- 暴露未处理异常计数，必须为 0。
+- 输出可复核的 evidence bundle JSON，含硬 Gate 结果、观测指标、漏斗、降级分布、失败分布、成本、缓存状态、新鲜度和运行配置。
 - 遵守 canonical `pledge_ratio` 语义：`record_not_found` 保持 `None + pledge_status`，由 evidence 层判定为 usable（known-zero）；`source_failed` 保持 `None + pledge_status` 并计为 missing。
-- 增加缓存温暖度预检，确保 warm-cache 条件可验证。
+- 将 `cache_warm` 与 `data_freshness` 分离：前者判断本地可计算性，后者描述 fresh/stale/missing/invalid。
+- 支持 `allow_stale` 受控本地验证；该模式只读取存在且结构有效的缓存，不触发 provider。生产默认 `require_fresh` 仍按 freshness policy 刷新 stale 数据。
+- `require_fresh` 与 `allow_stale` 均必须拒绝 JSON 可读但不满足 G1 维度最低结构合同的 payload；`allow_stale` 只额外放宽 TTL。
 
 **Non-Goals:**
 
@@ -45,28 +47,31 @@ G1 umbrella tasks 5.1/5.2/5.3 要求对完整可交易 A 股集合执行的 perf
 - 实测成本：`usage_summary.total_tokens` × ¥0.001/1k token（AD-03 基准单价）。
 - 等效全量成本：`(call_count + cache_hits)` × 单只平均 token × 单价，反映无缓存时的全量成本。
 
-两种口径都写入 evidence bundle。Gate 判定以实测成本为准（warm-cache 场景），等效全量成本作为 cold-cache 预估参考。
+两种口径都写入 evidence bundle。两者均为观测指标；`gate_thresholds.reference_max_l2_cost_yuan=2.0` 仅作为参考阈值和展示口径，不参与硬性 Gate 判定。
 
 如果 `call_count=0` 且只有 cache hits，则没有可观察的单只 token 基准，`equivalent_full_yuan` 必须为 `null`，不能把“无法外推”伪装成 0 元。
 
 ### D4：未处理异常从 failure_summary 取
 
-`scout_batch` 的 `failure_summary["unhandled_exceptions"]` 已保证为 0（兜底 catch all）。evidence module 直接读取该字段并断言为 0。如果非 0，evidence bundle 标记 `gate_passed=false` 并写入异常详情。
+`scout_batch` 的 `failure_summary["unhandled_exceptions"]` 已保证为 0（兜底 catch all），但这不等于没有 L2 业务错误。evidence module 直接读取该字段；`failure_summary.errors` 必须原样写入 `exceptions.error_details`，`funnel.l2_error` 必须保留。若未处理异常非 0，evidence bundle 标记硬 Gate 失败。
 
 ### D5：Evidence bundle 结构
 
 输出 JSON envelope 包含：
 
 - `schema_version`、`run_id`、`profile_version`、`input_ticker_set_hash`（从 L1 继承）、`input_tickers`（精确输入集合）；
-- `run_date`、`warm_cache`（bool）、`cache_status`（缓存温暖度详情）、`mode`（`live`/`simulated`）；
+- `run_date`、`cache_warm`（bool）、`data_freshness`（按维度的新鲜度详情）、`mode`（`live`/`simulated`）；
 - `timing`：`total_elapsed_seconds`、`l1_elapsed_seconds`、`l2_elapsed_seconds`；
 - `funnel`：`total`、`after_hard_gates`、`after_factors`、`after_heat_filter`、`l2_input`、`l2_deep_dive`、`l2_watch`、`l2_skip`、`l2_error`、`l2_degraded`；
 - `field_availability`：`rate`、`checked_fields`、`total_fields`、`missing_count`；
 - `cost`：`measured_yuan`、`equivalent_full_yuan`、`call_count`、`cache_hits`、`total_tokens`；
 - `exceptions`：`unhandled_count`、`error_details`；
 - `run_config`：`exclude_cyclicals`、`force_l2`、`semaphore_concurrency`、`l2_timeout_seconds`、`ticker_count`；
-- `gate_passed`：bool，四维度全达标才为 true；
-- `gate_thresholds`：`max_elapsed_minutes=15`、`min_field_availability=0.95`、`max_l2_cost_yuan=2.0`、`max_unhandled_exceptions=0`。
+- `hard_gate_passed`：bool，仅由字段可用率和未处理异常决定；
+- `observed_metrics`：真实耗时和 L2 成本观测值及其参考阈值；
+- `metrics_gate_passed`：兼容字段，含义改为 `hard_gate_passed`，不再表示耗时/成本四项联合判定；
+- `gate_passed`：`coverage=full_market` 且 `hard_gate_passed=true`；
+- `gate_thresholds`：记录 `min_field_availability=0.95`、`max_unhandled_exceptions=0` 硬阈值，以及 `reference_max_elapsed_minutes=15`、`reference_max_l2_cost_yuan=2.0` 观测参考阈值。
 
 ### D6：pledge_ratio canonical status 保留与 evidence 可用率映射
 
@@ -76,11 +81,9 @@ G1 umbrella tasks 5.1/5.2/5.3 要求对完整可交易 A 股集合执行的 perf
 
 根因数据：首次 560 只运行中，190 只 candidates 有 117 个 `pledge_ratio=None`；其中 `record_not_found` 属 canonical usable，不能简单视为 missing。修复后应以 status-aware 可用率重新报告，而不是通过改写 candidate 值让 Gate 转绿。
 
-### D7：缓存温暖度预检
+### D7：缓存可用性与数据新鲜度分离
 
-evidence module 在运行前预检缓存状态：统计各维度缓存命中/过期/缺失数。`warm_cache` 为 true 当且仅当全部 ticker 的全部 G1 数据维度缓存未过期；它只描述 L1 数据缓存，不被 L2 scout cache 命中影响。L2 cache hits 单独写入 cost/evidence_notes。预检不调用会创建目录的私有 `_path`，也不污染 cache 根目录；`cache_base` 参数必须生效。
-
-根因：首次 evidence run 在冷缓存采集未完成时启动（冷采集持续 32min，evidence run 在 8min 时启动），导致 L1 实际做了大量真实采集（含 0.5-2s 反爬延迟/ticker/dim），耗时 23.5min。真正的 warm-cache 下 L1 只需 0.3s（全部缓存命中，无网络请求）。
+`cache_warm` 只检查文件存在、JSON 可读和各 G1 维度最低结构合同，不因 TTL 过期而判定不可用。`data_freshness` 单独按维度统计 `fresh/stale/missing/invalid`、最老/最新数据年龄和使用的 freshness/TTL 配置。生产默认 `require_fresh`：缓存 stale 时按现有 provider 采集语义刷新；受控本地验证使用 `allow_stale`：只读取存在且结构有效的本地数据，不触发 provider。L2 scout cache 命中单独写入 cost，不与 `cache_warm` 混用。Evidence bundle 中保留的旧 `warm_cache`/`cache_status` 仅为向后兼容别名，不是新合同的权威字段；新代码和新消费者必须读取 `cache_warm`/`data_freshness`。
 
 ### D8：coverage 与可复现性显式记录
 
@@ -93,7 +96,7 @@ Evidence bundle 必须记录：
 - `input_ticker_set_hash`；
 - `evidence_notes`：子集运行、L2 scout cache 复用、L1 缓存未全暖和成本外推口径。
 
-已缓存子集（例如本次 560 只）只能证明输入集合上的 pipeline、异常和字段 status 口径；不能关闭完整可交易集合的全市场 Gate。耗时与成本是规模相关指标，不从 560 只线性外推为 5542 只 Gate 通过。首次 L2 成本还需区分真实调用与 scout cache 命中，`equivalent_full_yuan` 只是按本次单只平均 token 的参考外推。
+已缓存子集（例如本次 560 只）只能证明输入集合上的 pipeline、异常和字段 status 口径；不能关闭完整可交易集合的全市场 Gate。耗时与成本是规模相关观测指标，不从 560 只线性外推为 5208 只 Gate 通过。首次 L2 成本还需区分真实调用与 scout cache 命中，`equivalent_full_yuan` 只是按本次单只平均 token 的参考外推。
 
 ### D9：缓存路径查询无副作用
 
@@ -106,7 +109,7 @@ Evidence bundle 必须记录：
 ## Risks / Trade-offs
 
 - **[Risk] 真实全市场运行依赖 provider 可用** → 如果 AkShare/东财 spot 不可用，运行会失败；evidence bundle 保留失败证据，标记 `gate_passed=false`，不以默认值伪造成功。
-- **[Risk] warm-cache 不可复现** → evidence bundle 记录 `cache_status` 和缓存命中数，warm-cache 条件可从 `cache_status.warm_cache == true` 验证。
+- **[Risk] cache 可用性与新鲜度混淆** → evidence bundle 同时记录 `cache_warm` 和 `data_freshness`，allow_stale 只放行结构有效的本地缓存，不改变生产 require_fresh 语义。
 - **[Risk] 成本单价假设可能过时** → AD-03 基准 ¥0.001/1k token 是当前 LLM 单价假设，evidence bundle 显式记录单价假设，单价变化时只需重算。
 - **[Risk] pledge_ratio status 语义跨边界** → candidate 保持 `None + pledge_status`，evidence 只在可用率统计时把 `record_not_found` 记为 usable；原始 risk、H6、factor、L2、monitor 语义不被改写。新增测试覆盖 status-aware availability 与 provenance。
 - **[Risk] 全量 Gate 规模尚未证实** → 560 只子集不能关闭完整可交易集合的 Gate；bundle 的 `coverage` 和 `evidence_notes` 强制标注事实口径。全量 5542 只需单独完成缓存预热与 warm-cache 运行。

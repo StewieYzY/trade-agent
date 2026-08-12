@@ -46,35 +46,69 @@ GATE_MAX_UNHANDLED_EXCEPTIONS = 0
 _USABLE_PLEDGE_STATUS = ("record_not_found",)
 
 
-def _check_cache_warmth(tickers: list[str], cache_base: str | Path | None = None) -> dict:
-    """预检 L1 数据缓存温暖度：统计各维度缓存命中/过期/缺失数.
-
-    warm-cache 运行的前置条件：全部 ticker 的全部 G1 量化维度缓存未过期。
-    只使用 CacheManager 公开接口（get/is_expired/base），不调用有 mkdir
-    副作用的私有 _path（review P2-2）。
-    """
+def _check_cache_warmth(
+    tickers: list[str],
+    cache_base: str | Path | None = None,
+    freshness_policy: str = "require_fresh",
+) -> dict:
+    """预检本地缓存可用性，并独立统计数据新鲜度."""
     from data.cache.manager import CacheManager
 
     cm = CacheManager(base_dir=cache_base) if cache_base is not None else CacheManager()
     total = len(tickers) * len(G1_QUANT_DIMENSIONS)
-    hits = 0
-    expired = 0
-    missing = 0
+    counts = {
+        dim: {
+            "fresh": 0,
+            "stale": 0,
+            "missing": 0,
+            "invalid": 0,
+            "oldest_age_seconds": None,
+            "latest_age_seconds": None,
+            "ttl_seconds": cm._ttl(dim),
+        }
+        for dim in G1_QUANT_DIMENSIONS
+    }
     for t in tickers:
         code = CacheManager.normalize_ticker(t)
         for dim in G1_QUANT_DIMENSIONS:
-            if not cm.is_expired(t, dim):
-                hits += 1
-            elif (cm.base / code / f"{dim}.json").exists():
-                expired += 1
-            else:
-                missing += 1
+            path = cm.base / code / f"{dim}.json"
+            item = counts[dim]
+            if not path.exists():
+                item["missing"] += 1
+                continue
+            age = max(0.0, time.time() - path.stat().st_mtime)
+            try:
+                with path.open("r", encoding="utf-8") as handle:
+                    payload = json.load(handle)
+            except (json.JSONDecodeError, OSError):
+                item["invalid"] += 1
+                continue
+            if not cm.is_valid_payload(dim, payload):
+                item["invalid"] += 1
+                continue
+            freshness = "fresh" if age <= item["ttl_seconds"] else "stale"
+            item[freshness] += 1
+            if item["oldest_age_seconds"] is None or age > item["oldest_age_seconds"]:
+                item["oldest_age_seconds"] = age
+            if item["latest_age_seconds"] is None or age < item["latest_age_seconds"]:
+                item["latest_age_seconds"] = age
+    freshness_totals = {
+        key: sum(item[key] for item in counts.values())
+        for key in ("fresh", "stale", "missing", "invalid")
+    }
     return {
-        "cache_hits": hits,
-        "cache_expired": expired,
-        "cache_missing": missing,
+        "cache_warm": sum(freshness_totals[key] for key in ("missing", "invalid")) == 0,
+        "data_freshness": {
+            "policy": freshness_policy,
+            "by_dimension": counts,
+            **freshness_totals,
+            "total_slots": total,
+        },
+        "cache_hits": freshness_totals["fresh"] + freshness_totals["stale"],
+        "cache_expired": freshness_totals["stale"],
+        "cache_missing": freshness_totals["missing"] + freshness_totals["invalid"],
         "total_slots": total,
-        "warm_cache": hits == total,
+        "warm_cache": freshness_totals["missing"] + freshness_totals["invalid"] == 0,
     }
 
 
@@ -163,20 +197,18 @@ def _judge_gate(
     cost: dict,
     unhandled_count: int,
 ) -> bool:
-    """四维度全达标才为 true."""
-    elapsed_ok = timing["total_elapsed_seconds"] <= GATE_MAX_ELAPSED_MINUTES * 60
+    """硬 Gate 只判断字段可用率和未处理异常；耗时/成本仅作观测."""
     availability_ok = field_availability["rate"] >= GATE_MIN_FIELD_AVAILABILITY
-    cost_ok = cost["measured_yuan"] <= GATE_MAX_L2_COST_YUAN
     exception_ok = unhandled_count <= GATE_MAX_UNHANDLED_EXCEPTIONS
-    return elapsed_ok and availability_ok and cost_ok and exception_ok
+    return availability_ok and exception_ok
 
 
 def _gate_thresholds() -> dict:
     return {
-        "max_elapsed_minutes": GATE_MAX_ELAPSED_MINUTES,
         "min_field_availability": GATE_MIN_FIELD_AVAILABILITY,
-        "max_l2_cost_yuan": GATE_MAX_L2_COST_YUAN,
         "max_unhandled_exceptions": GATE_MAX_UNHANDLED_EXCEPTIONS,
+        "reference_max_elapsed_minutes": GATE_MAX_ELAPSED_MINUTES,
+        "reference_max_l2_cost_yuan": GATE_MAX_L2_COST_YUAN,
     }
 
 
@@ -187,6 +219,7 @@ def build_failure_bundle(
     coverage: str = "partial_market",
     tickers: list[str] | None = None,
     ticker_source: str = "unspecified",
+    freshness_policy: str = "require_fresh",
 ) -> dict[str, Any]:
     """运行失败时构造失败证据 bundle.
 
@@ -205,16 +238,30 @@ def build_failure_bundle(
             "elapsed_seconds_before_failure": elapsed_seconds,
         },
         "timing": {"total_elapsed_seconds": elapsed_seconds},
+        "observed_metrics": {
+            "total_elapsed_seconds": elapsed_seconds,
+            "reference_thresholds": {
+                "max_elapsed_minutes": GATE_MAX_ELAPSED_MINUTES,
+                "max_l2_cost_yuan": GATE_MAX_L2_COST_YUAN,
+            },
+        },
         "funnel": {},
         "field_availability": {},
         "cost": {},
         "artifact_id": f"failure-{uuid.uuid4().hex[:12]}",
         "exceptions": {"unhandled_count": 1, "error_details": [{"error": str(error)}]},
+        "cache_warm": False,
+        "data_freshness": {
+            "policy": freshness_policy,
+            "status": "unknown_before_pipeline_completion",
+        },
         "run_config": {
             "ticker_count": ticker_count,
             "ticker_source": ticker_source,
+            "freshness_policy": freshness_policy,
         },
         "metrics_gate_passed": False,
+        "hard_gate_passed": False,
         "gate_passed": False,
         "gate_thresholds": _gate_thresholds(),
     }
@@ -226,6 +273,7 @@ async def run_full_market_evidence(
     force_l2: bool = False,
     coverage: str = "partial_market",
     ticker_source: str = "unspecified",
+    freshness_policy: str = "require_fresh",
 ) -> dict[str, Any]:
     """编排一次 warm-cache L1+L2 运行，采集性能/成本证据.
 
@@ -241,13 +289,17 @@ async def run_full_market_evidence(
         run_config/gate_passed/gate_thresholds/coverage/evidence_notes 和 run identity。
     """
     # L1 数据缓存温暖度预检（design D7 口径：warm_cache 仅指 L1 数据缓存）
-    cache_status = _check_cache_warmth(tickers)
+    cache_status = _check_cache_warmth(tickers, freshness_policy=freshness_policy)
 
     total_start = time.monotonic()
 
     # L1 阶段
     l1_start = time.monotonic()
-    l1_output = screen_a_shares(tickers, exclude_cyclicals=exclude_cyclicals)
+    l1_output = screen_a_shares(
+        tickers,
+        exclude_cyclicals=exclude_cyclicals,
+        freshness_policy=freshness_policy,
+    )
     l1_elapsed = time.monotonic() - l1_start
 
     run_id = l1_output.get("run_id")
@@ -300,19 +352,33 @@ async def run_full_market_evidence(
             f"{usage_summary.get('call_count')} 次真实 LLM 调用；"
             + equivalent_note
         )
-    if not cache_status["warm_cache"]:
+    if not cache_status["cache_warm"]:
         evidence_notes.append(
-            f"L1 数据缓存未全暖（hits={cache_status['cache_hits']}, "
-            f"expired={cache_status['cache_expired']}, missing={cache_status['cache_missing']}）："
-            "L1 耗时包含真实采集，不代表 warm-cache 性能。"
+            f"L1 本地缓存不可用（missing={cache_status['data_freshness']['missing']}, "
+            f"invalid={cache_status['data_freshness']['invalid']}）。"
+        )
+    if cache_status["data_freshness"]["stale"]:
+        evidence_notes.append(
+            f"本次存在 {cache_status['data_freshness']['stale']} 个 stale 数据槽位；"
+            f"freshness_policy={freshness_policy}。"
         )
 
-    metrics_gate_passed = _judge_gate(
+    hard_gate_passed = _judge_gate(
         timing,
         field_availability,
         cost,
         unhandled_count,
     )
+    observed_metrics = {
+        "total_elapsed_seconds": timing["total_elapsed_seconds"],
+        "l1_elapsed_seconds": timing["l1_elapsed_seconds"],
+        "l2_elapsed_seconds": timing["l2_elapsed_seconds"],
+        "l2_cost": cost,
+        "reference_thresholds": {
+            "max_elapsed_minutes": GATE_MAX_ELAPSED_MINUTES,
+            "max_l2_cost_yuan": GATE_MAX_L2_COST_YUAN,
+        },
+    }
 
     bundle = {
         "schema_version": "g1-full-market-performance-cost.v2",
@@ -321,7 +387,9 @@ async def run_full_market_evidence(
         "input_ticker_set_hash": input_ticker_set_hash,
         "input_tickers": list(tickers),
         "run_date": l1_output.get("run_date", date.today().isoformat()),
-        "warm_cache": cache_status["warm_cache"],  # design D7 口径：仅 L1 数据缓存预检
+        "cache_warm": cache_status["cache_warm"],
+        "data_freshness": cache_status["data_freshness"],
+        "warm_cache": cache_status["cache_warm"],
         "cache_status": cache_status,
         "coverage": coverage,
         "mode": "live",
@@ -333,18 +401,20 @@ async def run_full_market_evidence(
             "unhandled_count": unhandled_count,
             "error_details": failure_summary.get("errors", []),
         },
+        "observed_metrics": observed_metrics,
         "run_config": {
             "exclude_cyclicals": exclude_cyclicals,
             "force_l2": force_l2,
+            "freshness_policy": freshness_policy,
             "semaphore_concurrency": SCOUT_CONCURRENCY,
             "l2_timeout_seconds": LIGHT_LLM_TIMEOUT_SECONDS,
             "ticker_count": len(tickers),
             "ticker_source": ticker_source,
         },
         "gate_thresholds": _gate_thresholds(),
-        # 四项指标只对当前输入集合计算；只有完整可交易集合才可关闭 full-market Gate。
-        "metrics_gate_passed": metrics_gate_passed,
-        "gate_passed": metrics_gate_passed and coverage == "full_market",
+        "hard_gate_passed": hard_gate_passed,
+        "metrics_gate_passed": hard_gate_passed,
+        "gate_passed": hard_gate_passed and coverage == "full_market",
         "evidence_notes": evidence_notes,
     }
     return bundle

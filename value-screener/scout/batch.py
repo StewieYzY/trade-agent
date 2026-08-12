@@ -238,6 +238,18 @@ async def scout_batch(
 
             # 4. 解析输出 + 应用缓冲带
             parsed = parse_scout_output(raw_json)
+            if parsed.get("parse_error") is True:
+                return {
+                    "ticker": ticker,
+                    "verdict": "error",
+                    "error": "LLM 输出解析失败",
+                    "stage": "parse",
+                    "one_liner": "LLM 输出解析失败",
+                    "red_flags": [],
+                    "green_flags": [],
+                    "anti_trap_flags": [],
+                    "low_confidence_anomaly": False,
+                }
             final_verdict, is_anomaly = apply_buffer_zone(parsed["verdict"], parsed["confidence"])
 
             result = {

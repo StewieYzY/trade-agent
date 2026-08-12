@@ -9,6 +9,7 @@ import json
 import os
 import time
 from pathlib import Path
+from typing import Any
 
 INTRADAY = 5 * 60
 DAILY = 2 * 3600
@@ -70,16 +71,56 @@ class CacheManager:
             return True
         return time.time() - path.stat().st_mtime > self._ttl(dim)
 
-    def get(self, ticker: str, dim: str) -> dict | None:
-        """读缓存；过期/缺失/损坏返回 None."""
-        if self.is_expired(ticker, dim):
+    @staticmethod
+    def is_valid_payload(dim: str, payload: Any) -> bool:
+        """检查 G1 维度的最低本地计算结构合同."""
+        if not isinstance(payload, dict) or payload.get("__error__") is True:
+            return False
+        contracts = {
+            "basic": lambda p: all(k in p for k in ("code", "name", "price", "pe", "pb", "market_cap")),
+            "financials": lambda p: (
+                isinstance(p.get("years"), list)
+                and isinstance(p.get("income"), dict)
+                and isinstance(p.get("balance_sheet"), dict)
+                and isinstance(p.get("cash_flow"), dict)
+            ),
+            "kline": lambda p: all(
+                isinstance(p.get(k), list) and len(p[k]) > 0
+                for k in ("dates", "close", "volume", "turnover_rate")
+            ),
+            "valuation": lambda p: all(
+                k in p for k in ("pe_ttm", "pb", "pe_percentile_5y", "pb_percentile_5y")
+            ),
+            "risk": lambda p: "pledge_ratio" in p and "pledge_status" in p,
+        }
+        validator = contracts.get(dim)
+        if validator is None:
+            return isinstance(payload, dict)
+        return bool(validator(payload))
+
+    def get(
+        self,
+        ticker: str,
+        dim: str,
+        *,
+        allow_stale: bool = False,
+        validate: bool = False,
+    ) -> dict | None:
+        """读缓存；默认保持历史语义，受控 stale 读取可显式开启结构校验."""
+        path = self._path(ticker, dim)
+        if not path.exists():
             return None
         path = self._path(ticker, dim)
         try:
             with path.open("r", encoding="utf-8") as handle:
-                return json.load(handle)
+                payload = json.load(handle)
         except (json.JSONDecodeError, OSError):
             return None
+        if validate and not self.is_valid_payload(dim, payload):
+            return None
+        if not allow_stale and time.time() - path.stat().st_mtime > self._ttl(dim):
+            return None
+        return payload
 
     def set(self, ticker: str, dim: str, data: dict) -> None:
         """原子写：json.dump 到 .tmp → os.replace 到目标路径."""

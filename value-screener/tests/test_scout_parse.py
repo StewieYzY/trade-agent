@@ -61,6 +61,10 @@ def test_parse_scout_output_malformed_json():
     assert result["verdict"] == "watch"
     assert result["confidence"] == 0
     assert result.get("parse_error") is True
+    assert result["one_liner"] == ""
+    assert result["red_flags"] == []
+    assert result["green_flags"] == []
+    assert result["anti_trap_flags"] == []
 
 
 def test_parse_scout_output_invalid_verdict():

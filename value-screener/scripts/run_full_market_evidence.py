@@ -81,6 +81,9 @@ async def main():
                         help="Coverage label; default derived from source")
     parser.add_argument("--tickers-file", type=str, default=None,
                         help="Universe 快照 JSON（{source, generated_at, tickers[]}），优先于 --source")
+    parser.add_argument("--freshness-policy", type=str, default="require_fresh",
+                        choices=["require_fresh", "allow_stale"],
+                        help="L1 cache policy: require_fresh refreshes stale; allow_stale reads valid local cache only")
     args = parser.parse_args()
 
     from performance.run_evidence import run_full_market_evidence, save_evidence_bundle, build_failure_bundle
@@ -113,6 +116,7 @@ async def main():
         bundle = await run_full_market_evidence(
             tickers, exclude_cyclicals=False, force_l2=False,
             coverage=coverage, ticker_source=source,
+            freshness_policy=args.freshness_policy,
         )
     except Exception as e:  # noqa: BLE001 - 失败证据保留，不伪造成功
         elapsed = time.monotonic() - run_start
@@ -124,6 +128,7 @@ async def main():
             coverage=coverage,
             tickers=tickers,
             ticker_source=source,
+            freshness_policy=args.freshness_policy,
         )
 
     out_path = save_evidence_bundle(bundle, output_dir=args.output)
@@ -134,8 +139,11 @@ async def main():
         print(f"gate_passed: {bundle['gate_passed']}")
         return
 
-    print(f"gate_passed: {bundle['gate_passed']}")
-    print(f"warm_cache(L1 数据缓存): {bundle['warm_cache']}")
+    print(f"hard_gate_passed: {bundle['hard_gate_passed']}")
+    print(f"metrics_gate_passed(compat): {bundle['metrics_gate_passed']}")
+    print(f"gate_passed(full_market only): {bundle['gate_passed']}")
+    print(f"cache_warm(local usable): {bundle['cache_warm']}")
+    print(f"data_freshness: {bundle['data_freshness']}")
     t = bundle["timing"]
     print(f"timing: total={t['total_elapsed_seconds']:.1f}s, "
           f"L1={t['l1_elapsed_seconds']:.1f}s, L2={t['l2_elapsed_seconds']:.1f}s")
@@ -143,9 +151,16 @@ async def main():
     avail = bundle["field_availability"]
     print(f"field_availability: {avail['rate']:.4f} "
           f"({avail['missing_count']} missing / {avail['total_fields']} total)")
+    print(f"observed_metrics: elapsed={bundle['observed_metrics']['total_elapsed_seconds']:.1f}s")
     cost = bundle["cost"]
+    equivalent_full = cost["equivalent_full_yuan"]
+    equivalent_text = (
+        f"¥{equivalent_full:.4f}"
+        if equivalent_full is not None
+        else "n/a (无真实调用基准)"
+    )
     print(f"cost: measured=¥{cost['measured_yuan']:.4f}, "
-          f"equiv_full=¥{cost['equivalent_full_yuan']:.4f}, "
+          f"equiv_full={equivalent_text}, "
           f"calls={cost['call_count']}, cache_hits={cost['cache_hits']}")
     exc = bundle["exceptions"]
     print(f"exceptions: unhandled={exc['unhandled_count']}, errors={len(exc['error_details'])}")

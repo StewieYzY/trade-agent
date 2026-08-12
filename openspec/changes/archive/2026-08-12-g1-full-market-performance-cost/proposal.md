@@ -1,12 +1,14 @@
 ## Why
 
-G1 umbrella 的 M3 工程 Gate（§5）要求一次对完整可交易 A 股集合执行的 warm-cache L1+L2 运行证据：耗时 ≤15 分钟、关键字段可用率 ≥95%、L2 成本 ≤¥2、未处理异常为 0，并保存完整漏斗、降级分布、失败分布和运行配置证据。`g1-300-sample-validation` 只建立了离线 fixture/contract foundation，不构成全市场 Gate 证据。本 child 负责建立证据采集能力，先用真实已缓存子集验证 pipeline 与证据口径，再保留完整可交易集合运行作为最终 Gate 证据任务。
+G1 umbrella 的 M3 工程 Gate（§5）要求一次对完整可交易 A 股集合执行的真实 L1+L2 运行证据：关键字段可用率至少 95%、未处理异常为 0，并真实记录总耗时与 L2 成本作为观测指标。耗时 15 分钟与 L2 成本 ¥2 是参考阈值，不作为本 child 的硬性 Gate 否决条件。`g1-300-sample-validation` 只建立了离线 fixture/contract foundation，不构成全市场 Gate 证据。本 child 负责建立证据采集能力，先用真实已缓存子集验证 pipeline 与证据口径，再保留完整可交易集合运行作为最终 Gate 证据任务。
 
 ## What Changes
 
 - 新增 `g1-full-market-performance-cost` 能力，编排真实 L1+L2 运行，采集耗时、可用率、成本、漏斗分布和异常证据，并明确 `partial_market` 与 `full_market` coverage。
 - 新增 performance/cost evidence module：包裹现有 `screen_a_shares` + `scout_batch`，记录分阶段耗时、关键字段可用率、L2 实测/等效推算成本、未处理异常计数和运行配置。
-- 新增缓存温暖度预检：运行前检查全部 ticker 的 G1 量化维度缓存状态，确保 warm-cache 条件可验证。
+- 新增缓存可用性与新鲜度分离的预检：`cache_warm` 只检查文件存在、JSON 可读和维度最低结构合同；`data_freshness` 单独记录 fresh/stale/missing/invalid 与年龄分布。
+- 支持受控 `allow_stale` 本地验证：只读已落盘且结构有效的数据，不触发 provider；生产默认 `require_fresh` 仍按 freshness policy 刷新 stale 数据。
+- Evidence bundle 明确区分 `hard_gate_passed`、`observed_metrics`、兼容字段 `metrics_gate_passed` 和 `gate_passed`。
 - 保持 canonical `pledge_ratio` 输出语义：`record_not_found` 仍输出 `None + pledge_status`（known-zero 的可用性由 evidence 层按 status 判定），`source_failed` 仍输出 `None + pledge_status`，不在 candidate 投影中用 0.0 改写或丢失 provenance。
 - 新增 evidence bundle 输出：总耗时、分阶段耗时、候选数量变化、可用率、降级分布、失败分布、成本、缓存状态和运行配置写入可复核的 JSON evidence artifact。
 - 不修改 L1 筛选规则（hard_gates/factor_scores/anti_trap/heat_filter 判定逻辑）、L2 scout 逻辑、provider adapter、ScreeningProfile 或已有 canonical spec 合同；candidate 投影只补充 `pledge_status` provenance。

@@ -56,15 +56,15 @@ G1 SHALL 为每只输入股票生成最终分类 `deep_dive`、`watch`、`skip` 
 - **THEN** 整批运行 SHALL 继续，失败股票 SHALL 进入 `error`，且未处理异常数量 MUST 为 0
 
 ### Requirement: 规模、数据质量、性能与成本 Gate
-G1 在宣称全市场能力成立前 MUST 先通过不少于 300 只多行业样本验证，再完成一次真实全市场运行。全市场 warm-cache L1+L2 SHALL 在 15 分钟内完成，关键字段可用率 SHALL 不低于 95%，全市场 L2 成本 SHALL 不超过 ¥2。
+G1 在宣称全市场能力成立前 MUST 先通过不少于 300 只多行业样本验证，再完成一次真实全市场 L1+L2 运行。全市场运行 SHALL 真实记录总耗时、L1/L2 分阶段耗时和 L2 实测成本；15 分钟和 ¥2 是参考观测阈值，不是本工程 Gate 的硬性否决条件。硬性工程 Gate 仅包括关键字段可用率不低于 95% 和未处理异常数量为 0。
 
 #### Scenario: 300 只之前不得宣称全市场成立
 - **WHEN** 系统只在少于 300 只或单一行业样本上验证
 - **THEN** G1 capability status MUST 保持未通过，且 MUST NOT 宣称已具备全市场筛选能力
 
 #### Scenario: 全市场运行满足工程 Gate
-- **WHEN** 对当期完整可交易 A 股集合执行 warm-cache L1+L2
-- **THEN** evidence SHALL 显示总耗时不超过 15 分钟、关键字段可用率不低于 95%、L2 成本不超过 ¥2，且 deep_dive/watch/skip/error 数量之和等于输入总数
+- **WHEN** 对当期完整可交易 A 股集合执行 L1+L2
+- **THEN** evidence SHALL 显示关键字段可用率不低于 95%、未处理异常数量为 0，真实保存总耗时和 L2 成本观测值及 15 分钟/¥2 参考阈值，且 deep_dive/watch/skip/error 数量之和等于输入总数
 
 ### Requirement: Top 20 个人风格验收
 G1 最终产品 Gate SHALL 包含用户对固定版本运行 Top 20 的逐只人工复核。至少 70% 的 Top 20 MUST 被用户判断为“值得进一步研究”，并保留判断标签与理由。

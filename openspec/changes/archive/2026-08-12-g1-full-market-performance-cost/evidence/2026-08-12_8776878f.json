@@ -1,0 +1,233 @@
+{
+  "schema_version": "g1-full-market-performance-cost.v2",
+  "run_id": "8776878f-7ef2-44da-9e73-e7314e966c29",
+  "profile_version": "g1-2026-07-21",
+  "input_ticker_set_hash": "b77415ba493a",
+  "input_tickers": [
+    "000001",
+    "000002",
+    "000006",
+    "000007",
+    "000008",
+    "000009",
+    "000010",
+    "000011",
+    "000012",
+    "000014"
+  ],
+  "run_date": "2026-08-12",
+  "cache_warm": true,
+  "data_freshness": {
+    "policy": "allow_stale",
+    "by_dimension": {
+      "basic": {
+        "fresh": 0,
+        "stale": 10,
+        "missing": 0,
+        "invalid": 0,
+        "oldest_age_seconds": 19703.458835601807,
+        "latest_age_seconds": 19703.4495241642,
+        "ttl_seconds": 7200
+      },
+      "financials": {
+        "fresh": 0,
+        "stale": 10,
+        "missing": 0,
+        "invalid": 0,
+        "oldest_age_seconds": 94086.37385463715,
+        "latest_age_seconds": 94075.28772258759,
+        "ttl_seconds": 86400
+      },
+      "kline": {
+        "fresh": 0,
+        "stale": 10,
+        "missing": 0,
+        "invalid": 0,
+        "oldest_age_seconds": 94074.62157320976,
+        "latest_age_seconds": 94066.75460553169,
+        "ttl_seconds": 86400
+      },
+      "valuation": {
+        "fresh": 0,
+        "stale": 10,
+        "missing": 0,
+        "invalid": 0,
+        "oldest_age_seconds": 94065.32201457024,
+        "latest_age_seconds": 94064.04565930367,
+        "ttl_seconds": 86400
+      },
+      "risk": {
+        "fresh": 0,
+        "stale": 10,
+        "missing": 0,
+        "invalid": 0,
+        "oldest_age_seconds": 94062.76770496368,
+        "latest_age_seconds": 94062.62273693085,
+        "ttl_seconds": 86400
+      }
+    },
+    "fresh": 0,
+    "stale": 50,
+    "missing": 0,
+    "invalid": 0,
+    "total_slots": 50
+  },
+  "warm_cache": true,
+  "cache_status": {
+    "cache_warm": true,
+    "data_freshness": {
+      "policy": "allow_stale",
+      "by_dimension": {
+        "basic": {
+          "fresh": 0,
+          "stale": 10,
+          "missing": 0,
+          "invalid": 0,
+          "oldest_age_seconds": 19703.458835601807,
+          "latest_age_seconds": 19703.4495241642,
+          "ttl_seconds": 7200
+        },
+        "financials": {
+          "fresh": 0,
+          "stale": 10,
+          "missing": 0,
+          "invalid": 0,
+          "oldest_age_seconds": 94086.37385463715,
+          "latest_age_seconds": 94075.28772258759,
+          "ttl_seconds": 86400
+        },
+        "kline": {
+          "fresh": 0,
+          "stale": 10,
+          "missing": 0,
+          "invalid": 0,
+          "oldest_age_seconds": 94074.62157320976,
+          "latest_age_seconds": 94066.75460553169,
+          "ttl_seconds": 86400
+        },
+        "valuation": {
+          "fresh": 0,
+          "stale": 10,
+          "missing": 0,
+          "invalid": 0,
+          "oldest_age_seconds": 94065.32201457024,
+          "latest_age_seconds": 94064.04565930367,
+          "ttl_seconds": 86400
+        },
+        "risk": {
+          "fresh": 0,
+          "stale": 10,
+          "missing": 0,
+          "invalid": 0,
+          "oldest_age_seconds": 94062.76770496368,
+          "latest_age_seconds": 94062.62273693085,
+          "ttl_seconds": 86400
+        }
+      },
+      "fresh": 0,
+      "stale": 50,
+      "missing": 0,
+      "invalid": 0,
+      "total_slots": 50
+    },
+    "cache_hits": 50,
+    "cache_expired": 50,
+    "cache_missing": 0,
+    "total_slots": 50,
+    "warm_cache": true
+  },
+  "coverage": "partial_market",
+  "mode": "live",
+  "timing": {
+    "total_elapsed_seconds": 0.0072907499998109415,
+    "l1_elapsed_seconds": 0.0060755420054192655,
+    "l2_elapsed_seconds": 0.0012143330022809096
+  },
+  "funnel": {
+    "total": 10,
+    "after_hard_gates": 3,
+    "after_factors": 3,
+    "after_heat_filter": 2,
+    "l2_input": 2,
+    "l2_deep_dive": 0,
+    "l2_watch": 0,
+    "l2_skip": 0,
+    "l2_error": 2,
+    "l2_degraded": 0
+  },
+  "field_availability": {
+    "rate": 1.0,
+    "checked_fields": [
+      "ticker",
+      "f_score",
+      "adjusted_composite",
+      "pe_ttm",
+      "pb",
+      "pledge_ratio"
+    ],
+    "total_fields": 12,
+    "missing_count": 0
+  },
+  "cost": {
+    "measured_yuan": 0.0,
+    "equivalent_full_yuan": 0.0,
+    "call_count": 0,
+    "cache_hits": 0,
+    "total_tokens": 0
+  },
+  "exceptions": {
+    "unhandled_count": 0,
+    "error_details": [
+      {
+        "ticker": "000001.SZ",
+        "input_index": null,
+        "reason": "insufficient_data",
+        "stage": "scout"
+      },
+      {
+        "ticker": "000012.SZ",
+        "input_index": null,
+        "reason": "insufficient_data",
+        "stage": "scout"
+      }
+    ]
+  },
+  "observed_metrics": {
+    "total_elapsed_seconds": 0.0072907499998109415,
+    "l1_elapsed_seconds": 0.0060755420054192655,
+    "l2_elapsed_seconds": 0.0012143330022809096,
+    "l2_cost": {
+      "measured_yuan": 0.0,
+      "equivalent_full_yuan": 0.0,
+      "call_count": 0,
+      "cache_hits": 0,
+      "total_tokens": 0
+    },
+    "reference_thresholds": {
+      "max_elapsed_minutes": 15,
+      "max_l2_cost_yuan": 2.0
+    }
+  },
+  "run_config": {
+    "exclude_cyclicals": false,
+    "force_l2": false,
+    "freshness_policy": "allow_stale",
+    "semaphore_concurrency": 20,
+    "l2_timeout_seconds": 60.0,
+    "ticker_count": 10,
+    "ticker_source": "universe_file:data/universe_full.json; akshare.stock_info_a_code_name(5542 total) filtered SH/SZ (5208 total); BJ excluded by scope; generated_at=2026-08-11T19:32:14[--max 10]"
+  },
+  "gate_thresholds": {
+    "min_field_availability": 0.95,
+    "max_unhandled_exceptions": 0,
+    "reference_max_elapsed_minutes": 15,
+    "reference_max_l2_cost_yuan": 2.0
+  },
+  "hard_gate_passed": true,
+  "metrics_gate_passed": true,
+  "gate_passed": false,
+  "evidence_notes": [
+    "coverage=partial_market: 本次输入 10 只（ticker_source=universe_file:data/universe_full.json; akshare.stock_info_a_code_name(5542 total) filtered SH/SZ (5208 total); BJ excluded by scope; generated_at=2026-08-11T19:32:14[--max 10]），不是完整可交易 A 股集合；耗时/成本/可用率结论仅对该输入集合成立。",
+    "本次存在 50 个 stale 数据槽位；freshness_policy=allow_stale。"
+  ]
+}

@@ -921,6 +921,39 @@ def test_error_results_satisfy_full_result_contract():
     assert CONTRACT_FIELDS <= set(dd.keys())
 
 
+def test_scout_parse_error_is_explicit_l2_error():
+    """解析失败应计入 parse error，而不是因缺 one_liner 落入 unexpected_exception."""
+    candidates = [{"ticker": "600587"}]
+
+    async def mock_call(snapshot, system):
+        return ("not-json", LLM_USAGE)
+
+    def mock_assemble(ticker, **kwargs):
+        return _basic_features(ticker)
+
+    with patch("scout.batch.call_llm_snapshot", new=mock_call):
+        with patch("scout.batch.assemble_snapshot", new=mock_assemble):
+            with patch("scout.batch.ScoutCache") as mock_cache_cls:
+                mock_cache_cls.return_value.get.return_value = None
+                full_results, usage, failure = asyncio.run(
+                    scout_batch(candidates, force=True)
+                )
+
+    assert usage["call_count"] == 1
+    assert len(full_results) == 1
+    result = full_results[0]
+    assert result["verdict"] == "error"
+    assert result["stage"] == "parse"
+    assert result["one_liner"] == "LLM 输出解析失败"
+    assert failure["unhandled_exceptions"] == 0
+    assert failure["errors"] == [{
+        "ticker": "600587",
+        "input_index": None,
+        "reason": "LLM 输出解析失败",
+        "stage": "parse",
+    }]
+
+
 # ============================================================
 # g1-canonical-run-identity: scout_batch 继承 run_id（design D2 + Migration 5）
 # ============================================================

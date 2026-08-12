@@ -38,10 +38,26 @@ def parse_scout_output(raw_json: str) -> dict:
     try:
         data = json.loads(raw_json)
     except (json.JSONDecodeError, TypeError):
-        return {"verdict": "watch", "confidence": 0, "parse_error": True}
+        return {
+            "verdict": "watch",
+            "confidence": 0,
+            "one_liner": "",
+            "red_flags": [],
+            "green_flags": [],
+            "anti_trap_flags": [],
+            "parse_error": True,
+        }
 
     if not isinstance(data, dict):
-        return {"verdict": "watch", "confidence": 0, "parse_error": True}
+        return {
+            "verdict": "watch",
+            "confidence": 0,
+            "one_liner": "",
+            "red_flags": [],
+            "green_flags": [],
+            "anti_trap_flags": [],
+            "parse_error": True,
+        }
 
     # 提取字段（缺省值）
     verdict = data.get("verdict")

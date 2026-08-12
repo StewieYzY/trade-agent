@@ -6,7 +6,7 @@
 - L2 成本双口径（实测 + 等效全量，含 cache_hits>0 外推，review P2-4）
 - 未处理异常显式暴露
 - 完整漏斗、降级分布、失败分布、运行配置、coverage/evidence_notes
-- gate_passed 四维度全达标才为 true（含 elapsed/cost 失败分支，review P2-4）
+- hard_gate_passed 只由字段可用率和未处理异常决定
 - _check_cache_warmth 真实逻辑（review P2-4）
 - save_evidence_bundle 落盘与 build_failure_bundle 失败证据（review P2-4）
 - candidate 投影保留 pledge_status provenance（canonical None + status）
@@ -98,11 +98,21 @@ def _warmth_mock(warm=True, total_slots=15):
     return patch(
         "performance.run_evidence._check_cache_warmth",
         return_value={
+            "cache_warm": warm,
             "warm_cache": warm,
             "cache_hits": total_slots if warm else 0,
             "cache_expired": 0,
             "cache_missing": 0 if warm else total_slots,
             "total_slots": total_slots,
+            "data_freshness": {
+                "policy": "require_fresh",
+                "fresh": total_slots if warm else 0,
+                "stale": 0,
+                "missing": 0 if warm else total_slots,
+                "invalid": 0,
+                "total_slots": total_slots,
+                "by_dimension": {},
+            },
         },
     )
 
@@ -362,6 +372,39 @@ def test_unhandled_exceptions_makes_gate_fail():
     assert bundle["gate_passed"] is False
 
 
+def test_l2_business_errors_remain_visible_when_unhandled_is_zero():
+    """L2 error 分布必须保留；unhandled=0 不等于没有业务错误."""
+    from performance.run_evidence import run_full_market_evidence
+
+    l1_output = _make_l1_output()
+    l2_results, usage, failure = _make_l2_output(n=3)
+    l2_results[1]["verdict"] = "error"
+    failure["errors"] = [{
+        "ticker": "600001.SH",
+        "input_index": 1,
+        "reason": "LLM 输出解析失败",
+        "stage": "parse",
+    }]
+
+    with patch("performance.run_evidence.screen_a_shares", return_value=l1_output), \
+         patch(
+             "performance.run_evidence.scout_batch",
+             new_callable=AsyncMock,
+             return_value=(l2_results, usage, failure),
+         ), \
+         _warmth_mock():
+        bundle = asyncio.run(run_full_market_evidence(
+            ["600000", "600001", "600002"],
+            coverage="full_market",
+        ))
+
+    assert bundle["hard_gate_passed"] is True
+    assert bundle["gate_passed"] is True
+    assert bundle["funnel"]["l2_error"] == 1
+    assert bundle["exceptions"]["unhandled_count"] == 0
+    assert bundle["exceptions"]["error_details"] == failure["errors"]
+
+
 # ==================== 2.6 漏斗/降级/失败分布/运行配置/coverage ====================
 
 
@@ -426,7 +469,7 @@ def test_evidence_bundle_has_run_identity():
 
 
 def test_metrics_gate_passed_true_when_all_criteria_met():
-    """四维度全达标时 metrics_gate_passed 为 true；partial 仍不关闭 full-market Gate."""
+    """硬 Gate 达标时 metrics_gate_passed 为 true；partial 仍不关闭 full-market Gate."""
     from performance.run_evidence import run_full_market_evidence
 
     l1_output = _make_l1_output()
@@ -443,9 +486,9 @@ def test_metrics_gate_passed_true_when_all_criteria_met():
     assert bundle["metrics_gate_passed"] is True
     assert bundle["gate_passed"] is False
     thresholds = bundle["gate_thresholds"]
-    assert thresholds["max_elapsed_minutes"] == 15
+    assert thresholds["reference_max_elapsed_minutes"] == 15
     assert thresholds["min_field_availability"] == 0.95
-    assert thresholds["max_l2_cost_yuan"] == 2.0
+    assert thresholds["reference_max_l2_cost_yuan"] == 2.0
     assert thresholds["max_unhandled_exceptions"] == 0
 
 
@@ -490,28 +533,28 @@ def test_gate_passed_false_when_availability_below_threshold():
     assert bundle["gate_passed"] is False
 
 
-def test_judge_gate_elapsed_failure_branch():
-    """耗时 > 15min 时 gate_passed 为 false（review P2-4 补测）."""
+def test_observed_elapsed_over_reference_does_not_block_hard_gate():
+    """耗时超过参考值仍不阻断硬 Gate."""
     from performance.run_evidence import _judge_gate
 
     timing = {"total_elapsed_seconds": 16 * 60, "l1_elapsed_seconds": 900, "l2_elapsed_seconds": 60}
     avail = {"rate": 1.0}
     cost = {"measured_yuan": 0.1}
-    assert _judge_gate(timing, avail, cost, 0) is False
+    assert _judge_gate(timing, avail, cost, 0) is True
 
 
-def test_judge_gate_cost_failure_branch():
-    """成本 > ¥2 时 gate_passed 为 false（review P2-4 补测）."""
+def test_observed_cost_over_reference_does_not_block_hard_gate():
+    """成本超过参考值仍不阻断硬 Gate."""
     from performance.run_evidence import _judge_gate
 
     timing = {"total_elapsed_seconds": 60, "l1_elapsed_seconds": 30, "l2_elapsed_seconds": 30}
     avail = {"rate": 1.0}
     cost = {"measured_yuan": 2.5}
-    assert _judge_gate(timing, avail, cost, 0) is False
+    assert _judge_gate(timing, avail, cost, 0) is True
 
 
 def test_judge_gate_boundary_values_pass():
-    """边界值（恰好等于阈值）SHALL 判 pass（≤/≥ 语义）."""
+    """字段可用率和异常硬阈值边界 SHALL 判 pass."""
     from performance.run_evidence import _judge_gate
 
     timing = {"total_elapsed_seconds": 15 * 60, "l1_elapsed_seconds": 800, "l2_elapsed_seconds": 100}
@@ -527,14 +570,21 @@ def _write_cache_entry(base: Path, ticker: str, dim: str, age_seconds: float = 0
     d = base / ticker
     d.mkdir(parents=True, exist_ok=True)
     p = d / f"{dim}.json"
-    p.write_text(json.dumps({"ok": True}), encoding="utf-8")
+    payloads = {
+        "basic": {"code": ticker, "name": "n", "price": 1, "pe": 1, "pb": 1, "market_cap": 1},
+        "financials": {"years": ["2025"], "income": {}, "balance_sheet": {}, "cash_flow": {}},
+        "kline": {"dates": ["2026-08-11"], "close": [1], "volume": [1], "turnover_rate": [1]},
+        "valuation": {"pe_ttm": 1, "pb": 1, "pe_percentile_5y": 1, "pb_percentile_5y": 1},
+        "risk": {"pledge_ratio": None, "pledge_status": "record_not_found"},
+    }
+    p.write_text(json.dumps(payloads[dim]), encoding="utf-8")
     if age_seconds > 0:
         t = time.time() - age_seconds
         os.utime(p, (t, t))
 
 
 def test_check_cache_warmth_all_warm(tmp_path):
-    """全部维度缓存未过期 → warm_cache=true."""
+    """全部维度缓存结构有效 → cache_warm=true."""
     from performance.run_evidence import _check_cache_warmth
     from screener.main import G1_QUANT_DIMENSIONS
 
@@ -544,14 +594,14 @@ def test_check_cache_warmth_all_warm(tmp_path):
             _write_cache_entry(tmp_path, t, dim)
 
     status = _check_cache_warmth(tickers, cache_base=tmp_path)
-    assert status["warm_cache"] is True
-    assert status["cache_hits"] == len(tickers) * len(G1_QUANT_DIMENSIONS)
-    assert status["cache_expired"] == 0
-    assert status["cache_missing"] == 0
+    assert status["cache_warm"] is True
+    assert status["data_freshness"]["fresh"] == len(tickers) * len(G1_QUANT_DIMENSIONS)
+    assert status["data_freshness"]["stale"] == 0
+    assert status["data_freshness"]["missing"] == 0
 
 
 def test_check_cache_warmth_expired_and_missing(tmp_path):
-    """过期与缺失 SHALL 分别计数，warm_cache=false."""
+    """过期文件仍可 warm，但 freshness SHALL 标记 stale."""
     from performance.run_evidence import _check_cache_warmth
     from screener.main import G1_QUANT_DIMENSIONS
 
@@ -561,11 +611,68 @@ def test_check_cache_warmth_expired_and_missing(tmp_path):
     _write_cache_entry(tmp_path, "600001", "financials", age_seconds=30 * 24 * 3600)
 
     status = _check_cache_warmth(tickers, cache_base=tmp_path)
-    assert status["warm_cache"] is False
-    assert status["cache_hits"] == 1
-    assert status["cache_expired"] == 1
-    assert status["cache_missing"] == len(G1_QUANT_DIMENSIONS) - 2
-    assert status["total_slots"] == len(G1_QUANT_DIMENSIONS)
+    assert status["cache_warm"] is False
+    assert status["data_freshness"]["fresh"] == 1
+    assert status["data_freshness"]["stale"] == 1
+    assert status["data_freshness"]["missing"] == len(G1_QUANT_DIMENSIONS) - 2
+    assert status["data_freshness"]["total_slots"] == len(G1_QUANT_DIMENSIONS)
+
+
+def test_invalid_cache_is_not_warm(tmp_path):
+    """JSON 可读但不满足维度最低结构合同 → invalid 且不可 warm."""
+    from performance.run_evidence import _check_cache_warmth
+    from screener.main import G1_QUANT_DIMENSIONS
+
+    for dim in G1_QUANT_DIMENSIONS:
+        _write_cache_entry(tmp_path, "600001", dim)
+    (tmp_path / "600001" / "kline.json").write_text("{}", encoding="utf-8")
+
+    status = _check_cache_warmth(["600001"], cache_base=tmp_path)
+    assert status["cache_warm"] is False
+    assert status["data_freshness"]["invalid"] == 1
+
+
+def test_allow_stale_cache_reads_without_provider(tmp_path):
+    """allow_stale 真实 fetch_all 读取 stale 缓存时不触发 provider."""
+    from data.cache.manager import CacheManager
+    from data.lib.batch_fetcher import BatchFetcher
+    from data.fetchers.basic import BasicFetcher
+
+    _write_cache_entry(tmp_path, "600001", "basic", age_seconds=30 * 24 * 3600)
+    manager = CacheManager(tmp_path)
+    with patch.object(BasicFetcher, "fetch_with_fallback") as provider:
+        result = BatchFetcher(
+            cache=manager,
+            freshness_policy="allow_stale",
+        ).fetch_all(["600001"], dimensions=["basic"])
+    provider.assert_not_called()
+    assert result["600001"]["basic"]["code"] == "600001"
+
+
+def test_require_fresh_rejects_invalid_json_structure_and_calls_provider(tmp_path):
+    """require_fresh 不能复用 JSON 合法但结构无效的缓存."""
+    from data.cache.manager import CacheManager
+    from data.lib.batch_fetcher import BatchFetcher
+    from data.fetchers.basic import BasicFetcher
+
+    cache_dir = tmp_path / "cache" / "600001"
+    cache_dir.mkdir(parents=True)
+    (cache_dir / "basic.json").write_text(json.dumps({"code": "600001"}), encoding="utf-8")
+    replacement = {
+        "code": "600001",
+        "name": "replacement",
+        "price": 1.0,
+        "pe": 1.0,
+        "pb": 1.0,
+        "market_cap": 1.0,
+    }
+    with patch.object(BasicFetcher, "fetch_with_fallback", return_value=replacement) as provider:
+        result = BatchFetcher(
+            cache=CacheManager(tmp_path / "cache"),
+            freshness_policy="require_fresh",
+        ).fetch_all(["600001"], dimensions=["basic"])
+    provider.assert_called_once_with("600001")
+    assert result["600001"]["basic"] == replacement
 
 
 def test_check_cache_warmth_does_not_create_missing_ticker_dirs(tmp_path):
@@ -634,6 +741,7 @@ def test_build_failure_bundle_structure():
         bundle = build_failure_bundle(e, elapsed_seconds=12.5, ticker_count=100)
 
     assert bundle["run_failed"] is True
+    assert bundle["hard_gate_passed"] is False
     assert bundle["gate_passed"] is False
     assert bundle["failure"]["error"] == "provider down"
     assert "RuntimeError" in bundle["failure"]["traceback"]
@@ -670,7 +778,7 @@ def test_warm_cache_reflects_l1_precheck_not_l2_hits():
 
 
 def test_cold_l1_cache_generates_evidence_note():
-    """L1 缓存未全暖时 SHALL 在 evidence_notes 标注耗时含真实采集."""
+    """本地缓存不可用时 SHALL 在 evidence_notes 显式标注."""
     from performance.run_evidence import run_full_market_evidence
 
     l1_output = _make_l1_output()
@@ -682,7 +790,7 @@ def test_cold_l1_cache_generates_evidence_note():
         bundle = asyncio.run(run_full_market_evidence(["600000", "600001", "600002"]))
 
     assert bundle["warm_cache"] is False
-    assert any("L1 数据缓存未全暖" in n for n in bundle["evidence_notes"])
+    assert any("L1 本地缓存不可用" in n for n in bundle["evidence_notes"])
 
 
 if __name__ == "__main__":
