@@ -17,10 +17,10 @@
 > 架构决策：`design/architecture-decisions.md`
 >
 > runtime/integration baseline：
-> `d0aaf9e merge: integrate g1 full-market performance evidence`
+> `ec47837 docs(g1): sync full-market gate status`
 >
 > 当前 main/docs baseline：
-> `main@d0aaf9e`，已 push 至 `origin/main`
+> `main@ec47837`，已 push 至 `origin/main`
 >
 > 当前 GitHub 审查入口：
 > `PR #1 codex/mainline-sync-2026-08-05 → main`
