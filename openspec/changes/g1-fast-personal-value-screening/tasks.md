@@ -24,9 +24,9 @@
 
 ## 5. 全市场工程 Gate
 
-- [ ] 5.1 建立并归档全市场 performance/cost child change
-- [ ] 5.2 完成一次真实全市场 L1+L2 运行，证明关键字段可用率 ≥95%、未处理异常为 0；同时保存总耗时与 L2 实测成本观测值及 15 分钟/¥2 参考阈值。`cache_warm` 与 `data_freshness` 必须分开记录，不能以 TTL 过期单独否定本地可计算性
-- [ ] 5.3 保存完整漏斗、降级分布、失败分布和运行配置证据
+- [x] 5.1 建立并归档全市场 performance/cost child change：`g1-full-market-performance-cost` 已归档并合入 `main@d0aaf9e`
+- [x] 5.2 完成一次真实全市场 L1+L2 运行，证明关键字段可用率 ≥95%、未处理异常为 0；同时保存总耗时与 L2 实测成本观测值及 15 分钟/¥2 参考阈值。`cache_warm` 与 `data_freshness` 必须分开记录，不能以 TTL 过期单独否定本地可计算性。归档证据：`openspec/changes/archive/2026-08-12-g1-full-market-performance-cost/evidence/2026-08-12_7887d515.json`，沪深 5208 只、北交所排除、字段可用率 100%、未处理异常 0
+- [x] 5.3 保存完整漏斗、降级分布、失败分布和运行配置证据。证据索引：`openspec/changes/archive/2026-08-12-g1-full-market-performance-cost/evidence-index.md`
 
 ## 6. 产品 Gate
 

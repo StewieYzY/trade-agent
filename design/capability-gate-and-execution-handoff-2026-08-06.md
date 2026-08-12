@@ -17,21 +17,20 @@
 > 架构决策：`design/architecture-decisions.md`
 >
 > runtime/integration baseline：
-> `9a3a779 feat(g1): add staged screening runtime`
+> `d0aaf9e merge: integrate g1 full-market performance evidence`
 >
 > 当前 main/docs baseline：
-> `9a3a779 feat(g1): add staged screening runtime`
+> `main@d0aaf9e`，已 push 至 `origin/main`
 >
 > 当前 GitHub 审查入口：
 > `PR #1 codex/mainline-sync-2026-08-05 → main`
 >
 > 当前直接执行阶段：
-> Queue 1 repair closure complete：`R-G1-001`、`R-G1-002`、`R-G1-003`、
-> `R-G1-004` 已 closed；`g1-canonical-snapshot-consumer` 已 archived /
-> integrated at `main@2777e7e`，consumer capability child = closed；
-> `g1-staged-screening-runtime` 已 archived / integrated at `main@9a3a779`，
-> staged runtime child = closed；下一阶段为 Track A
-> `g1-300-sample-validation`
+> `g1-full-market-performance-cost` 已 archived / integrated at
+> `main@d0aaf9e`；其归档 evidence 保留在
+> `openspec/changes/archive/2026-08-12-g1-full-market-performance-cost/evidence/`。
+> M3 的 5.1、5.2、5.3 已有证据闭环；4.1、4.2 仍未闭环，不能开始
+> `g1-top20-style-review`。当前不得宣称 G1 capability passed。
 
 ## 1. 本文件的唯一权威地位
 
@@ -293,6 +292,7 @@ scope:
 | `g1-fast-personal-value-screening` | 6/16 | in-progress | G1 umbrella 未通过 |
 | `g1-canonical-snapshot-consumer` | 10/10 | archived / integrated at `main@2777e7e` | consumer capability child closed |
 | `g1-staged-screening-runtime` | complete | archived / integrated at `main@9a3a779` | staged runtime child closed |
+| `g1-full-market-performance-cost` | archived | archived / integrated at `main@d0aaf9e` | M3 5.1/5.2/5.3 closed; evidence preserved |
 | `g3-holding-discipline` | 0/29 | in-progress | design 可继续，runtime 锁定 |
 
 任务勾选只表示旧 tasks 已完成。独立 review 发现合同缺口后，必须先更新原 active
@@ -817,14 +817,24 @@ M2: not passed
 2. `g1-full-market-performance-cost`
 3. `g1-top20-style-review`
 
-Gate：
+当前状态：
+
+- `g1-full-market-performance-cost` 已归档并合入 `main@d0aaf9e`
+- 真实受控证据覆盖沪深 5208 只，明确排除北交所
+- 字段可用率 100%，未处理异常 0；总耗时与 L2 实测成本已作为观测指标保存
+- 完整漏斗、降级分布、失败分布和运行配置已归档
+- 4.1/4.2 尚无足够的真实 300+ 分层样本运行证据，不能以 full-market evidence 替代
+- G1 capability 仍为 `not passed`
+
+Gate 组成：
 
 ```text
 300+ 多行业样本
-warm-cache 全市场 ≤15 分钟
-关键字段可用率 ≥95%
-L2 成本 ≤¥2
+warm-cache 全市场真实运行
+关键字段可用率 ≥95%（硬性）
 未处理异常 = 0
+总耗时（观测指标，15 分钟为参考阈值）
+L2 成本（观测指标，¥2 为参考阈值）
 Top 20 用户复核 ≥70% 值得进一步研究
 ```
 
@@ -974,10 +984,14 @@ fixture reproduction 为证据。该外部工具问题不登记为项目 Repair 
 
 ### Live evidence
 
+- `g1-full-market-performance-cost` 的最终 evidence 已归档并纳入
+  `main@d0aaf9e`，索引为
+  `openspec/changes/archive/2026-08-12-g1-full-market-performance-cost/evidence-index.md`；
+- 该 evidence 证明 M3 5.1、5.2、5.3，不能证明 4.1、4.2 或 Top 20；
 - historical health runs 均不足以作为当前 promotion/G1 Gate；
 - 当前 head 没有 completed live qualification/promotion；
 - fixture/reference 不替代 live evidence；
-- deterministic repair closed 前禁止新 live run。
+- 在 4.1、4.2 正式闭环前，不创建 `g1-top20-style-review`。
 
 ## 22. 当前唯一允许动作
 
@@ -987,7 +1001,11 @@ Queue 1 repair closure 已完成：`R-G1-001`、`R-G1-002`、`R-G1-003`、
 `main@2777e7e`，consumer capability child = closed。
 `g1-staged-screening-runtime` 已完成实现、验证、归档并合入
 `main@9a3a779`，staged runtime child = closed。
-下一步按 Track A 处理现有 `g1-300-sample-validation` WIP。
+`g1-full-market-performance-cost` 已完成实现、独立 review、归档并合入
+`main@d0aaf9e`，M3 5.1/5.2/5.3 = closed，证据已保留。
+下一步仅允许对现有 `g1-300-sample-validation` WIP 做真实 300+ 分层样本
+证据核验/补证；不得新增重复 selector，也不得提前创建
+`g1-top20-style-review`。
 
 ## 23. 下一窗口启动方式
 
