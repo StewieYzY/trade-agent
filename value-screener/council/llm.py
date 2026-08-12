@@ -23,6 +23,8 @@ import os
 
 import httpx
 
+LIGHT_LLM_TIMEOUT_SECONDS = 60.0
+
 
 def _get_model_for_level(reasoning_level: str) -> str:
     """根据推理等级返回对应的模型名称.
@@ -182,4 +184,9 @@ async def call_llm_light(
     """
     # fail-fast: 复用 _get_model_for_level 的通用 env 检查 + light 特定检查
     model = _get_model_for_level("light")
-    return await _http_call(system_prompt, snapshot, model, timeout=60.0)
+    return await _http_call(
+        system_prompt,
+        snapshot,
+        model,
+        timeout=LIGHT_LLM_TIMEOUT_SECONDS,
+    )

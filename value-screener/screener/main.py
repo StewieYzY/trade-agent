@@ -30,7 +30,11 @@ from .profile import PROFILE_VERSION
 G1_QUANT_DIMENSIONS = ("basic", "financials", "kline", "valuation", "risk")
 
 
-def screen_a_shares(tickers: list[str], exclude_cyclicals: bool = False) -> dict[str, Any]:
+def screen_a_shares(
+    tickers: list[str],
+    exclude_cyclicals: bool = False,
+    freshness_policy: str = "require_fresh",
+) -> dict[str, Any]:
     """全市场 A 股量化筛选.
 
     Args:
@@ -58,7 +62,7 @@ def screen_a_shares(tickers: list[str], exclude_cyclicals: bool = False) -> dict
     # g1-staged-fetch-boundary：显式传 G1 量化五维白名单，不依赖 fetch_all 的
     # dimensions=None 全采兜底（会默认采 dossier 三维 main_business/peers/research，
     # 这三维属 G2/L3 深研路径，L1/L2 漏斗从不读取，全市场路径下是纯浪费 + 反爬风险）。
-    fetcher = BatchFetcher()
+    fetcher = BatchFetcher(freshness_policy=freshness_policy)
     all_data = fetcher.fetch_all(tickers, dimensions=G1_QUANT_DIMENSIONS)
 
     # R2: 计算行业 PE 中位数（用于 PE 行业折价估值锚）
@@ -145,7 +149,12 @@ def screen_a_shares(tickers: list[str], exclude_cyclicals: bool = False) -> dict
             "graham_number": valuation.get("graham_number"),
             "pe_ttm": valuation.get("pe_ttm"),
             "pb": valuation.get("pb"),
-            "pledge_ratio": risk.get("pledge_ratio")
+            # g1-full-market-performance-cost (review P1-1 方案 A): pledge_ratio 保持
+            # canonical「None + status」契约（data-minimum-contract: MUST NOT 用"视为 0"
+            # 掩盖）。投影额外携带 pledge_status，保留 record_not_found（known-zero）
+            # 与 source_failed（provider 失败）的 provenance。
+            "pledge_ratio": risk.get("pledge_ratio"),
+            "pledge_status": risk.get("pledge_status")
         })
 
     # g1-canonical-run-identity: L1 唯一生成 run_id（uuid4 每次唯一，D2 纠正）+

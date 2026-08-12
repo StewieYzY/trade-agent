@@ -67,7 +67,8 @@ DCF 如缺少每股口径、净债务、总股本和假设敏感性验证，必�
 ## Risks / Trade-offs
 
 - [Risk] Top 20 的 70% 人工复核带有主观性 → 预先固定 ScreeningProfile 版本、候选展示格式和评价标签，并保留用户逐只理由。
-- [Risk] warm-cache 15 分钟不能代表冷启动表现 → 同时记录 cold/warm 指标，但日常 Gate 以可重复的 warm-cache 场景为准。
+- [Risk] 耗时与成本是规模和 provider 配置相关的观测值 → evidence 必须真实记录总耗时、L1/L2 分阶段耗时、L2 token 成本及 15 分钟/¥2 参考阈值，但本 G1 M3 child 的硬 Gate 只由字段可用率 ≥95% 与未处理异常 =0 决定。
+- [Risk] cache TTL 与本地可计算性不是同一概念 → evidence 同时记录 `cache_warm`（文件/JSON/结构合同）与 `data_freshness`（fresh/stale/missing/invalid）；生产刷新遵循 freshness policy，受控验证可 allow_stale。
 - [Risk] 数据源在全市场运行时出现大面积降级 → 将 availability、degraded、error 分开统计，未达到 95% 时不允许用 shortlist 掩盖。
 - [Risk] 为追求通过率而持续调低规则 → 所有阈值变更必须形成新 profile version，并重跑同一验证样本比较候选漂移。
 - [Trade-off] 将完整 DCF 移出 G1 会减少一个“精细估值”信号 → 换取数值可靠性和全市场吞吐；完整估值保留给 G2。
