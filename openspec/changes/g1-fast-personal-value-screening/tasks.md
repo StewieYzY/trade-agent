@@ -19,8 +19,8 @@
 
 ## 4. 规模预检
 
-- [ ] 4.1 固定不少于 300 只、覆盖多行业与不同风险类型的验证样本
-- [ ] 4.2 完成样本运行，证明关键字段可用率、失败隔离和 verdict 分布满足进入全市场实跑的前置条件
+- [x] 4.1 固定不少于 300 只、覆盖多行业与不同风险类型的验证样本。归档索引：`openspec/changes/g1-fast-personal-value-screening/evidence/g1-300-live-validation/evidence-index.md`；真实样本与固定 universe 的可复核副本保存在同目录。样本为 300 只沪深股票，覆盖 33 个行业及 ST、小市值、负 PE、60 日过热风险类型，北交所排除。
+- [x] 4.2 完成样本运行，证明关键字段可用率、失败隔离和 verdict 分布满足进入全市场实跑的前置条件。归档 L1/L2 evidence：`openspec/changes/g1-fast-personal-value-screening/evidence/g1-300-live-validation/2026-08-12_d32b4444.json`；字段可用率 100%、未处理异常 0，L2 verdict 分布为 deep_dive=24、watch=97、skip=14、error=1、degraded=15。`600008.SH` 的 L2 解析错误被单票隔离并保留，未中断整批运行。本证据仅关闭规模预检前置条件，不代表 G1 capability passed。
 
 ## 5. 全市场工程 Gate
 
