@@ -490,5 +490,145 @@ def council(
     typer.echo(f"\n辩论记录已写入 debate/{normalized}/{date.today().isoformat()}.md")
 
 
+# ---------------------------------------------------------------------------
+# G1 产品 Gate（umbrella 6.1/6.2）：Top 20 派生与用户逐只复核
+# ---------------------------------------------------------------------------
+
+top20_app = typer.Typer(
+    name="top20",
+    help="G1 6.1/6.2 产品 Gate：固定 run 的 Top 20 派生与用户逐只复核（离线，无 provider/LLM 调用）",
+)
+app.add_typer(top20_app)
+
+TOP20_DEFAULT_OUTPUT_DIR = "data/evidence/g1-top20-style-review"
+
+
+@top20_app.command(name="derive")
+def top20_derive(
+    pinned: str = typer.Option(..., "--pinned", help="pinned run evidence bundle JSON 路径（通过工程 Gate 的固定 run）"),
+    output_dir: str = typer.Option(TOP20_DEFAULT_OUTPUT_DIR, "--output-dir", help="derivation 与复核模板输出目录"),
+    expected_sha256: str = typer.Option(None, "--expected-sha256", help="可选：pinned bundle 的 SHA-256 完整性校验"),
+    limit: int = typer.Option(20, "--limit", help="Top N 上限（缺省 20）"),
+):
+    """从 pinned bundle 的 input_tickers 离线再派生 L1 排序，产出 Top N 与用户复核模板.
+
+    allow_stale 只读本地缓存，不调用 provider/LLM。运行前先做缓存温暖度预检：
+    pinned 输入集合的 L1 缓存不完整（missing/invalid）时直接拒绝（exit 2），
+    绝不退回 provider 抓取。derivation 的 profile_version / input_ticker_set_hash /
+    漏斗必须与 pinned 一致，否则标记 not_evaluable（exit 2）。
+    """
+    import hashlib
+    from performance.run_evidence import _check_cache_warmth
+    from screener.main import screen_a_shares
+    from screener.top20_review import (
+        Top20ValidationError,
+        build_review_template,
+        derive_top20,
+        load_pinned_run,
+        save_json,
+    )
+
+    pinned_path = Path(pinned)
+    if not pinned_path.exists():
+        raise typer.BadParameter(f"pinned bundle not found: {pinned}")
+    if expected_sha256:
+        actual = hashlib.sha256(pinned_path.read_bytes()).hexdigest()
+        if actual != expected_sha256.lower():
+            raise typer.BadParameter(
+                f"pinned bundle SHA-256 不匹配: expected={expected_sha256} actual={actual}"
+            )
+
+    try:
+        pinned_run = load_pinned_run(pinned_path)
+    except Top20ValidationError as exc:
+        raise typer.BadParameter(str(exc))
+
+    typer.echo(
+        f"pinned run: {pinned_run['run_id']} profile={pinned_run['profile_version']} "
+        f"input_hash={pinned_run['input_ticker_set_hash']} tickers={len(pinned_run['input_tickers'])}"
+    )
+    warmth = _check_cache_warmth(pinned_run["input_tickers"])
+    if not warmth["cache_warm"]:
+        freshness = warmth["data_freshness"]
+        typer.echo(
+            "离线预检失败：pinned run 输入集合的本地 L1 缓存不完整"
+            f"（missing={freshness['missing']} invalid={freshness['invalid']} / "
+            f"total_slots={freshness['total_slots']}）。"
+            "缓存缺失时 allow_stale 会退回 provider 抓取，违反本 Gate 的离线约束；"
+            "请先恢复或经授权重建 pinned run 的数据快照后再执行 derive。",
+            err=True,
+        )
+        raise typer.Exit(code=2)
+
+    typer.echo("开始离线 L1 再派生（allow_stale，无 provider/LLM 调用）...")
+    l1_output = screen_a_shares(
+        pinned_run["input_tickers"],
+        freshness_policy="allow_stale",
+    )
+
+    derivation = derive_top20(pinned_run, l1_output, limit=limit)
+    out_dir = Path(output_dir)
+    derivation_path = save_json(derivation, out_dir / "top20_derivation.json")
+    typer.echo(f"derivation 已写入 {derivation_path}（status={derivation['status']}）")
+
+    if derivation["status"] != "derived":
+        for reason in derivation["reason"]:
+            typer.echo(f"  not_evaluable: {reason}")
+        raise typer.Exit(code=2)
+
+    template = build_review_template(derivation)
+    template_path = save_json(template, out_dir / "user_review_template.json")
+    typer.echo(f"用户复核模板已写入 {template_path}（{len(template['reviews'])} 只待逐只填写 label/reason）")
+
+
+@top20_app.command(name="finalize")
+def top20_finalize(
+    derivation: str = typer.Option(..., "--derivation", help="top20 derive 输出的 derivation JSON 路径"),
+    review: str = typer.Option(..., "--review", help="用户填写后的复核 JSON 路径"),
+    output: str = typer.Option(None, "--output", help="gate evidence 输出路径，缺省为 derivation 同目录 top20_gate_evidence.json"),
+):
+    """校验用户逐只复核记录并计算 Gate verdict.
+
+    exit code: 0=passed, 1=failed, 2=not_evaluable 或记录非法（不产出 evidence）。
+    失败与不可判定 MUST NOT 被写成 capability passed。
+    """
+    from screener.top20_review import (
+        Top20ValidationError,
+        finalize_top20,
+        save_json,
+    )
+
+    derivation_path = Path(derivation)
+    review_path = Path(review)
+    for path in (derivation_path, review_path):
+        if not path.exists():
+            raise typer.BadParameter(f"file not found: {path}")
+    try:
+        derivation_doc = json.loads(derivation_path.read_text(encoding="utf-8"))
+        review_doc = json.loads(review_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise typer.BadParameter(f"JSON 读取失败: {exc}")
+
+    try:
+        evidence = finalize_top20(derivation_doc, review_doc)
+    except Top20ValidationError as exc:
+        typer.echo(f"用户复核记录校验失败（Gate 未计算）: {exc}", err=True)
+        raise typer.Exit(code=2)
+
+    out_path = Path(output) if output else derivation_path.parent / "top20_gate_evidence.json"
+    save_json(evidence, out_path)
+    stats = evidence.get("statistics") or {}
+    typer.echo(
+        f"gate_verdict={evidence['gate_verdict']} "
+        f"worth={stats.get('worth_research_count')}/{stats.get('total_reviewed')} "
+        f"evidence={out_path}"
+    )
+    if evidence["gate_verdict"] == "passed":
+        raise typer.Exit(code=0)
+    if evidence["gate_verdict"] == "failed":
+        raise typer.Exit(code=1)
+    raise typer.Exit(code=2)
+
+
 if __name__ == "__main__":
     app()
