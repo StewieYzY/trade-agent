@@ -1,6 +1,6 @@
 # trade-agent Capability Gate 与完整执行 Handoff
 
-> 日期：2026-08-06
+> 日期：2026-08-13
 >
 > Master ID：`MASTER-2026-08-06`
 >
@@ -20,7 +20,7 @@
 > `ec47837 docs(g1): sync full-market gate status`
 >
 > 当前 main/docs baseline：
-> `main@ec47837`，已 push 至 `origin/main`
+> `main@85fb583`，已 push 至 `origin/main`
 >
 > 当前 GitHub 审查入口：
 > `PR #1 codex/mainline-sync-2026-08-05 → main`
@@ -29,8 +29,9 @@
 > `g1-full-market-performance-cost` 已 archived / integrated at
 > `main@d0aaf9e`；其归档 evidence 保留在
 > `openspec/changes/archive/2026-08-12-g1-full-market-performance-cost/evidence/`。
-> M3 的 5.1、5.2、5.3 已有证据闭环；4.1、4.2 仍未闭环，不能开始
-> `g1-top20-style-review`。当前不得宣称 G1 capability passed。
+> M3 的 4.1、4.2、5.1、5.2、5.3 已有证据闭环；6.1、6.2
+> 尚未完成，下一步允许创建并执行 `g1-top20-style-review`。
+> 当前不得宣称 G1 capability passed。
 
 ## 1. 本文件的唯一权威地位
 
@@ -289,7 +290,7 @@ scope:
 | `g2-deep-investment-thesis` | 0/27 | in-progress | G2 umbrella，含 M4.5 |
 | `f3c-r1-crosstalk-root-cause` | 5/17 | in-progress | M0 前置未闭 |
 | `g1-4-data-source-resilience` | 0/48 | in-progress | P2 已映射到既有 D1/D6 |
-| `g1-fast-personal-value-screening` | 6/16 | in-progress | G1 umbrella 未通过 |
+| `g1-fast-personal-value-screening` | 11/16 | in-progress | 4.1/4.2/5.1/5.2/5.3 已闭环；6.x 产品 Gate 与 7.x umbrella closure 未完成 |
 | `g1-canonical-snapshot-consumer` | 10/10 | archived / integrated at `main@2777e7e` | consumer capability child closed |
 | `g1-staged-screening-runtime` | complete | archived / integrated at `main@9a3a779` | staged runtime child closed |
 | `g1-full-market-performance-cost` | archived | archived / integrated at `main@d0aaf9e` | M3 5.1/5.2/5.3 closed; evidence preserved |
@@ -823,7 +824,10 @@ M2: not passed
 - 真实受控证据覆盖沪深 5208 只，明确排除北交所
 - 字段可用率 100%，未处理异常 0；总耗时与 L2 实测成本已作为观测指标保存
 - 完整漏斗、降级分布、失败分布和运行配置已归档
-- 4.1/4.2 尚无足够的真实 300+ 分层样本运行证据，不能以 full-market evidence 替代
+- 4.1 已通过真实 300 只沪深分层样本与固定 universe 证据闭环：覆盖 33 个行业及 ST、小市值、负 PE、60 日过热风险类型，北交所排除
+- 4.2 已通过真实样本 L1/L2 运行证据闭环：字段可用率 100%、未处理异常 0，`600008.SH` 的 L2 解析错误被单票隔离，完整 verdict 分布已保留
+- 4.1/4.2 归档索引：`openspec/changes/g1-fast-personal-value-screening/evidence/g1-300-live-validation/evidence-index.md`
+- 4.1/4.2 的证据只关闭规模预检前置条件，不替代 Top 20 产品 Gate，也不代表 G1 capability passed
 - G1 capability 仍为 `not passed`
 
 Gate 组成：
@@ -840,6 +844,9 @@ Top 20 用户复核 ≥70% 值得进一步研究
 
 ```text
 M3/G1 capability: not passed
+4.1/4.2: closed
+5.1/5.2/5.3: closed
+6.1/6.2: not started
 ```
 
 ## 16. M4：G2 Evidence Dossier Quality
@@ -987,11 +994,12 @@ fixture reproduction 为证据。该外部工具问题不登记为项目 Repair 
 - `g1-full-market-performance-cost` 的最终 evidence 已归档并纳入
   `main@d0aaf9e`，索引为
   `openspec/changes/archive/2026-08-12-g1-full-market-performance-cost/evidence-index.md`；
-- 该 evidence 证明 M3 5.1、5.2、5.3，不能证明 4.1、4.2 或 Top 20；
+- 该 full-market evidence 证明 M3 5.1、5.2、5.3，不能替代 4.1/4.2 的独立证据，也不能证明 Top 20；
 - historical health runs 均不足以作为当前 promotion/G1 Gate；
 - 当前 head 没有 completed live qualification/promotion；
 - fixture/reference 不替代 live evidence；
-- 在 4.1、4.2 正式闭环前，不创建 `g1-top20-style-review`。
+- 当前 4.1/4.2 已由独立真实样本 evidence 闭环；下一步可创建
+  `g1-top20-style-review`，但仍不能把任何前置 evidence 描述为 G1 capability passed。
 
 ## 22. 当前唯一允许动作
 
@@ -1003,9 +1011,9 @@ Queue 1 repair closure 已完成：`R-G1-001`、`R-G1-002`、`R-G1-003`、
 `main@9a3a779`，staged runtime child = closed。
 `g1-full-market-performance-cost` 已完成实现、独立 review、归档并合入
 `main@d0aaf9e`，M3 5.1/5.2/5.3 = closed，证据已保留。
-下一步仅允许对现有 `g1-300-sample-validation` WIP 做真实 300+ 分层样本
-证据核验/补证；不得新增重复 selector，也不得提前创建
-`g1-top20-style-review`。
+下一步仅允许在 `main@85fb583` 基线上创建并执行
+`g1-top20-style-review`，完成 6.1/6.2；不得把本次 4.1/4.2
+证据或 full-market evidence 描述为 G1 capability passed。
 
 ## 23. 下一窗口启动方式
 
