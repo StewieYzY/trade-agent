@@ -20,7 +20,7 @@
 > `ec47837 docs(g1): sync full-market gate status`
 >
 > 当前 main/docs baseline：
-> `main@8513096`；G1 closure artifacts are recorded in the current working
+> `main@18d748d`；G1 closure artifacts are recorded in the current working
 > tree and remain separate from existing user WIP.
 >
 > 当前 GitHub 审查入口：
@@ -739,7 +739,7 @@ PR Ready / merge 仍不表示 G1 或 G2 Capability passed。
 | M0 G2 前置可信基础 | partial | f3c 5/17；R-G2-001/002/003 | 否 |
 | M1 Provider Qualification | engineering partial | 当前 code version 的 completed live run、provider/field eligibility decision、baseline/candidate field coverage 缺失 | 否 |
 | M2 Canonical Runtime | engineering partial | 真实 qualified snapshot；Stage A/B/C 的真实 provider runtime evidence | 否 |
-| M3 G1 Capability Gate | not started | 300+、全市场、成本/性能、Top 20 | 否 |
+| M3 G1 Capability Gate | passed | 300+、全市场、成本/性能、Top 20 | 是 |
 | M4 G2 Dossier Quality | planned | source-aware dossier、单位/报告期/状态 | 否 |
 | M4.5 Growth Diagnostic V0 | planned | contract、engine、dossier integration | 否 |
 | M5 Thesis 与 A/B | foundation only | stable Thesis、同输入 A/B、盲评 | 否 |
@@ -999,11 +999,14 @@ fixture reproduction 为证据。该外部工具问题不登记为项目 Repair 
   `main@d0aaf9e`，索引为
   `openspec/changes/archive/2026-08-12-g1-full-market-performance-cost/evidence-index.md`；
 - 该 full-market evidence 证明 M3 5.1、5.2、5.3，不能替代 4.1/4.2 的独立证据，也不能证明 Top 20；
+- `g1-top20-style-review` 已归档，固定 run 的真实用户复核证据记录
+  `20/20` 值得进一步研究，完成 M3 6.1/6.2；
 - historical health runs 均不足以作为当前 promotion/G1 Gate；
 - 当前 head 没有 completed live qualification/promotion；
 - fixture/reference 不替代 live evidence；
-- 当前 4.1/4.2 已由独立真实样本 evidence 闭环；下一步可创建
-  `g1-top20-style-review`，但仍不能把任何前置 evidence 描述为 G1 capability passed。
+- G1 7.1/7.2/7.3 已完成，release decision 记录
+  `G1=passed`、`G2=approved_to_start_formal_acceptance`；
+- G1 capability 已通过，但不代表 G2 capability/runtime 或下游产品化已完成。
 
 ## 22. 当前唯一允许动作
 
@@ -1015,9 +1018,12 @@ Queue 1 repair closure 已完成：`R-G1-001`、`R-G1-002`、`R-G1-003`、
 `main@9a3a779`，staged runtime child = closed。
 `g1-full-market-performance-cost` 已完成实现、独立 review、归档并合入
 `main@d0aaf9e`，M3 5.1/5.2/5.3 = closed，证据已保留。
-下一步仅允许在 `main@85fb583` 基线上创建并执行
-`g1-top20-style-review`，完成 6.1/6.2；不得把本次 4.1/4.2
-证据或 full-market evidence 描述为 G1 capability passed。
+`g1-top20-style-review` 已完成实现、独立 review、归档并合入
+`main@8513096`，M3 6.1/6.2 = closed，Top 20 evidence 已保留。
+G1 umbrella 7.1/7.2/7.3 已完成，release decision 已记录
+`G1=passed`、`G2=approved_to_start_formal_acceptance`。
+下一步仅允许推进 G2 formal acceptance；不得将 G2 capability/runtime
+描述为已通过，也不得提前启动 G3 runtime 或产品化。
 
 ## 23. 下一窗口启动方式
 
