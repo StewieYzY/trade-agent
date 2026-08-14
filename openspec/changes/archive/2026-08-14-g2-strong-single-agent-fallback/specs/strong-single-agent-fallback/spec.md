@@ -84,3 +84,14 @@ fallback SHALL 调用 shared `redact_sensitive_text()` 处理错误诊断，并 
 #### Scenario: Protected production roots fail before side effects
 - **WHEN** output root is a protected root, its exact/ancestor/descendant, or a symlink resolving to one
 - **THEN** fallback SHALL fail closed before artifact creation or LLM invocation; external run-scoped roots remain governed by the shared validator
+
+### Post-archive CR repair clarification
+
+The closure evidence additionally requires:
+
+- recursive identity validation inside `core_snapshot`, optional top-level sections, and `research_dossier`;
+- recursive redaction of schema-valid `agent_output`, `usage`, raw JSON, error strings, and nested secret-bearing values;
+- bare credential redaction is limited to a standalone `Bearer|Token <credential>` string so normal diagnostic phrases remain intact;
+- identity walking covers `collections.abc.Mapping` as well as plain dictionaries and sequences;
+- protected output-root validation before dossier/provider preflight, including `features=None`;
+- CURRENT handoff metadata and OpenSpec status table must match the archived state and integrated commit.

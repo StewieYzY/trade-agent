@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from collections import UserDict
 from pathlib import Path
 
 import httpx
@@ -103,6 +104,29 @@ def test_invalid_fallback_input_has_zero_side_effect(
             **_dossier(),
             "pledge": {"ticker": "600519.SH", "pledge_ratio": 8.0},
         },
+        {
+            **_dossier(),
+            "core_snapshot": {
+                **_dossier()["core_snapshot"],
+                "metadata": {"symbol": "600519.SH"},
+            },
+        },
+        {
+            **_dossier(),
+            "core_snapshot": {
+                **_dossier()["core_snapshot"],
+                "metadata": UserDict({"symbol": "600519.SH"}),
+            },
+        },
+        {
+            **_dossier(),
+            "research_dossier": UserDict(
+                {
+                    **_dossier()["research_dossier"],
+                    "peers": UserDict({"symbol": "600519.SH"}),
+                }
+            ),
+        },
     ],
     ids=[
         "core-ticker-missing",
@@ -110,6 +134,9 @@ def test_invalid_fallback_input_has_zero_side_effect(
         "core-ticker-omitted",
         "optional-section-mismatch",
         "top-level-optional-section-mismatch",
+        "nested-core-identity-mismatch",
+        "mapping-core-identity-mismatch",
+        "mapping-research-identity-mismatch",
     ],
 )
 def test_explicit_dossier_identity_is_required_and_consistent(
@@ -167,6 +194,8 @@ def test_explicit_dossier_identity_is_preserved_for_normal_run(
     [
         "api_key=unit-test-secret",
         "token=unit-test-secret",
+        "Bearer x",
+        "Token x",
         "Authorization: Bearer unit-test-secret",
         "https://user:unit-test-secret@example.test/v1",
         {
@@ -178,7 +207,16 @@ def test_explicit_dossier_identity_is_preserved_for_normal_run(
             "token=unit-test-secret",
         ],
     ],
-    ids=["api-key", "token", "authorization", "url-credential", "mapping", "nested"],
+    ids=[
+        "api-key",
+        "token",
+        "bare-bearer",
+        "bare-token",
+        "authorization",
+        "url-credential",
+        "mapping",
+        "nested",
+    ],
 )
 def test_fallback_redacts_sensitive_error_content(tmp_path, monkeypatch, error_value):
     async def fake_call(*_args, **_kwargs):
@@ -239,6 +277,69 @@ def test_fallback_redacts_sensitive_malformed_raw_response(tmp_path, monkeypatch
     assert result["raw"] != raw_response
     assert "unit-test-secret" not in serialized
     assert "<redacted>" in serialized
+
+
+def test_fallback_redacts_schema_valid_output_and_usage(tmp_path, monkeypatch):
+    payload = _agent_output(
+        core_thesis="api_key=unit-test-secret",
+        extra={"password": "unit-test-secret", "nested": {"token": "unit-test-secret"}},
+    ).to_dict()
+    raw_response = json.dumps(payload, ensure_ascii=False)
+
+    async def fake_call(*_args, **_kwargs):
+        return raw_response, {
+            "token": "unit-test-secret",
+            "nested": {"client_secret": "unit-test-secret"},
+        }
+
+    monkeypatch.setattr(fallback, "call_llm", fake_call)
+    monkeypatch.setattr(fallback, "_build_user_message", lambda *args, **kwargs: "user")
+    monkeypatch.setattr(fallback, "get_prompt_builder", lambda _agent: lambda: "system")
+    monkeypatch.setenv("LLM_MODEL_HEAVY", "strong-from-env")
+
+    result = asyncio.run(
+        fallback.run_fallback(
+            ticker="600009.SH",
+            features=_dossier(),
+            output_root=tmp_path,
+            run_id="redacted-schema-valid",
+        )
+    )
+    serialized = (tmp_path / "redacted-schema-valid" / "result.json").read_text(
+        encoding="utf-8"
+    )
+
+    assert result["quality_status"] == "passed"
+    assert "unit-test-secret" not in serialized
+    assert result["usage"]["token"] == "<redacted>"
+    assert result["agent_output"]["extra"]["password"] == "<redacted>"
+    assert result["agent_output"]["extra"]["nested"]["token"] == "<redacted>"
+
+
+def test_protected_output_root_is_rejected_before_none_features_preflight(
+    monkeypatch,
+):
+    protected_root = Path(__file__).resolve().parents[1] / "watchlist"
+    preflight_calls = []
+
+    def forbidden_preflight(*args, **kwargs):
+        preflight_calls.append((args, kwargs))
+        raise AssertionError("protected path must be rejected before dossier preflight")
+
+    monkeypatch.setattr(fallback, "_prepare_council_input", forbidden_preflight)
+    monkeypatch.setenv("LLM_MODEL_HEAVY", "strong-from-env")
+
+    with pytest.raises(ValueError, match="protected production output root"):
+        asyncio.run(
+            fallback.run_fallback(
+                ticker="600009.SH",
+                features=None,
+                output_root=protected_root,
+                run_id="path-order",
+            )
+        )
+
+    assert preflight_calls == []
 
 
 @pytest.mark.parametrize("root_name", ["cache", "watchlist", "debate", "snapshots"])

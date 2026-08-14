@@ -931,6 +931,28 @@ def test_redaction_preserves_normal_diagnostic_words_and_redacts_other_uri_schem
     assert "user:pass@" not in reason
 
 
+def test_redaction_preserves_token_budget_diagnostic_phrase():
+    result = BatchAdapter(
+        [
+            ProviderSpec(
+                "fixture",
+                "provider",
+                lambda _request: (_ for _ in ()).throw(
+                    RuntimeError("Token budget exhausted")
+                ),
+            )
+        ]
+    ).run(
+        tickers=["600519.SH"],
+        method="quote",
+        fields=["last_price"],
+        run_id="redaction-token-budget",
+    )
+
+    reason = result["evidence"][0]["reason"]
+    assert "Token budget exhausted" in reason
+
+
 def test_available_none_is_not_canonical_consumable():
     def fetch(_request):
         return {

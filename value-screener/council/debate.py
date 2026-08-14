@@ -15,6 +15,7 @@ import asyncio
 import json
 import math
 import re
+from collections.abc import Mapping
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -93,12 +94,8 @@ def _validate_dossier_ticker_identity(requested_ticker: str, dossier: dict) -> N
         )
     _validate_declared_ticker(requested_ticker, core, location="core_snapshot")
 
-    research = dossier.get("research_dossier")
-    if not isinstance(research, dict):
-        return
-
     def validate_section(value: Any, location: str) -> None:
-        if isinstance(value, dict):
+        if isinstance(value, Mapping):
             for key in _TICKER_BINDING_KEYS:
                 if key in value:
                     _validate_declared_ticker(
@@ -107,13 +104,17 @@ def _validate_dossier_ticker_identity(requested_ticker: str, dossier: dict) -> N
                         location=f"{location}.{key}",
                     )
             for key, child in value.items():
-                if isinstance(child, (dict, list, tuple)):
+                if isinstance(child, (Mapping, list, tuple)):
                     validate_section(child, f"{location}.{key}")
         elif isinstance(value, (list, tuple)):
             for index, child in enumerate(value):
                 validate_section(child, f"{location}[{index}]")
 
-    validate_section(research, "research_dossier")
+    validate_section(core, "core_snapshot")
+
+    research = dossier.get("research_dossier")
+    if isinstance(research, Mapping):
+        validate_section(research, "research_dossier")
     for section_name, section in dossier.items():
         if section_name not in {"core_snapshot", "research_dossier"}:
             validate_section(section, section_name)
@@ -142,10 +143,10 @@ def _validate_council_input(ticker: str, dossier: Any) -> dict:
         )
 
     research = dossier.get("research_dossier")
-    if not isinstance(research, dict):
+    if not isinstance(research, Mapping):
         raise ValueError("no_evidence: dossier.research_dossier must be a dict.")
     main_business = research.get("main_business")
-    if not isinstance(main_business, dict) or not main_business:
+    if not isinstance(main_business, Mapping) or not main_business:
         raise ValueError(
             "no_evidence: dossier.research_dossier.main_business must be a non-empty dict."
         )

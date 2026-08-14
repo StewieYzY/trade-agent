@@ -23,7 +23,7 @@ from council.debate import _build_user_message, _prepare_council_input
 from council.llm import call_llm
 from council.schema import AgentOutput, ValidationError
 from data.lib.production_paths import validate_g1_output_root
-from data.lib.provenance import redact_sensitive_text
+from data.lib.provenance import redact_sensitive_text, redact_sensitive_value
 from council.verify_quality_gate import (
     detect_circular_reference,
     verify_r1_feature_grounding,
@@ -39,6 +39,18 @@ def _sha256(value: object) -> str:
 
 def _redact_error(message: object) -> str:
     return redact_sensitive_text(message)
+
+
+def _redact_raw_response(raw_response: object) -> str:
+    try:
+        parsed = json.loads(raw_response)
+    except (TypeError, json.JSONDecodeError):
+        return redact_sensitive_text(raw_response)
+    return json.dumps(
+        redact_sensitive_value(parsed),
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
 
 
 def _canonical_ticker(ticker: str) -> str:
@@ -190,14 +202,14 @@ async def run_fallback(
     if agent_id not in AGENT_REGISTRY:
         raise ValueError(f"unknown fallback agent: {agent_id}")
 
-    # 必须在 run directory 和任意 LLM side effect 前完成 preflight。
-    dossier = _prepare_council_input(canonical_ticker, features)
+    # 必须在 dossier/provider preflight 和任意 LLM side effect 前拒绝 protected root。
+    run_id, run_dir = _resolve_run_dir(output_root, run_id)
 
+    dossier = _prepare_council_input(canonical_ticker, features)
     selected_model = model or os.environ.get("LLM_MODEL_HEAVY")
     if not selected_model or not selected_model.strip():
         raise ValueError("missing strong model: provide model or LLM_MODEL_HEAVY")
 
-    run_id, run_dir = _resolve_run_dir(output_root, run_id)
     run_dir.mkdir(parents=True, exist_ok=False)
     manifest_path = run_dir / "manifest.json"
     result_path = run_dir / "result.json"
@@ -248,7 +260,7 @@ async def run_fallback(
             "heavy",
             model=selected_model,
         )
-        raw = redact_sensitive_text(raw_response)
+        raw = _redact_raw_response(raw_response)
         response_sha256 = _sha256(raw)
         agent_output = AgentOutput.from_json(agent_id, raw_response)
     except Exception as exc:
@@ -272,7 +284,7 @@ async def run_fallback(
         fact_check=fact_check,
     )
     quality_status = synthesis["quality_status"]
-    result = {
+    result = redact_sensitive_value({
         "schema_version": "g2-strong-single-agent-fallback-v1",
         "run_id": run_id,
         "execution_status": "completed" if failure_kind is None else "blocked",
@@ -287,7 +299,7 @@ async def run_fallback(
         "fact_check": fact_check,
         "synthesis": synthesis,
         "generated_at": datetime.now(timezone.utc).isoformat(),
-    }
+    })
     result_path.write_text(
         json.dumps(result, ensure_ascii=False, indent=2),
         encoding="utf-8",

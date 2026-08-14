@@ -50,6 +50,15 @@ _NUMERIC_FIELDS = {
 }
 _TIME_REQUIRED_FIELDS = set(_NUMERIC_FIELDS)
 _FRESHNESS_STATUSES = {"fresh", "stale", "unknown"}
+_SENSITIVE_KEY_NAMES = {
+    "apikey",
+    "authorization",
+    "clientsecret",
+    "password",
+    "refreshtoken",
+    "secret",
+    "token",
+}
 
 
 class ProvenanceContractError(ValueError):
@@ -58,6 +67,11 @@ class ProvenanceContractError(ValueError):
 
 def redact_sensitive_text(text: Any) -> str:
     value = str(text)
+    value = re.sub(
+        r"(?i)^\s*(?P<scheme>basic|bearer|token)\s+(?P<secret>\S+)\s*$",
+        lambda match: f"{match.group('scheme').title()} <redacted>",
+        value,
+    )
     value = re.sub(
         r"(?i)([a-z][a-z0-9+.-]*://)[^/\s@]+@",
         r"\1<redacted>@",
@@ -92,8 +106,37 @@ def redact_sensitive_text(text: Any) -> str:
         r"\1<redacted>",
         value,
     )
+    value = re.sub(
+        r"(?i)(\b(?:access[_\-\s]?token|refresh[_\-\s]?token|"
+        r"client[_\-\s]?secret|password)[\"']?\s*[:=]\s*[\"']?)"
+        r"[^\"',}\s]+",
+        r"\1<redacted>",
+        value,
+    )
     value = re.sub(r"\bsk-[A-Za-z0-9_-]+\b", "sk-<redacted>", value)
     return value[:2_000]
+
+
+def redact_sensitive_value(value: Any) -> Any:
+    """递归清理结构化诊断值，同时复用文本 redactor 处理字符串。"""
+    if isinstance(value, Mapping):
+        cleaned = {}
+        for key, nested in value.items():
+            normalized_key = re.sub(r"[^a-z0-9]", "", str(key).lower())
+            if (
+                normalized_key in _SENSITIVE_KEY_NAMES
+                or normalized_key.endswith("token")
+                or normalized_key.endswith("secret")
+            ):
+                cleaned[key] = "<redacted>"
+            else:
+                cleaned[key] = redact_sensitive_value(nested)
+        return cleaned
+    if isinstance(value, (list, tuple, set)):
+        return [redact_sensitive_value(item) for item in value]
+    if isinstance(value, str):
+        return redact_sensitive_text(value)
+    return value
 
 
 def _redact(text: Any) -> str:

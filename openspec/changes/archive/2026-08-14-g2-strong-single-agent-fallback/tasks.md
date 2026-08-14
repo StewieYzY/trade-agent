@@ -25,3 +25,12 @@
 - [x] 4.2 `R-G2-002`：fallback 复用 shared `redact_sensitive_text()`；focused tests 覆盖 error 与 malformed raw 中的 api_key、token、Bearer、URL credential、嵌套 mapping/list，并确认 error/raw/result/manifest 不含原始敏感值
 - [x] 4.3 `R-G2-003`：fallback 复用 shared `validate_g1_output_root()`；focused tests 覆盖 cache/watchlist/debate/data/snapshots exact/descendant/ancestor/symlink 拒绝、外部 tmp root 允许及拒绝时零副作用
 - [x] 4.4 验证证据：fallback focused 27 passed；Council preflight/dossier 16 passed；production-path 20 passed；provenance/provider-redaction 53 passed；全量 `value-screener/tests` 893 passed；compileall、diff check 和 strict OpenSpec 均待最终收口命令确认
+
+## 5. Post-archive CR repair closure
+
+- [x] 5.1 修复 schema-valid `agent_output`、`usage`、raw JSON 及嵌套 secret 的递归落盘脱敏
+- [x] 5.2 修复 `core_snapshot` 深层 identity mismatch 的 fail-closed 校验
+- [x] 5.3 将 protected output-root 校验提前到 dossier/provider preflight 之前
+- [x] 5.4 同步 CURRENT handoff baseline、OpenSpec archive 状态和本次 CR closure evidence
+- [x] 5.5 修复裸短 `Bearer`/`Token` credential 与普通诊断短语的边界，并补回归测试
+- [x] 5.6 让 identity walker 覆盖 `collections.abc.Mapping` 的 core/research nested section
