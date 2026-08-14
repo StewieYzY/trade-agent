@@ -20,7 +20,7 @@
 > `ec47837 docs(g1): sync full-market gate status`
 >
 > 当前 main/docs baseline：
-> `main@18d748d`；G1 closure artifacts are recorded in the current working
+> `main@ebcbb91`；G1 closure artifacts are recorded in the current working
 > tree and remain separate from existing user WIP.
 >
 > 当前 GitHub 审查入口：
@@ -287,7 +287,7 @@ scope:
 | `g1-field-qualification-canonical-promotion` | 22/22 | archived / integrated at `main@1ff6678` | R-G1-001/R-G1-002 closed |
 | `g1-r-g1-002-source-plan-matrix-completeness` | 14/14 | archived / integrated at `main@1ff6678` | R-G1-002 closed after independent review |
 | `g1-r-g1-003-rejected-canonical-visibility` | 4/4 | archived / integrated at `main@98570a1` | R-G1-003 closed after independent re-review |
-| `g2-strong-single-agent-fallback` | 12/12 | complete / active | review findings 未修，不 ready to archive |
+| `g2-strong-single-agent-fallback` | archived | archived / integrated at `main@da9e2c5` | R-G2-001/R-G2-002/R-G2-003 closed after CR repair |
 | `g2-deep-investment-thesis` | 0/27 | in-progress | G2 umbrella，含 M4.5 |
 | `f3c-r1-crosstalk-root-cause` | 5/17 | in-progress | M0 前置未闭 |
 | `g1-4-data-source-resilience` | 0/48 | in-progress | P2 已映射到既有 D1/D6 |
