@@ -35,6 +35,6 @@
 
 ## 7. Umbrella Closure
 
-- [ ] 7.1 确认所有必要 child changes 均引用本 umbrella 且已独立归档
-- [ ] 7.2 汇总 G1 evidence bundle，逐项对照 capability spec 确认无缺口
-- [ ] 7.3 仅在真实 Gate 全部通过后标记 G1 capability passed，并记录 G2 正式验收放行决定
+- [x] 7.1 确认所有必要 child changes 均引用本 umbrella 且已独立归档。治理映射与历史行政项判定：`openspec/changes/g1-fast-personal-value-screening/evidence/g1-umbrella-closure/child-governance-crosswalk.md`
+- [x] 7.2 汇总 G1 evidence bundle，逐项对照 capability spec 确认无缺口。汇总文件：`openspec/changes/g1-fast-personal-value-screening/evidence/g1-umbrella-closure/evidence-bundle.md`；机器可核验 manifest：`openspec/changes/g1-fast-personal-value-screening/evidence/g1-umbrella-closure/g1-evidence-bundle.json`
+- [x] 7.3 仅在真实 Gate 全部通过后标记 G1 capability passed，并记录 G2 正式验收放行决定。决策文件：`openspec/changes/g1-fast-personal-value-screening/evidence/g1-umbrella-closure/g1-release-decision.md`；G1=`passed`，G2=`approved_to_start_formal_acceptance`，G2 capability=`not_started`

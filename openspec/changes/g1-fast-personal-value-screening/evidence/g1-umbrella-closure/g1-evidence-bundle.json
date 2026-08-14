@@ -1,0 +1,120 @@
+{
+  "schema_version": "g1-fast-personal-value-screening.evidence-bundle.v1",
+  "bundle_scope": "umbrella closure milestones 7.2 and 7.3",
+  "evidence_cutoff": "2026-08-14",
+  "gate_verdict": "passed",
+  "g1_capability_passed": true,
+  "g2_formal_acceptance_recorded": true,
+  "g2_formal_acceptance_status": "approved_to_start_formal_acceptance",
+  "g2_capability_status": "not_started",
+  "sources": [
+    {
+      "gate": "1.1/1.2",
+      "kind": "archived_child",
+      "path": "openspec/changes/archive/2026-07-21-g1-l1-numeric-dcf-correction",
+      "verdict": "passed",
+      "evidence": "proposal/tasks/design/tests"
+    },
+    {
+      "gate": "2.1/2.2",
+      "kind": "archived_child",
+      "path": "openspec/changes/archive/2026-07-21-g1-staged-fetch-boundary",
+      "verdict": "passed",
+      "evidence": "proposal/tasks/design/tests"
+    },
+    {
+      "gate": "3.1",
+      "kind": "archived_child",
+      "path": "openspec/changes/archive/2026-07-21-g1-l2-full-result-contract",
+      "verdict": "passed",
+      "evidence": "proposal/tasks/design/tests"
+    },
+    {
+      "gate": "3.2",
+      "kind": "archived_child_with_repair",
+      "path": "openspec/changes/archive/2026-07-22-g1-canonical-run-identity",
+      "repair_path": "openspec/changes/archive/2026-07-22-g1-canonical-run-identity-repair",
+      "archive_commits": [
+        "71b4df8",
+        "5e86d32"
+      ],
+      "verdict": "passed"
+    },
+    {
+      "gate": "4.1/4.2",
+      "kind": "live_sample_evidence",
+      "path": "openspec/changes/g1-fast-personal-value-screening/evidence/g1-300-live-validation/2026-08-12_d32b4444.json",
+      "sha256": "b75b642077879449f930c6a9fb63a5f06758b548c8ef284a5defe9914dc9a85a",
+      "run_id": "d32b4444-5635-440b-92f9-7df24bf7f31d",
+      "profile_version": "g1-2026-07-21",
+      "input_ticker_set_hash": "57f6c50e9c7f",
+      "coverage": "partial_market",
+      "hard_gate_passed": true,
+      "unhandled_exceptions": 0,
+      "verdict": "passed_as_scale_precondition"
+    },
+    {
+      "gate": "5.1/5.2/5.3",
+      "kind": "live_full_market_evidence",
+      "path": "openspec/changes/archive/2026-08-12-g1-full-market-performance-cost/evidence/2026-08-12_7887d515.json",
+      "sha256": "80334e3b2afdcf920100dbe33b52d0d27a3144caad45426f1950ff200d45760d",
+      "run_id": "7887d515-157d-4d17-bcb5-fab54c7fbee3",
+      "profile_version": "g1-2026-07-21",
+      "input_ticker_set_hash": "9d20ac29743c",
+      "coverage": "full_market",
+      "hard_gate_passed": true,
+      "unhandled_exceptions": 0,
+      "verdict": "passed"
+    },
+    {
+      "gate": "6.1/6.2",
+      "kind": "live_user_product_gate",
+      "path": "openspec/changes/archive/2026-08-14-g1-top20-style-review/evidence/2026-08-14_b4862934/top20_gate_evidence.json",
+      "sha256": "00061909053fc3c8d72db1d194aa380b937927d888fc50a8640fb33c9f7a24c5",
+      "run_id": "b4862934-907a-441a-9503-8fbc2c3f57e4",
+      "profile_version": "g1-2026-07-21",
+      "input_ticker_set_hash": "9d20ac29743c",
+      "reviewed_count": 20,
+      "worth_research_count": 20,
+      "worth_ratio": 1.0,
+      "verdict": "passed"
+    },
+    {
+      "gate": "7.1",
+      "kind": "governance_crosswalk",
+      "path": "openspec/changes/g1-fast-personal-value-screening/evidence/g1-umbrella-closure/child-governance-crosswalk.md",
+      "sha256": "0c5a4380f4509ac22d0b19d095146da2fb3300ddd2e421cf7f26823cc785853c",
+      "verdict": "passed"
+    },
+    {
+      "gate": "7.3",
+      "kind": "release_decision",
+      "path": "openspec/changes/g1-fast-personal-value-screening/evidence/g1-umbrella-closure/g1-release-decision.json",
+      "sha256": "38b13cdeae32f0aad595ccf64f169d93c2821c9edaef39fdafdbc561eb50452b",
+      "verdict": "passed",
+      "g1_capability_status": "passed",
+      "g2_formal_acceptance_status": "approved_to_start_formal_acceptance",
+      "g2_capability_status": "not_started"
+    }
+  ],
+  "spec_crosswalk": {
+    "personal_value_boundary": "passed",
+    "run_identity": "passed",
+    "numeric_correctness": "passed",
+    "staged_fetch_boundary": "passed",
+    "full_funnel_and_failures": "passed",
+    "scale_quality_performance_cost": "passed",
+    "top20_user_gate": "passed",
+    "child_governance": "passed"
+  },
+  "known_non_blocking_facts": [
+    "300-sample evidence is partial_market and only closes the scale precondition",
+    "full-market scope is SH/SZ 5208 with BJ excluded",
+    "full-market freshness_policy is allow_stale and stale data is explicitly recorded",
+    "full-market evidence retains isolated L2 error/degraded distribution with unhandled_exceptions=0"
+  ],
+  "pending_outside_7_3": [
+    "G2 capability Gate execution and decision",
+    "G3 runtime and productization"
+  ]
+}

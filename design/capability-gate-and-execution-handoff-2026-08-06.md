@@ -1,6 +1,6 @@
 # trade-agent Capability Gate 与完整执行 Handoff
 
-> 日期：2026-08-13
+> 日期：2026-08-14
 >
 > Master ID：`MASTER-2026-08-06`
 >
@@ -20,7 +20,8 @@
 > `ec47837 docs(g1): sync full-market gate status`
 >
 > 当前 main/docs baseline：
-> `main@85fb583`，已 push 至 `origin/main`
+> `main@8513096`；G1 closure artifacts are recorded in the current working
+> tree and remain separate from existing user WIP.
 >
 > 当前 GitHub 审查入口：
 > `PR #1 codex/mainline-sync-2026-08-05 → main`
@@ -29,9 +30,9 @@
 > `g1-full-market-performance-cost` 已 archived / integrated at
 > `main@d0aaf9e`；其归档 evidence 保留在
 > `openspec/changes/archive/2026-08-12-g1-full-market-performance-cost/evidence/`。
-> M3 的 4.1、4.2、5.1、5.2、5.3 已有证据闭环；6.1、6.2
-> 尚未完成，下一步允许创建并执行 `g1-top20-style-review`。
-> 当前不得宣称 G1 capability passed。
+> M3 的 4.1、4.2、5.1、5.2、5.3、6.1、6.2 已有真实证据闭环；
+> G1 umbrella 7.1、7.2、7.3 已完成。G1 capability 已通过，并已正式放行
+> G2 formal acceptance；G2 capability/runtime 尚未开始。
 
 ## 1. 本文件的唯一权威地位
 
@@ -290,7 +291,7 @@ scope:
 | `g2-deep-investment-thesis` | 0/27 | in-progress | G2 umbrella，含 M4.5 |
 | `f3c-r1-crosstalk-root-cause` | 5/17 | in-progress | M0 前置未闭 |
 | `g1-4-data-source-resilience` | 0/48 | in-progress | P2 已映射到既有 D1/D6 |
-| `g1-fast-personal-value-screening` | 11/16 | in-progress | 4.1/4.2/5.1/5.2/5.3 已闭环；6.x 产品 Gate 与 7.x umbrella closure 未完成 |
+| `g1-fast-personal-value-screening` | 16/16 | closed for G1 | 4.1/4.2/5.1/5.2/5.3/6.x/7.x 已闭环；G2 仅获准进入正式验收 |
 | `g1-canonical-snapshot-consumer` | 10/10 | archived / integrated at `main@2777e7e` | consumer capability child closed |
 | `g1-staged-screening-runtime` | complete | archived / integrated at `main@9a3a779` | staged runtime child closed |
 | `g1-full-market-performance-cost` | archived | archived / integrated at `main@d0aaf9e` | M3 5.1/5.2/5.3 closed; evidence preserved |
@@ -827,8 +828,8 @@ M2: not passed
 - 4.1 已通过真实 300 只沪深分层样本与固定 universe 证据闭环：覆盖 33 个行业及 ST、小市值、负 PE、60 日过热风险类型，北交所排除
 - 4.2 已通过真实样本 L1/L2 运行证据闭环：字段可用率 100%、未处理异常 0，`600008.SH` 的 L2 解析错误被单票隔离，完整 verdict 分布已保留
 - 4.1/4.2 归档索引：`openspec/changes/g1-fast-personal-value-screening/evidence/g1-300-live-validation/evidence-index.md`
-- 4.1/4.2 的证据只关闭规模预检前置条件，不替代 Top 20 产品 Gate，也不代表 G1 capability passed
-- G1 capability 仍为 `not passed`
+- 4.1/4.2 的证据只关闭规模预检前置条件；Top 20 产品 Gate 已由固定 run 的真实用户复核证据闭环
+- 7.2 evidence bundle 已逐项对照 capability spec；7.3 release decision 已记录 G1=`passed`、G2=`approved_to_start_formal_acceptance`
 
 Gate 组成：
 
@@ -843,10 +844,13 @@ Top 20 用户复核 ≥70% 值得进一步研究
 ```
 
 ```text
-M3/G1 capability: not passed
+M3/G1 capability: passed
 4.1/4.2: closed
 5.1/5.2/5.3: closed
-6.1/6.2: not started
+6.1/6.2: closed
+7.1/7.2/7.3: closed
+G2 formal acceptance: approved to start
+G2 capability/runtime: not started
 ```
 
 ## 16. M4：G2 Evidence Dossier Quality

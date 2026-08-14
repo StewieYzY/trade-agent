@@ -1,0 +1,18 @@
+{
+  "schema_version": "g1-fast-personal-value-screening.release-decision.v1",
+  "decision_id": "G1-RELEASE-2026-08-14",
+  "decision_date": "2026-08-14",
+  "decision_authority": "user-approved execution in current task",
+  "basis_commit": "8513096",
+  "evidence_bundle": "openspec/changes/g1-fast-personal-value-screening/evidence/g1-umbrella-closure/g1-evidence-bundle.json",
+  "g1_capability_status": "passed",
+  "g2_formal_acceptance_status": "approved_to_start_formal_acceptance",
+  "g2_capability_status": "not_started",
+  "g2_runtime_executed": false,
+  "g3_runtime_allowed": false,
+  "explicit_exclusions": [
+    "G2 capability has not passed",
+    "G2 runtime was not executed",
+    "G3 runtime and productization remain locked"
+  ]
+}
