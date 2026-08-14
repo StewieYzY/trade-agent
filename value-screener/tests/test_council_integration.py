@@ -133,6 +133,7 @@ def _mock_dossier(mock_features):
     return {
         "core_snapshot": {
             **mock_features,
+            "ticker": "600519.SH",
             "market_cap": 2000000000000,
             "roe_3y": [30.0, 31.0, 32.0],
             "net_margin": 50.0,

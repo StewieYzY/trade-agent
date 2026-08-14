@@ -345,9 +345,9 @@ PR #1: REQUEST CHANGES
 | `R-G1-002` | M1/M2 | `g1-r-g1-002-source-plan-matrix-completeness` | closed | 1 | 否 |
 | `R-G1-003` | M2 | `g1-r-g1-003-rejected-canonical-visibility` | closed | 1 | 否 |
 | `R-G1-004` | M1/M2 | `g1-provider-health-and-failure-visibility` | closed | 1 | 否 |
-| `R-G2-001` | M0/M5 foundation | `g2-strong-single-agent-fallback` | identified | 0 | 是 |
-| `R-G2-002` | M0/M5 foundation | `g2-strong-single-agent-fallback` | identified | 0 | 是 |
-| `R-G2-003` | M0/M5 foundation | `g2-strong-single-agent-fallback` | identified | 0 | 是 |
+| `R-G2-001` | M0/M5 foundation | `g2-strong-single-agent-fallback` | closed | 1 | 否 |
+| `R-G2-002` | M0/M5 foundation | `g2-strong-single-agent-fallback` | closed | 1 | 否 |
+| `R-G2-003` | M0/M5 foundation | `g2-strong-single-agent-fallback` | closed | 1 | 否 |
 
 独立 review 有 6 个 P1 finding。Production-path finding 跨 G1/G2 合同，为保持
 单 owner 和不跨 Goal 实现，拆成 `R-G1-004` 与 `R-G2-003` 两个执行 ID；二者共享
@@ -594,6 +594,11 @@ but no ticker/code/symbol
 - missing/mismatch 在 artifact、cache、LLM 前 fail closed；
 - regression tests 覆盖 Council 和 fallback。
 
+**Closure evidence (2026-08-14)**：共享 Council/fallback preflight 已要求非空
+`core_snapshot.ticker`，并递归校验顶层及 `research_dossier` optional identity；
+缺失、空值和 mismatch 均在 cache、artifact、LLM 前 fail closed。Focused identity
+tests、Council preflight tests 和全量 pytest 通过；该 repair 不改变 G2 capability verdict。
+
 ### R-G2-002：Fallback secret redaction
 
 **Root cause**
@@ -613,6 +618,10 @@ Fallback 私有 `_redact_error()` 未复用 shared recursive redactor，不能�
 - `fallback_runs/` repo hygiene 明确；
 - tests 不包含真实 secret。
 
+**Closure evidence (2026-08-14)**：fallback 已复用 shared `redact_sensitive_text()`；
+error 与 malformed raw 的 API key、token、Bearer、URL credential、嵌套 mapping/list
+不会进入 error/raw/result/manifest。未调用真实 provider/LLM。
+
 ### R-G2-003：Fallback production-path adoption
 
 **Root cause**
@@ -628,6 +637,11 @@ run_id=review-probe
 → accepted
 → run_dir under real watchlist
 ```
+
+**Closure evidence (2026-08-14)**：fallback 已复用 shared
+`validate_g1_output_root()`；cache/watchlist/debate/data/snapshots 的 exact、
+descendant、ancestor 和 symlink path 均 fail closed，拒绝前无 LLM/artifact 副作用，
+外部 run-scoped root 按 shared validator 规则处理。
 
 **Dependency**
 
@@ -705,7 +719,11 @@ R-G2-001
 → fallback archive decision
 ```
 
-不与 Queue 1 共用 implementation child。
+状态：`closed`，原 child 已完成独立 re-review，archive target 为
+`openspec/changes/archive/2026-08-14-g2-strong-single-agent-fallback/`。
+该闭环仅关闭 R-G2-001/002/003，不代表 G2 capability passed，也不放行 G3 runtime。
+下一允许工作仍需回到 G2 umbrella 的 identity/audit-chain 与 incomplete-cache child，
+不得把本 foundation 当作最终 InvestmentThesis。
 
 ### Queue 3：既有 G1-4
 
@@ -736,7 +754,7 @@ PR Ready / merge 仍不表示 G1 或 G2 Capability passed。
 
 | Milestone | 当前状态 | Repair / 缺口 | 放行 |
 |---|---|---|---|
-| M0 G2 前置可信基础 | partial | f3c 5/17；R-G2-001/002/003 | 否 |
+| M0 G2 前置可信基础 | partial | f3c 5/17；受控 live root-cause evidence | 否 |
 | M1 Provider Qualification | engineering partial | 当前 code version 的 completed live run、provider/field eligibility decision、baseline/candidate field coverage 缺失 | 否 |
 | M2 Canonical Runtime | engineering partial | 真实 qualified snapshot；Stage A/B/C 的真实 provider runtime evidence | 否 |
 | M3 G1 Capability Gate | passed | 300+、全市场、成本/性能、Top 20 | 是 |
@@ -759,7 +777,7 @@ PR Ready / merge 仍不表示 G1 或 G2 Capability passed。
 - `f3c-r1-crosstalk-root-cause` 5/17；
 - dirty f3c mainline closure；
 - 当前代码对应的受控 live root-cause evidence；
-- R-G2-001 / R-G2-002 / R-G2-003。
+- G2 identity/audit-chain 与 incomplete-cache child 尚未开始。
 
 ### 状态
 

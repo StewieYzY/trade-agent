@@ -83,13 +83,13 @@ def redact_sensitive_text(text: Any) -> str:
         value,
     )
     value = re.sub(
-        r"(?i)\bapi(?:[_\-\s]?key)\s*[:=]\s*\S+",
-        "api_key=<redacted>",
+        r"(?i)(\bapi(?:[_\-\s]?key)[\"']?\s*[:=]\s*[\"']?)[^\"',}\s]+",
+        r"\1<redacted>",
         value,
     )
     value = re.sub(
-        r"(?i)\b(secret|token)\s*[:=]\s*\S+",
-        r"\1=<redacted>",
+        r"(?i)(\b(secret|token)[\"']?\s*[:=]\s*[\"']?)[^\"',}\s]+",
+        r"\1<redacted>",
         value,
     )
     value = re.sub(r"\bsk-[A-Za-z0-9_-]+\b", "sk-<redacted>", value)

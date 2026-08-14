@@ -244,3 +244,44 @@ async def test_invalid_explicit_features_never_return_a_successful_cache():
             await run_debate("002156.SZ", features=invalid_features, force=False)
 
     mock_cache.assert_not_called()
+
+
+@pytest.mark.anyio
+async def test_top_level_optional_identity_mismatch_fails_before_council_side_effects():
+    features = _valid_dossier()
+    features["pledge"] = {"ticker": "600519.SH", "pledge_ratio": 8.0}
+
+    with patch(
+        "council.debate._check_cache",
+        side_effect=AssertionError("must fail before cache"),
+    ) as mock_cache, patch(
+        "council.debate.call_agent",
+        new_callable=AsyncMock,
+        side_effect=AssertionError("must fail before agent"),
+    ) as mock_agent:
+        with pytest.raises(ValueError, match="ticker mismatch"):
+            await run_debate("002156.SZ", features=features, force=False)
+
+    mock_cache.assert_not_called()
+    mock_agent.assert_not_called()
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("ticker_value", [None, ""])
+async def test_explicit_core_ticker_missing_or_empty_fails_before_council_cache(
+    ticker_value,
+):
+    features = _valid_dossier()
+    if ticker_value is None:
+        features["core_snapshot"].pop("ticker")
+    else:
+        features["core_snapshot"]["ticker"] = ticker_value
+
+    with patch(
+        "council.debate._check_cache",
+        side_effect=AssertionError("must fail before cache"),
+    ) as mock_cache:
+        with pytest.raises(ValueError, match="ticker"):
+            await run_debate("002156.SZ", features=features, force=False)
+
+    mock_cache.assert_not_called()

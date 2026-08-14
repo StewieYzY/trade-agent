@@ -58,3 +58,29 @@ fallback SHALL 只写 run-scoped diagnostic artifact；SHALL NOT 写入 Council 
 #### Scenario: Quality state persists
 - **WHEN** run 为 passed、blocked 或 transport failure
 - **THEN** artifact SHALL 持久化 `quality_status`、fact-check issues、pending verification 和 failure kind
+
+### Requirement: Explicit dossier identity is canonical and shared
+显式 dossier SHALL 存在非空 canonical `core_snapshot.ticker`，且 `core_snapshot`、顶层可选
+section 与任一 `research_dossier` section 中出现的 `ticker`、`code` 或 `symbol` SHALL 与请求 ticker 一致。该校验 SHALL
+在 artifact、cache、watchlist 和 LLM 调用前执行，并 SHALL 与 Council preflight 共享同一语义。
+
+#### Scenario: Missing or mismatched explicit identity fails closed
+- **WHEN** `core_snapshot.ticker` 缺失、为空、非法，或 optional section identity 与请求 ticker 不一致
+- **THEN** fallback 和 Council SHALL 抛出可识别的 `no_evidence`/ticker 错误，不调用 LLM，不写 artifact、cache 或 watchlist
+
+#### Scenario: Canonical identity is retained on valid input
+- **WHEN** explicit dossier identity matches a request expressed in an equivalent non-canonical form
+- **THEN** fallback SHALL use and persist the canonical ticker for the request, artifact and synthesis
+
+### Requirement: Fallback diagnostics reuse shared redaction and path boundaries
+fallback SHALL 调用 shared `redact_sensitive_text()` 处理错误诊断，并 SHALL 调用 shared
+`validate_g1_output_root()` 验证 output root；fallback MUST NOT 复制另一套 secret pattern
+或 protected production path 列表。
+
+#### Scenario: Sensitive error content is not persisted
+- **WHEN** provider/LLM error or malformed raw response contains API key, token, bearer authorization, URL credentials or nested mapping/list values
+- **THEN** `error`、raw、manifest 和 `result.json` SHALL 不包含原始敏感值，同时保留可诊断的错误类型/状态
+
+#### Scenario: Protected production roots fail before side effects
+- **WHEN** output root is a protected root, its exact/ancestor/descendant, or a symlink resolving to one
+- **THEN** fallback SHALL fail closed before artifact creation or LLM invocation; external run-scoped roots remain governed by the shared validator

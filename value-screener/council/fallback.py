@@ -11,7 +11,6 @@ import asyncio
 import hashlib
 import json
 import os
-import re
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
@@ -23,6 +22,8 @@ from council.agents import AGENT_REGISTRY, get_prompt_builder
 from council.debate import _build_user_message, _prepare_council_input
 from council.llm import call_llm
 from council.schema import AgentOutput, ValidationError
+from data.lib.production_paths import validate_g1_output_root
+from data.lib.provenance import redact_sensitive_text
 from council.verify_quality_gate import (
     detect_circular_reference,
     verify_r1_feature_grounding,
@@ -36,15 +37,8 @@ def _sha256(value: object) -> str:
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
-def _redact_error(message: str) -> str:
-    message = re.sub(r"(?i)(https?://)[^/\s@]+@", r"\1<redacted>@", message)
-    message = re.sub(
-        r"(?i)\bauthorization\s*:\s*(?:basic|bearer|token)\s+\S+",
-        "Authorization: <redacted>",
-        message,
-    )
-    message = re.sub(r"\bsk-[A-Za-z0-9_-]+\b", "sk-<redacted>", message)
-    return message
+def _redact_error(message: object) -> str:
+    return redact_sensitive_text(message)
 
 
 def _canonical_ticker(ticker: str) -> str:
@@ -68,7 +62,7 @@ def _resolve_run_dir(
         or "\\" in run_id
     ):
         raise ValueError("run_id must be a non-empty relative path leaf")
-    root = Path(output_root or "fallback_runs").resolve()
+    root = validate_g1_output_root(output_root or "fallback_runs")
     run_dir = (root / run_id).resolve()
     try:
         run_dir.relative_to(root)
@@ -248,14 +242,15 @@ async def run_fallback(
     error: str | None = None
     response_sha256: str | None = None
     try:
-        raw, usage = await call_llm(
+        raw_response, usage = await call_llm(
             system_prompt,
             user_message,
             "heavy",
             model=selected_model,
         )
+        raw = redact_sensitive_text(raw_response)
         response_sha256 = _sha256(raw)
-        agent_output = AgentOutput.from_json(agent_id, raw)
+        agent_output = AgentOutput.from_json(agent_id, raw_response)
     except Exception as exc:
         failure_kind = _classify_exception(exc)
         error = f"{type(exc).__name__}: {_redact_error(str(exc))}"

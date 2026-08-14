@@ -83,6 +83,42 @@ def _validate_declared_ticker(
             )
 
 
+def _validate_dossier_ticker_identity(requested_ticker: str, dossier: dict) -> None:
+    """要求显式 dossier 的 canonical identity 存在且在可选分区中保持一致。"""
+    core = dossier.get("core_snapshot")
+    declared_ticker = core.get("ticker")
+    if not isinstance(declared_ticker, str) or not declared_ticker.strip():
+        raise ValueError(
+            "no_evidence: dossier.core_snapshot.ticker is required for explicit dossier."
+        )
+    _validate_declared_ticker(requested_ticker, core, location="core_snapshot")
+
+    research = dossier.get("research_dossier")
+    if not isinstance(research, dict):
+        return
+
+    def validate_section(value: Any, location: str) -> None:
+        if isinstance(value, dict):
+            for key in _TICKER_BINDING_KEYS:
+                if key in value:
+                    _validate_declared_ticker(
+                        requested_ticker,
+                        value,
+                        location=f"{location}.{key}",
+                    )
+            for key, child in value.items():
+                if isinstance(child, (dict, list, tuple)):
+                    validate_section(child, f"{location}.{key}")
+        elif isinstance(value, (list, tuple)):
+            for index, child in enumerate(value):
+                validate_section(child, f"{location}[{index}]")
+
+    validate_section(research, "research_dossier")
+    for section_name, section in dossier.items():
+        if section_name not in {"core_snapshot", "research_dossier"}:
+            validate_section(section, section_name)
+
+
 def _validate_council_input(ticker: str, dossier: Any) -> dict:
     """验证可进入 Council 的分层 dossier，失败时不允许任何后续副作用。"""
     if not isinstance(dossier, dict) or not dossier:
@@ -104,7 +140,6 @@ def _validate_council_input(ticker: str, dossier: Any) -> dict:
             "insufficient_data: core_snapshot missing required facts "
             f"{missing_core}. Provide a verified dossier or skip."
         )
-    _validate_declared_ticker(ticker, core, location="core_snapshot")
 
     research = dossier.get("research_dossier")
     if not isinstance(research, dict):
@@ -125,7 +160,7 @@ def _validate_council_input(ticker: str, dossier: Any) -> dict:
         raise ValueError(
             "no_evidence: dossier.research_dossier.main_business has no business facts."
         )
-    _validate_declared_ticker(ticker, main_business, location="research_dossier.main_business")
+    _validate_dossier_ticker_identity(ticker, dossier)
 
     return dossier
 

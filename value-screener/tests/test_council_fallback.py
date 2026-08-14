@@ -78,6 +78,231 @@ def test_invalid_fallback_input_has_zero_side_effect(
     assert not (tmp_path / "invalid-input").exists()
 
 
+@pytest.mark.parametrize(
+    "features",
+    [
+        {**_dossier(), "core_snapshot": {**_dossier()["core_snapshot"], "ticker": None}},
+        {
+            **_dossier(),
+            "core_snapshot": {**_dossier()["core_snapshot"], "ticker": "   "},
+        },
+        {
+            **_dossier(),
+            "core_snapshot": {
+                k: v for k, v in _dossier()["core_snapshot"].items() if k != "ticker"
+            },
+        },
+        {
+            **_dossier(),
+            "research_dossier": {
+                **_dossier()["research_dossier"],
+                "peers": {"ticker": "600519.SH", "peer_avg_pe": 22.0},
+            },
+        },
+        {
+            **_dossier(),
+            "pledge": {"ticker": "600519.SH", "pledge_ratio": 8.0},
+        },
+    ],
+    ids=[
+        "core-ticker-missing",
+        "core-ticker-empty",
+        "core-ticker-omitted",
+        "optional-section-mismatch",
+        "top-level-optional-section-mismatch",
+    ],
+)
+def test_explicit_dossier_identity_is_required_and_consistent(
+    tmp_path, monkeypatch, features
+):
+    calls = []
+
+    async def forbidden_call(*args, **kwargs):
+        calls.append((args, kwargs))
+        raise AssertionError("fallback must fail before LLM")
+
+    monkeypatch.setattr(fallback, "call_llm", forbidden_call)
+    monkeypatch.setenv("LLM_MODEL_HEAVY", "strong-from-env")
+
+    with pytest.raises(ValueError, match="ticker"):
+        asyncio.run(
+            fallback.run_fallback(
+                ticker="600009.SH",
+                features=features,
+                output_root=tmp_path,
+                run_id="identity-rejected",
+            )
+        )
+
+    assert calls == []
+    assert not (tmp_path / "identity-rejected").exists()
+
+
+def test_explicit_dossier_identity_is_preserved_for_normal_run(
+    tmp_path, monkeypatch
+):
+    async def fake_call(*_args, **_kwargs):
+        return _raw_output(), {}
+
+    monkeypatch.setattr(fallback, "call_llm", fake_call)
+    monkeypatch.setattr(fallback, "_build_user_message", lambda *args, **kwargs: "user")
+    monkeypatch.setattr(fallback, "get_prompt_builder", lambda _agent: lambda: "system")
+    monkeypatch.setenv("LLM_MODEL_HEAVY", "strong-from-env")
+
+    result = asyncio.run(
+        fallback.run_fallback(
+            ticker="600009",
+            features=_dossier(),
+            output_root=tmp_path,
+            run_id="identity-accepted",
+        )
+    )
+
+    assert result["ticker"] == "600009.SH"
+    assert result["synthesis"]["ticker"] == "600009.SH"
+
+
+@pytest.mark.parametrize(
+    "error_value",
+    [
+        "api_key=unit-test-secret",
+        "token=unit-test-secret",
+        "Authorization: Bearer unit-test-secret",
+        "https://user:unit-test-secret@example.test/v1",
+        {
+            "headers": {"Authorization": "Bearer unit-test-secret"},
+            "query": {"api_key": "unit-test-secret", "token": "unit-test-secret"},
+        },
+        [
+            {"nested": {"api_key": "unit-test-secret"}},
+            "token=unit-test-secret",
+        ],
+    ],
+    ids=["api-key", "token", "authorization", "url-credential", "mapping", "nested"],
+)
+def test_fallback_redacts_sensitive_error_content(tmp_path, monkeypatch, error_value):
+    async def fake_call(*_args, **_kwargs):
+        raise RuntimeError(error_value)
+
+    monkeypatch.setattr(fallback, "call_llm", fake_call)
+    monkeypatch.setattr(fallback, "_build_user_message", lambda *args, **kwargs: "user")
+    monkeypatch.setattr(fallback, "get_prompt_builder", lambda _agent: lambda: "system")
+    monkeypatch.setenv("LLM_MODEL_HEAVY", "strong-from-env")
+
+    result = asyncio.run(
+        fallback.run_fallback(
+            ticker="600009.SH",
+            features=_dossier(),
+            output_root=tmp_path,
+            run_id="redacted-error",
+        )
+    )
+    serialized = (
+        (tmp_path / "redacted-error" / "result.json").read_text(encoding="utf-8")
+        + (tmp_path / "redacted-error" / "manifest.json").read_text(encoding="utf-8")
+    )
+
+    assert result["quality_status"] == "blocked"
+    assert "unit-test-secret" not in serialized
+    assert "<redacted>" in serialized
+
+
+def test_fallback_redacts_sensitive_malformed_raw_response(tmp_path, monkeypatch):
+    raw_response = (
+        'not-json api_key=unit-test-secret token=unit-test-secret '
+        'Authorization: Bearer unit-test-secret '
+        "https://user:unit-test-secret@example.test/v1"
+    )
+
+    async def fake_call(*_args, **_kwargs):
+        return raw_response, {}
+
+    monkeypatch.setattr(fallback, "call_llm", fake_call)
+    monkeypatch.setattr(fallback, "_build_user_message", lambda *args, **kwargs: "user")
+    monkeypatch.setattr(fallback, "get_prompt_builder", lambda _agent: lambda: "system")
+    monkeypatch.setenv("LLM_MODEL_HEAVY", "strong-from-env")
+
+    result = asyncio.run(
+        fallback.run_fallback(
+            ticker="600009.SH",
+            features=_dossier(),
+            output_root=tmp_path,
+            run_id="redacted-raw",
+        )
+    )
+    serialized = (
+        (tmp_path / "redacted-raw" / "result.json").read_text(encoding="utf-8")
+        + (tmp_path / "redacted-raw" / "manifest.json").read_text(encoding="utf-8")
+    )
+
+    assert result["quality_status"] == "blocked"
+    assert result["raw"] != raw_response
+    assert "unit-test-secret" not in serialized
+    assert "<redacted>" in serialized
+
+
+@pytest.mark.parametrize("root_name", ["cache", "watchlist", "debate", "snapshots"])
+def test_fallback_rejects_protected_roots_before_side_effects(
+    tmp_path, monkeypatch, root_name
+):
+    protected_root = Path(__file__).resolve().parents[1] / (
+        "data/cache" if root_name == "cache" else f"{root_name}"
+    )
+    if root_name == "snapshots":
+        protected_root = Path(__file__).resolve().parents[1] / "data/snapshots"
+
+    calls = []
+
+    async def forbidden_call(*args, **kwargs):
+        calls.append((args, kwargs))
+        raise AssertionError("fallback must reject protected root before LLM")
+
+    monkeypatch.setattr(fallback, "call_llm", forbidden_call)
+    monkeypatch.setenv("LLM_MODEL_HEAVY", "strong-from-env")
+
+    with pytest.raises(ValueError, match="protected production output root"):
+        asyncio.run(
+            fallback.run_fallback(
+                ticker="600009.SH",
+                features=_dossier(),
+                output_root=protected_root / "run-001",
+                run_id="protected-root",
+            )
+        )
+
+    assert calls == []
+    assert not (protected_root / "run-001" / "protected-root").exists()
+
+
+def test_fallback_rejects_protected_root_ancestor_and_symlink_before_side_effects(
+    tmp_path, monkeypatch
+):
+    protected_root = Path(__file__).resolve().parents[1] / "watchlist"
+    symlink_root = tmp_path / "watchlist-link"
+    symlink_root.symlink_to(protected_root, target_is_directory=True)
+    calls = []
+
+    async def forbidden_call(*args, **kwargs):
+        calls.append((args, kwargs))
+        raise AssertionError("fallback must reject protected root before LLM")
+
+    monkeypatch.setattr(fallback, "call_llm", forbidden_call)
+    monkeypatch.setenv("LLM_MODEL_HEAVY", "strong-from-env")
+
+    for output_root in (protected_root.parent, symlink_root / "run-001"):
+        with pytest.raises(ValueError, match="protected production output root"):
+            asyncio.run(
+                fallback.run_fallback(
+                    ticker="600009.SH",
+                    features=_dossier(),
+                    output_root=output_root,
+                    run_id="protected-root",
+                )
+            )
+
+    assert calls == []
+
+
 def test_fallback_calls_one_strong_agent_and_does_not_write_council_outputs(
     tmp_path, monkeypatch
 ):
