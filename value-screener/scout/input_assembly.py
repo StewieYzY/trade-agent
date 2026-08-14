@@ -243,6 +243,7 @@ def assemble_snapshot(
     ticker: str,
     cache_manager: CacheManager | None = None,
     degrade_on_financials_gap: bool = False,
+    freshness_policy: str = "require_fresh",
 ) -> dict:
     """从 L0 CacheManager 取全维度数据，组装为特征快照 dict.
 
@@ -252,6 +253,8 @@ def assemble_snapshot(
         degrade_on_financials_gap: f2 §6 L2 降级模式。True 时（L2 scout 调用），
             critical_fields 齐但 financials_floor 不齐返回 degraded 标记 + partial features
             而非 fail-fast error；False 时（L3 council 默认）仍 fail-fast。
+        freshness_policy: `require_fresh` 严格读取新鲜缓存；`allow_stale` 读取结构
+            可用但过期缓存，并由上层 evidence 记录 stale 事实。
 
     Returns:
         features dict（含所有字段 + 趋势标注），或
@@ -268,13 +271,16 @@ def assemble_snapshot(
     """
     if cache_manager is None:
         cache_manager = CacheManager()
+    if freshness_policy not in {"require_fresh", "allow_stale"}:
+        raise ValueError("freshness_policy must be require_fresh or allow_stale")
+    allow_stale = freshness_policy == "allow_stale"
 
     # 取全维度数据
-    basic = cache_manager.get(ticker, "basic") or {}
-    valuation = cache_manager.get(ticker, "valuation") or {}
-    financials = cache_manager.get(ticker, "financials") or {}
-    kline = cache_manager.get(ticker, "kline") or {}
-    risk = cache_manager.get(ticker, "risk") or {}
+    basic = cache_manager.get(ticker, "basic", allow_stale=allow_stale) or {}
+    valuation = cache_manager.get(ticker, "valuation", allow_stale=allow_stale) or {}
+    financials = cache_manager.get(ticker, "financials", allow_stale=allow_stale) or {}
+    kline = cache_manager.get(ticker, "kline", allow_stale=allow_stale) or {}
+    risk = cache_manager.get(ticker, "risk", allow_stale=allow_stale) or {}
 
     # 提取字段
     name = basic.get("name")

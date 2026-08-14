@@ -140,6 +140,28 @@ def test_evidence_bundle_has_timing_fields():
     assert timing["total_elapsed_seconds"] >= timing["l1_elapsed_seconds"] + timing["l2_elapsed_seconds"]
 
 
+def test_evidence_passes_freshness_policy_to_l2():
+    """run evidence SHALL propagate allow_stale into scout_batch."""
+    from performance.run_evidence import run_full_market_evidence
+
+    l1_output = _make_l1_output(n_candidates=1)
+    captured = {}
+
+    async def fake_scout_batch(candidates, **kwargs):
+        captured.update(kwargs)
+        return _make_l2_output(n=1)
+
+    with patch("performance.run_evidence.screen_a_shares", return_value=l1_output), \
+         patch("performance.run_evidence.scout_batch", new=fake_scout_batch), \
+         _warmth_mock(total_slots=5):
+        asyncio.run(run_full_market_evidence(
+            ["600000"],
+            freshness_policy="allow_stale",
+        ))
+
+    assert captured["freshness_policy"] == "allow_stale"
+
+
 # ==================== 2.2 关键字段可用率（含 pledge_status canonical 语义） ====================
 
 
@@ -533,6 +555,56 @@ def test_gate_passed_false_when_availability_below_threshold():
     assert bundle["gate_passed"] is False
 
 
+def test_gate_passed_false_when_force_l2_all_inputs_error():
+    """force-L2 全量 insufficient_data 且零调用时不得宣称 Gate 通过."""
+    from performance.run_evidence import run_full_market_evidence
+
+    l1_output = _make_l1_output(n_candidates=3)
+    l2_results = [
+        {
+            "ticker": f"60000{i}.SH",
+            "verdict": "error",
+            "error": "insufficient_data",
+        }
+        for i in range(3)
+    ]
+    usage = {
+        "call_count": 0,
+        "cache_hits": 0,
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "total_tokens": 0,
+    }
+    failure = {
+        "errors": [
+            {"ticker": item["ticker"], "reason": "insufficient_data", "stage": "scout"}
+            for item in l2_results
+        ],
+        "skips": 0,
+        "watches": 0,
+        "degraded": 0,
+        "unhandled_exceptions": 0,
+    }
+
+    with patch("performance.run_evidence.screen_a_shares", return_value=l1_output), \
+         patch(
+             "performance.run_evidence.scout_batch",
+             new_callable=AsyncMock,
+             return_value=(l2_results, usage, failure),
+         ), \
+         _warmth_mock():
+        bundle = asyncio.run(run_full_market_evidence(
+            ["600000", "600001", "600002"],
+            force_l2=True,
+            coverage="full_market",
+        ))
+
+    assert bundle["hard_gate_passed"] is True
+    assert bundle["funnel"]["l2_error"] == 3
+    assert bundle["cost"]["call_count"] == 0
+    assert bundle["gate_passed"] is False
+
+
 def test_observed_elapsed_over_reference_does_not_block_hard_gate():
     """耗时超过参考值仍不阻断硬 Gate."""
     from performance.run_evidence import _judge_gate
@@ -795,3 +867,32 @@ def test_cold_l1_cache_generates_evidence_note():
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+# ==================== 2.11 l1_candidates 归档（G1 6.1/6.2 Top 20 派生消费） ====================
+
+
+def test_bundle_archives_l1_candidates_for_top20_derivation():
+    """evidence bundle SHALL 归档 L1 有序候选（l1_candidates），供 Top 20 派生离线消费.
+
+    8-12 run 的 bundle 只存聚合指标、丢失逐票候选，导致 6.1/6.2 无法固定候选排序；
+    新 bundle 必须保留 heat-filter 后的有序候选列表（与 L2 输入同源）。
+    """
+    from performance.run_evidence import run_full_market_evidence
+
+    l1_output = _make_l1_output(n_candidates=4)
+    l1_output["stats"]["after_heat_filter"] = 4
+    l2_tuple = _make_l2_output(n=4)
+
+    with patch("performance.run_evidence.screen_a_shares", return_value=l1_output), \
+         patch("performance.run_evidence.scout_batch", new_callable=AsyncMock, return_value=l2_tuple), \
+         _warmth_mock(total_slots=20):
+        bundle = asyncio.run(run_full_market_evidence(["600000", "600001", "600002", "600003"]))
+
+    assert "l1_candidates" in bundle
+    # 与 L1 候选同源、保序（排序即 Top 20 派生依据）
+    assert bundle["l1_candidates"] == l1_output["candidates"]
+    assert [c["ticker"] for c in bundle["l1_candidates"]] == \
+        [c["ticker"] for c in l1_output["candidates"]]
+    # 候选数与漏斗 after_heat_filter 一致（归档完整性）
+    assert len(bundle["l1_candidates"]) == bundle["funnel"]["after_heat_filter"]

@@ -1,0 +1,457 @@
+{
+  "schema_version": "g1-top20-derivation.v1",
+  "status": "derived",
+  "reason": [],
+  "pinned_run": {
+    "run_id": "b4862934-907a-441a-9503-8fbc2c3f57e4",
+    "profile_version": "g1-2026-07-21",
+    "input_ticker_set_hash": "9d20ac29743c",
+    "run_date": "2026-08-14",
+    "coverage": "full_market",
+    "source_path": "../openspec/changes/g1-top20-style-review/evidence/2026-08-14_b4862934/full_market_evidence.json"
+  },
+  "derivation_run": {
+    "run_id": "b4862934-907a-441a-9503-8fbc2c3f57e4",
+    "profile_version": "g1-2026-07-21",
+    "input_ticker_set_hash": "9d20ac29743c",
+    "run_date": "2026-08-14",
+    "derivation_kind": "pinned_bundle_l1_candidates",
+    "freshness_policy": "embedded_l1_candidates(no_cache_io)"
+  },
+  "funnel_check": {
+    "pinned": {
+      "total": 5208,
+      "after_hard_gates": 2545,
+      "after_factors": 300,
+      "after_heat_filter": 250,
+      "l2_input": 250,
+      "l2_deep_dive": 95,
+      "l2_watch": 154,
+      "l2_skip": 0,
+      "l2_error": 1,
+      "l2_degraded": 32
+    },
+    "derivation": {
+      "total": 5208,
+      "after_hard_gates": 2545,
+      "after_factors": 300,
+      "after_heat_filter": 250
+    },
+    "consistent": true
+  },
+  "candidate_count": 250,
+  "top20": [
+    {
+      "rank": 1,
+      "ticker": "000902.SZ",
+      "adjusted_composite": 97.32,
+      "factor_scores": {
+        "quality": 94.79,
+        "value": 99.76,
+        "safety_margin": 100.0,
+        "composite": 97.32,
+        "f_score": 9,
+        "dcf_note": "dcf_dimension_mismatch"
+      },
+      "anti_trap": {
+        "score": 100.0,
+        "flags": []
+      },
+      "pinned_run_id": "b4862934-907a-441a-9503-8fbc2c3f57e4",
+      "profile_version": "g1-2026-07-21",
+      "input_ticker_set_hash": "9d20ac29743c"
+    },
+    {
+      "rank": 2,
+      "ticker": "002236.SZ",
+      "adjusted_composite": 95.83420000000001,
+      "factor_scores": {
+        "quality": 95.57,
+        "value": 100.0,
+        "safety_margin": 100.0,
+        "composite": 97.79,
+        "f_score": 9,
+        "dcf_note": "dcf_dimension_mismatch"
+      },
+      "anti_trap": {
+        "score": 98.0,
+        "flags": [
+          "A1_ROE_decline:1y"
+        ]
+      },
+      "pinned_run_id": "b4862934-907a-441a-9503-8fbc2c3f57e4",
+      "profile_version": "g1-2026-07-21",
+      "input_ticker_set_hash": "9d20ac29743c"
+    },
+    {
+      "rank": 3,
+      "ticker": "600690.SH",
+      "adjusted_composite": 95.56,
+      "factor_scores": {
+        "quality": 91.11,
+        "value": 100.0,
+        "safety_margin": 100.0,
+        "composite": 95.56,
+        "f_score": 7,
+        "dcf_note": "dcf_dimension_mismatch"
+      },
+      "anti_trap": {
+        "score": 100.0,
+        "flags": []
+      },
+      "pinned_run_id": "b4862934-907a-441a-9503-8fbc2c3f57e4",
+      "profile_version": "g1-2026-07-21",
+      "input_ticker_set_hash": "9d20ac29743c"
+    },
+    {
+      "rank": 4,
+      "ticker": "601717.SH",
+      "adjusted_composite": 95.56,
+      "factor_scores": {
+        "quality": 91.11,
+        "value": 100.0,
+        "safety_margin": 100.0,
+        "composite": 95.56,
+        "f_score": 7,
+        "dcf_note": "dcf_dimension_mismatch"
+      },
+      "anti_trap": {
+        "score": 100.0,
+        "flags": []
+      },
+      "pinned_run_id": "b4862934-907a-441a-9503-8fbc2c3f57e4",
+      "profile_version": "g1-2026-07-21",
+      "input_ticker_set_hash": "9d20ac29743c"
+    },
+    {
+      "rank": 5,
+      "ticker": "601216.SH",
+      "adjusted_composite": 94.13,
+      "factor_scores": {
+        "quality": 90.61,
+        "value": 96.08,
+        "safety_margin": 100.0,
+        "composite": 94.13,
+        "f_score": 9,
+        "dcf_note": "dcf_dimension_mismatch"
+      },
+      "anti_trap": {
+        "score": 100.0,
+        "flags": []
+      },
+      "pinned_run_id": "b4862934-907a-441a-9503-8fbc2c3f57e4",
+      "profile_version": "g1-2026-07-21",
+      "input_ticker_set_hash": "9d20ac29743c"
+    },
+    {
+      "rank": 6,
+      "ticker": "600897.SH",
+      "adjusted_composite": 94.07,
+      "factor_scores": {
+        "quality": 88.14,
+        "value": 100.0,
+        "safety_margin": 100.0,
+        "composite": 94.07,
+        "f_score": 9,
+        "dcf_note": "dcf_dimension_mismatch"
+      },
+      "anti_trap": {
+        "score": 100.0,
+        "flags": []
+      },
+      "pinned_run_id": "b4862934-907a-441a-9503-8fbc2c3f57e4",
+      "profile_version": "g1-2026-07-21",
+      "input_ticker_set_hash": "9d20ac29743c"
+    },
+    {
+      "rank": 7,
+      "ticker": "600861.SH",
+      "adjusted_composite": 93.76,
+      "factor_scores": {
+        "quality": 87.52,
+        "value": 100.0,
+        "safety_margin": 100.0,
+        "composite": 93.76,
+        "f_score": 8,
+        "dcf_note": "dcf_dimension_mismatch"
+      },
+      "anti_trap": {
+        "score": 100.0,
+        "flags": []
+      },
+      "pinned_run_id": "b4862934-907a-441a-9503-8fbc2c3f57e4",
+      "profile_version": "g1-2026-07-21",
+      "input_ticker_set_hash": "9d20ac29743c"
+    },
+    {
+      "rank": 8,
+      "ticker": "600741.SH",
+      "adjusted_composite": 93.7468,
+      "factor_scores": {
+        "quality": 91.32,
+        "value": 100.0,
+        "safety_margin": 100.0,
+        "composite": 95.66,
+        "f_score": 9,
+        "dcf_note": "dcf_dimension_mismatch"
+      },
+      "anti_trap": {
+        "score": 98.0,
+        "flags": [
+          "A1_ROE_decline:1y"
+        ]
+      },
+      "pinned_run_id": "b4862934-907a-441a-9503-8fbc2c3f57e4",
+      "profile_version": "g1-2026-07-21",
+      "input_ticker_set_hash": "9d20ac29743c"
+    },
+    {
+      "rank": 9,
+      "ticker": "600060.SH",
+      "adjusted_composite": 93.73,
+      "factor_scores": {
+        "quality": 87.7,
+        "value": 99.58,
+        "safety_margin": 100.0,
+        "composite": 93.73,
+        "f_score": 9,
+        "dcf_note": "dcf_dimension_mismatch"
+      },
+      "anti_trap": {
+        "score": 100.0,
+        "flags": []
+      },
+      "pinned_run_id": "b4862934-907a-441a-9503-8fbc2c3f57e4",
+      "profile_version": "g1-2026-07-21",
+      "input_ticker_set_hash": "9d20ac29743c"
+    },
+    {
+      "rank": 10,
+      "ticker": "000708.SZ",
+      "adjusted_composite": 93.68799999999999,
+      "factor_scores": {
+        "quality": 91.21,
+        "value": 100.0,
+        "safety_margin": 100.0,
+        "composite": 95.6,
+        "f_score": 8,
+        "dcf_note": "dcf_dimension_mismatch"
+      },
+      "anti_trap": {
+        "score": 98.0,
+        "flags": [
+          "A1_ROE_decline:1y"
+        ]
+      },
+      "pinned_run_id": "b4862934-907a-441a-9503-8fbc2c3f57e4",
+      "profile_version": "g1-2026-07-21",
+      "input_ticker_set_hash": "9d20ac29743c"
+    },
+    {
+      "rank": 11,
+      "ticker": "002011.SZ",
+      "adjusted_composite": 93.6488,
+      "factor_scores": {
+        "quality": 91.11,
+        "value": 100.0,
+        "safety_margin": 100.0,
+        "composite": 95.56,
+        "f_score": 7,
+        "dcf_note": "dcf_dimension_mismatch"
+      },
+      "anti_trap": {
+        "score": 98.0,
+        "flags": [
+          "A1_ROE_decline:1y"
+        ]
+      },
+      "pinned_run_id": "b4862934-907a-441a-9503-8fbc2c3f57e4",
+      "profile_version": "g1-2026-07-21",
+      "input_ticker_set_hash": "9d20ac29743c"
+    },
+    {
+      "rank": 12,
+      "ticker": "600968.SH",
+      "adjusted_composite": 93.27,
+      "factor_scores": {
+        "quality": 86.55,
+        "value": 100.0,
+        "safety_margin": 100.0,
+        "composite": 93.27,
+        "f_score": 7,
+        "dcf_note": "dcf_dimension_mismatch"
+      },
+      "anti_trap": {
+        "score": 100.0,
+        "flags": []
+      },
+      "pinned_run_id": "b4862934-907a-441a-9503-8fbc2c3f57e4",
+      "profile_version": "g1-2026-07-21",
+      "input_ticker_set_hash": "9d20ac29743c"
+    },
+    {
+      "rank": 13,
+      "ticker": "601083.SH",
+      "adjusted_composite": 92.82,
+      "factor_scores": {
+        "quality": 85.63,
+        "value": 100.0,
+        "safety_margin": 100.0,
+        "composite": 92.82,
+        "f_score": 7,
+        "dcf_note": "dcf_dimension_mismatch"
+      },
+      "anti_trap": {
+        "score": 100.0,
+        "flags": []
+      },
+      "pinned_run_id": "b4862934-907a-441a-9503-8fbc2c3f57e4",
+      "profile_version": "g1-2026-07-21",
+      "input_ticker_set_hash": "9d20ac29743c"
+    },
+    {
+      "rank": 14,
+      "ticker": "601808.SH",
+      "adjusted_composite": 92.45,
+      "factor_scores": {
+        "quality": 84.89,
+        "value": 100.0,
+        "safety_margin": 100.0,
+        "composite": 92.45,
+        "f_score": 9,
+        "dcf_note": "dcf_dimension_mismatch"
+      },
+      "anti_trap": {
+        "score": 100.0,
+        "flags": []
+      },
+      "pinned_run_id": "b4862934-907a-441a-9503-8fbc2c3f57e4",
+      "profile_version": "g1-2026-07-21",
+      "input_ticker_set_hash": "9d20ac29743c"
+    },
+    {
+      "rank": 15,
+      "ticker": "002215.SZ",
+      "adjusted_composite": 92.17,
+      "factor_scores": {
+        "quality": 84.34,
+        "value": 100.0,
+        "safety_margin": 100.0,
+        "composite": 92.17,
+        "f_score": 7,
+        "dcf_note": "dcf_dimension_mismatch"
+      },
+      "anti_trap": {
+        "score": 100.0,
+        "flags": []
+      },
+      "pinned_run_id": "b4862934-907a-441a-9503-8fbc2c3f57e4",
+      "profile_version": "g1-2026-07-21",
+      "input_ticker_set_hash": "9d20ac29743c"
+    },
+    {
+      "rank": 16,
+      "ticker": "000612.SZ",
+      "adjusted_composite": 92.08,
+      "factor_scores": {
+        "quality": 84.15,
+        "value": 100.0,
+        "safety_margin": 100.0,
+        "composite": 92.08,
+        "f_score": 7,
+        "dcf_note": "dcf_dimension_mismatch"
+      },
+      "anti_trap": {
+        "score": 100.0,
+        "flags": []
+      },
+      "pinned_run_id": "b4862934-907a-441a-9503-8fbc2c3f57e4",
+      "profile_version": "g1-2026-07-21",
+      "input_ticker_set_hash": "9d20ac29743c"
+    },
+    {
+      "rank": 17,
+      "ticker": "000899.SZ",
+      "adjusted_composite": 92.05,
+      "factor_scores": {
+        "quality": 84.09,
+        "value": 100.0,
+        "safety_margin": 100.0,
+        "composite": 92.05,
+        "f_score": 7,
+        "dcf_note": "dcf_dimension_mismatch"
+      },
+      "anti_trap": {
+        "score": 100.0,
+        "flags": []
+      },
+      "pinned_run_id": "b4862934-907a-441a-9503-8fbc2c3f57e4",
+      "profile_version": "g1-2026-07-21",
+      "input_ticker_set_hash": "9d20ac29743c"
+    },
+    {
+      "rank": 18,
+      "ticker": "000719.SZ",
+      "adjusted_composite": 91.80640000000001,
+      "factor_scores": {
+        "quality": 87.36,
+        "value": 100.0,
+        "safety_margin": 100.0,
+        "composite": 93.68,
+        "f_score": 8,
+        "dcf_note": "dcf_dimension_mismatch"
+      },
+      "anti_trap": {
+        "score": 98.0,
+        "flags": [
+          "A1_ROE_decline:1y"
+        ]
+      },
+      "pinned_run_id": "b4862934-907a-441a-9503-8fbc2c3f57e4",
+      "profile_version": "g1-2026-07-21",
+      "input_ticker_set_hash": "9d20ac29743c"
+    },
+    {
+      "rank": 19,
+      "ticker": "000425.SZ",
+      "adjusted_composite": 91.79,
+      "factor_scores": {
+        "quality": 85.41,
+        "value": 96.94,
+        "safety_margin": 100.0,
+        "composite": 91.79,
+        "f_score": 8,
+        "dcf_note": "dcf_dimension_mismatch"
+      },
+      "anti_trap": {
+        "score": 100.0,
+        "flags": []
+      },
+      "pinned_run_id": "b4862934-907a-441a-9503-8fbc2c3f57e4",
+      "profile_version": "g1-2026-07-21",
+      "input_ticker_set_hash": "9d20ac29743c"
+    },
+    {
+      "rank": 20,
+      "ticker": "600873.SH",
+      "adjusted_composite": 91.4634,
+      "factor_scores": {
+        "quality": 86.67,
+        "value": 100.0,
+        "safety_margin": 100.0,
+        "composite": 93.33,
+        "f_score": 6,
+        "dcf_note": "dcf_dimension_mismatch"
+      },
+      "anti_trap": {
+        "score": 98.0,
+        "flags": [
+          "A1_ROE_decline:1y"
+        ]
+      },
+      "pinned_run_id": "b4862934-907a-441a-9503-8fbc2c3f57e4",
+      "profile_version": "g1-2026-07-21",
+      "input_ticker_set_hash": "9d20ac29743c"
+    }
+  ]
+}

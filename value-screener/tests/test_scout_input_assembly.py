@@ -1,8 +1,10 @@
 """Tests for scout/input_assembly.py (tasks 6.2, 6.3, 6.4)."""
+import os
 import sys
 from pathlib import Path
 import tempfile
 import json
+import time
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -89,6 +91,57 @@ def test_assemble_snapshot_basic():
         assert features["revenue_growth"] is not None
         assert features["price_change_60d"] is not None
         assert features["turnover_avg_percentile_60d"] is not None
+
+
+def test_assemble_snapshot_allow_stale_reads_complete_stale_cache():
+    """L2 allow_stale SHALL read structurally valid stale basic data."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        cache_dir = Path(tmpdir) / "cache"
+        ticker = "600519"
+        mock_data = {
+            "basic": {
+                "name": "贵州茅台",
+                "industry": "白酒",
+                "market_cap": 2e12,
+            },
+            "valuation": {
+                "pe_ttm": 38.5,
+                "pb": 8.2,
+                "pe_percentile_5y": 45.0,
+            },
+            "financials": {
+                "income": {
+                    "net_profit": [400e8, 450e8, 500e8],
+                    "revenue": [800e8, 900e8, 1000e8],
+                },
+                "balance_sheet": {
+                    "TOTAL_ASSETS": [2000e8, 2200e8, 2400e8],
+                    "TOTAL_CURRENT_LIAB": [200e8, 220e8, 240e8],
+                    "TOTAL_NONCURRENT_LIAB": [100e8, 110e8, 120e8],
+                    "GOODWILL": [0, 0, 0],
+                },
+                "cash_flow": {"NETCASH_OPERATE": [450e8, 500e8, 550e8]},
+            },
+            "kline": {
+                "close": [1800.0] * 250,
+                "turnover_rate": [0.5] * 250,
+            },
+            "risk": {"pledge_ratio": 5.0, "audit_opinion": "标准无保留意见"},
+        }
+        _create_mock_cache(ticker, cache_dir, mock_data)
+        stale_time = time.time() - 30 * 24 * 3600
+        for path in (cache_dir / ticker).glob("*.json"):
+            os.utime(path, (stale_time, stale_time))
+
+        cm = CacheManager(base_dir=str(cache_dir))
+        features = assemble_snapshot(
+            ticker,
+            cache_manager=cm,
+            freshness_policy="allow_stale",
+        )
+
+        assert "error" not in features
+        assert features["name"] == "贵州茅台"
 
 
 def test_assemble_snapshot_contract_pe_ttm_source():

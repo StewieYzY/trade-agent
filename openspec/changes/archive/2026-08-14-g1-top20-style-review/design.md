@@ -94,6 +94,42 @@ evidence 记录两组身份：
 - 归档复核副本：真实用户 Gate 完成后复制进 `openspec/changes/g1-top20-style-review/evidence/`，并在 `evidence-index.md` 登记 SHA-256、来源路径与解释（与既有 child 归档惯例一致）。
 - evidence 必须保留：pinned/derivation identity、Top 20 逐只记录（rank/ticker/adjusted_composite/因子与 anti-trap 摘要）、用户逐只 label+reason、统计（n、worth/not_worth/unable 计数、比例）、gate_verdict 与判定依据。
 
+### D8. Evidence bundle 归档有序候选（l1_candidates）与内嵌消费
+
+2026-08-13 阻断（tasks.md 4.5）暴露「确定性再派生依赖外部数据快照」的脆弱性后，新增（用户授权恢复路径 (a) 的工程前提）：
+
+- evidence bundle 增加 `l1_candidates` 字段：heat-filter 后的有序候选列表（与 L2 输入同源同序，即 Top 20 派生直接依据），随 bundle 永久归档。
+- `top20 derive` 优先消费内嵌候选：bundle 含非空 `l1_candidates` 时完全离线（无缓存依赖、无 provider/LLM 调用），`derivation_run.derivation_kind="pinned_bundle_l1_candidates"`、`derivation_run.run_id == pinned run_id`（消费的是 pinned run 自身产物，不是新 run）。
+- 绑定检查与 replay 路径完全一致：profile_version / input_ticker_set_hash / 漏斗（含候选数量 == after_heat_filter）/ 候选 ticker 完整性，任一不一致 → `not_evaluable`。
+- 无 `l1_candidates` 的旧 bundle 继续走 D1 warm-cache replay 路径；两路径语义等价，仅候选来源不同。
+
+### D9. 受控重跑：冻结输入 + 全量预热 + force-l2 evidence run（恢复路径 (a)）
+
+用户 2026-08-13 授权「一次新的受控全市场 warm-cache L1+L2 run」。执行合同：
+
+- **冻结输入**：归档 bundle `2026-08-12_7887d515.json`（SHA-256 80334e3b…）的 `input_tickers`（5208 SH/SZ）写为 universe 快照文件；重算 `compute_input_ticker_set_hash` 必须 == `9d20ac29743c`，否则中止。不使用 live akshare 名单（输入身份必须与 8-12 run 一致）。
+- **全量预热**：对冻结名单做五维 cache-first 预热（socket 90s、逐维进度遥测、失败明细落日志），随后补漏 + basic 最后刷新（TTL=2h），终检全暖才允许进入 evidence run。
+- **受控 evidence run**：`--tickers-file <冻结 universe> --coverage full_market --freshness-policy allow_stale --force-l2`（L2 强制真实 LLM 调用，对齐 8-12 run 实际口径；allow_stale 在全暖缓存下不触发 provider）。
+- **新 run 固定为产品 run**：通过工程 Gate（hard_gate_passed、cache_warm、可用率、unhandled=0、l1_candidates 完整）后，替代 `7887d515` 成为 4.1/4.2 的 pinned run；旧 bundle 降级为输入冻结来源与历史工程证据。
+- **失败语义**：run 失败保留失败 bundle 与日志、停止后续步骤；MUST NOT 用部分数据或降级口径冒充通过。
+
+### D10. L2 freshness policy 贯通与全量错误阻断
+
+2026-08-14 的 `allow_stale` run 暴露 freshness policy 只传到 L1、
+未传到 L2 的设计断裂：`screen_a_shares` 能读 stale basic，但
+`scout_batch → assemble_snapshot → CacheManager.get` 仍按默认
+`require_fresh` 读取，导致全部 L2 输入以 `insufficient_data` 短路，0 次
+真实 LLM 调用。
+
+- `freshness_policy` 从 evidence orchestrator 贯通到 `scout_batch` 和
+  `assemble_snapshot`；默认 `require_fresh` 行为不变。
+- `allow_stale` 只允许读取结构有效的 stale payload；stale 数量继续写入
+  `data_freshness`，不得标记为 fresh。
+- `hard_gate_passed` 继续只表达工程字段可用率与未处理异常；但
+  `force_l2=true` 且所有 L2 输入均 error、真实调用数为 0 时，最终
+  `gate_passed` 必须为 false，防止工程硬门槛被误读为真实 L2 capability
+  evidence。
+
 ### D7. 防冒充与 WIP 保护
 
 - derive/finalize 全程不访问 LLM/provider；测试使用注入的 fake L1 输出与 tmp_path，不读写真实 `data/cache`、`debate/`、`watchlist/`。
@@ -109,9 +145,16 @@ evidence 记录两组身份：
 - [Risk] 用户复核主观性 → 固定标签枚举 + 强制逐只理由 + 记录全量保留，使主观判断可审计、可复盘。
 - [Trade-off] Top 20 采用 L1 排序（adjusted_composite 降序）而非 L2 confidence 排序：pinned run 的 L2 逐票结果不可恢复，L1 排序是 pinned run 输入下唯一可确定性复现的 canonical 排序；用户复核的是筛选器排序质量，符合产品 Gate 意图。
 
-### 已实现风险记录（2026-08-13）
+### 已实现风险记录（2026-08-13，已于 2026-08-14 解决）
 
-首次真实 `top20 derive` 执行即暴露上述第一条风险的实际形态：pinned run `7887d515` 的 evidence bundle 只含聚合指标，未归档逐票候选；其 warm cache（26040 槽位）位于已被清理的全市场 child worktree 内（untracked `data/cache`），本机主 checkout 仅剩 73 个 code 的旧缓存，废纸篓与 Time Machine 本地快照均无残留。因此 pinned run 的 Top 20 目前无法离线确定性复现，6.1/6.2 处于 not-evaluable-blocked 状态，等待用户决定的受控恢复路径（见 tasks.md 4.5）。本 child 的派生/校验/Gate 实现与测试不受影响；该发现同时证明 D2 漏斗交叉验证的必要性——数据快照缺失时必须阻断而不是勉强产出名单。后续工程 run 应持久化逐票候选与（或）数据快照引用，作为独立改进项，不在本 child 实现。
+首次真实 `top20 derive` 执行暴露了上述第一条风险的实际形态：旧 pinned run
+`7887d515` 的 evidence bundle 只含聚合指标，未归档逐票候选，其 warm cache
+也已不可恢复。因此旧 run 的 Top 20 无法离线确定性复现，6.1/6.2 曾处于
+`not_evaluable-blocked`。用户随后授权 D8/D9 恢复路径 (a)，由新受控 run
+`b4862934-907a-441a-9503-8fbc2c3f57e4` 固定完整 `l1_candidates`、派生 Top 20
+并完成真实用户复核；最终 evidence 已通过并登记于
+`evidence/2026-08-14_b4862934/evidence-index.md`。该发现仍证明 D2 漏斗交叉验证
+的必要性；后续工程 run 应持久化逐票候选与（或）数据快照引用，作为独立改进项。
 
 ## Migration Plan
 

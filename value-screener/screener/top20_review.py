@@ -9,7 +9,7 @@
   （screen_a_shares 确定性计算，不调用 provider/LLM），复现候选排序。
 - 绑定校验：profile_version / input_ticker_set_hash / 漏斗统计必须与 pinned 一致，
   任一不一致 → not_evaluable，不得产生 Gate 通过结论。
-- 用户复核：每只 Top 20 一条记录（枚举 label + 非空理由）；缺失/重复/非法即阻断。
+- 用户复核：每只 Top 20 一条记录（枚举 label/confidence + 非空理由）；缺失/重复/非法即阻断。
 - Gate：worth_research_count * 10 >= n * 7 → passed；记录合法但不足 → failed；
   身份不一致或记录非法 → not_evaluable。failed/not_evaluable 绝不写成 passed。
 """
@@ -31,6 +31,7 @@ LABEL_WORTH = "worth_further_research"
 LABEL_NOT_WORTH = "not_worth_further_research"
 LABEL_UNABLE = "unable_to_judge_insufficient_data"
 REVIEW_LABELS = (LABEL_WORTH, LABEL_NOT_WORTH, LABEL_UNABLE)
+REVIEW_CONFIDENCE_LEVELS = ("low", "medium", "high")
 
 # pinned bundle 必须包含的身份字段
 _PINNED_REQUIRED_FIELDS = ("run_id", "profile_version", "input_ticker_set_hash", "input_tickers")
@@ -88,6 +89,10 @@ def load_pinned_run(bundle: dict | str | Path) -> dict:
             f"recomputed={recomputed} declared={declared}（bundle 可能被改动）"
         )
 
+    l1_candidates = bundle.get("l1_candidates")
+    if l1_candidates is not None and not isinstance(l1_candidates, list):
+        raise Top20ValidationError("pinned bundle l1_candidates 必须是列表（候选归档损坏）")
+
     return {
         "run_id": bundle["run_id"],
         "profile_version": bundle["profile_version"],
@@ -97,7 +102,14 @@ def load_pinned_run(bundle: dict | str | Path) -> dict:
         "coverage": bundle.get("coverage"),
         "funnel": dict(bundle.get("funnel") or {}),
         "source_path": source_path,
+        # 新 run 的 bundle 归档 heat-filter 后有序候选（Top 20 派生直接消费）；
+        # 旧 bundle 无归档 → None，调用方据此选择 warm-cache replay 路径。
+        "l1_candidates": l1_candidates,
     }
+
+
+DERIVATION_KIND_REPLAY = "deterministic_l1_replay"
+DERIVATION_KIND_EMBEDDED = "pinned_bundle_l1_candidates"
 
 
 def derive_top20(
@@ -105,14 +117,22 @@ def derive_top20(
     l1_output: dict,
     limit: int = DEFAULT_TOP20_LIMIT,
     freshness_policy: str = "allow_stale",
+    derivation_kind: str = DERIVATION_KIND_REPLAY,
 ) -> dict:
-    """从固定 run 的输入派生 Top 20（确定性 L1 再派生）.
+    """从固定 run 的输入派生 Top 20.
+
+    两种派生来源（derivation_kind 区分，绑定检查完全一致）：
+    - deterministic_l1_replay：对 pinned input_tickers 以 allow_stale 离线再跑
+      screen_a_shares（确定性计算，不调用 provider/LLM）。
+    - pinned_bundle_l1_candidates：直接消费 pinned bundle 归档的 l1_candidates
+      （同一 run 的候选，无缓存依赖）。
 
     Args:
         pinned: load_pinned_run() 的输出。
-        l1_output: screen_a_shares() 的 S5 输出（对 pinned input_tickers 的 allow_stale 再运行）。
+        l1_output: screen_a_shares() 的 S5 输出，或由 bundle 归档候选构造的等价结构。
         limit: Top N 上限（缺省 20）。
-        freshness_policy: 记录到 derivation 身份（derivation 必须离线 allow_stale）。
+        freshness_policy: 记录到 derivation 身份（replay 必须离线 allow_stale）。
+        derivation_kind: 派生来源标识。
 
     Returns:
         derivation 文档。status="derived" 时含 top20 逐只记录；
@@ -151,12 +171,19 @@ def derive_top20(
             f"pinned after_heat_filter={expected_candidates}"
         )
 
+    bad_ticker_indices = [i for i, c in enumerate(candidates) if not c.get("ticker")]
+    if bad_ticker_indices:
+        reasons.append(
+            f"候选 ticker 缺失: indices={bad_ticker_indices[:10]}"
+            f"{'...' if len(bad_ticker_indices) > 10 else ''}（无法形成可审计 Top {limit}）"
+        )
+
     derivation_run = {
         "run_id": l1_output.get("run_id"),
         "profile_version": derivation_profile,
         "input_ticker_set_hash": derivation_hash,
         "run_date": l1_output.get("run_date"),
-        "derivation_kind": "deterministic_l1_replay",
+        "derivation_kind": derivation_kind,
         "freshness_policy": freshness_policy,
     }
     pinned_run = {
@@ -210,10 +237,51 @@ def derive_top20(
     }
 
 
-def build_review_template(derivation: dict) -> dict:
-    """生成用户复核模板：逐只预填 rank/ticker 与 identity，label/reason 留空.
+def derive_top20_from_pinned_bundle(
+    bundle: dict | str | Path,
+    limit: int = DEFAULT_TOP20_LIMIT,
+) -> dict:
+    """直接消费 pinned bundle 归档的 l1_candidates 派生 Top 20（完全离线）.
 
-    label/reason 只能由真实用户填写；MUST NOT 由模型或历史结果自动填充。
+    与 replay 路径相比：无缓存依赖、无 screen_a_shares 调用；候选来自 pinned run
+    自身的归档（derivation_run.run_id == pinned run_id）。profile/hash/漏斗/候选
+    完整性检查与 replay 路径完全一致，任一不一致仍判 not_evaluable。
+
+    Args:
+        bundle: pinned bundle（dict 或 JSON 文件路径），必须含非空 l1_candidates。
+        limit: Top N 上限（缺省 20）。
+
+    Raises:
+        Top20ValidationError: bundle 身份非法或无 l1_candidates 归档。
+    """
+    pinned = load_pinned_run(bundle)
+    candidates = pinned.get("l1_candidates")
+    if not candidates:
+        raise Top20ValidationError(
+            "pinned bundle 缺少 l1_candidates 归档（非空列表）；旧 bundle 无候选归档，"
+            "须恢复该 run 的 warm cache 走 deterministic replay，或经授权重跑并归档候选"
+        )
+    l1_output = {
+        "run_id": pinned["run_id"],
+        "run_date": pinned.get("run_date"),
+        "profile_version": pinned["profile_version"],
+        "input_ticker_set_hash": pinned["input_ticker_set_hash"],
+        "candidates": candidates,
+        "stats": pinned.get("funnel") or {},
+    }
+    return derive_top20(
+        pinned,
+        l1_output,
+        limit=limit,
+        freshness_policy="embedded_l1_candidates(no_cache_io)",
+        derivation_kind=DERIVATION_KIND_EMBEDDED,
+    )
+
+
+def build_review_template(derivation: dict) -> dict:
+    """生成用户复核模板：逐只预填 rank/ticker 与 identity，label/confidence/reason 留空.
+
+    label/confidence/reason 只能由真实用户填写；MUST NOT 由模型或历史结果自动填充。
     """
     if derivation.get("status") != "derived":
         raise Top20ValidationError(
@@ -227,6 +295,7 @@ def build_review_template(derivation: dict) -> dict:
             "ticker": item["ticker"],
             "adjusted_composite": item.get("adjusted_composite"),
             "label": None,
+            "confidence": None,
             "reason": "",
         })
     return {
@@ -236,6 +305,7 @@ def build_review_template(derivation: dict) -> dict:
         "profile_version": derivation["pinned_run"]["profile_version"],
         "input_ticker_set_hash": derivation["pinned_run"]["input_ticker_set_hash"],
         "label_enum": list(REVIEW_LABELS),
+        "confidence_enum": list(REVIEW_CONFIDENCE_LEVELS),
         "reviews": reviews,
     }
 
@@ -245,7 +315,7 @@ def validate_user_review(review_doc: dict, derivation: dict) -> list[dict]:
 
     Raises:
         Top20ValidationError: 任一违规（缺失/重复/rank-ticker 不匹配/非法 label/
-            空理由/身份不一致/仅汇总无逐只记录）。MUST NOT 静默接受。
+            非法 confidence/空理由/身份不一致/仅汇总无逐只记录）。MUST NOT 静默接受。
     """
     if derivation.get("status") != "derived":
         raise Top20ValidationError(
@@ -288,6 +358,7 @@ def validate_user_review(review_doc: dict, derivation: dict) -> list[dict]:
         rank = entry.get("rank")
         ticker = entry.get("ticker")
         label = entry.get("label")
+        confidence = entry.get("confidence")
         reason = entry.get("reason")
 
         if rank not in expected_by_rank:
@@ -305,12 +376,23 @@ def validate_user_review(review_doc: dict, derivation: dict) -> list[dict]:
             errors.append(
                 f"ticker={ticker!r} label 非法: {label!r}，允许值={list(REVIEW_LABELS)}"
             )
+        if confidence not in REVIEW_CONFIDENCE_LEVELS:
+            errors.append(
+                f"ticker={ticker!r} confidence 非法: {confidence!r}，"
+                f"允许值={list(REVIEW_CONFIDENCE_LEVELS)}"
+            )
         if not isinstance(reason, str) or not reason.strip():
             errors.append(f"ticker={ticker!r} reason 为空（必须提供逐只理由）")
 
         seen_ranks.add(rank)
         seen_tickers.add(ticker)
-        records_by_rank[rank] = {"rank": rank, "ticker": ticker, "label": label, "reason": reason}
+        records_by_rank[rank] = {
+            "rank": rank,
+            "ticker": ticker,
+            "label": label,
+            "confidence": confidence,
+            "reason": reason,
+        }
 
     missing_ranks = sorted(set(expected_by_rank) - set(records_by_rank))
     if missing_ranks:
@@ -385,6 +467,7 @@ def finalize_top20(derivation: dict, review_doc: dict | None) -> dict:
             "ticker": record["ticker"],
             "adjusted_composite": context.get("adjusted_composite"),
             "label": record["label"],
+            "confidence": record["confidence"],
             "reason": record["reason"],
             "pinned_run_id": derivation["pinned_run"]["run_id"],
             "derivation_run_id": derivation["derivation_run"]["run_id"],

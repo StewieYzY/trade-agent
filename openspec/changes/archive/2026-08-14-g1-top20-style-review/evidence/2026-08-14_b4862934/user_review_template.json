@@ -1,0 +1,179 @@
+{
+  "schema_version": "g1-top20-user-review.v1",
+  "pinned_run_id": "b4862934-907a-441a-9503-8fbc2c3f57e4",
+  "derivation_run_id": "b4862934-907a-441a-9503-8fbc2c3f57e4",
+  "profile_version": "g1-2026-07-21",
+  "input_ticker_set_hash": "9d20ac29743c",
+  "label_enum": [
+    "worth_further_research",
+    "not_worth_further_research",
+    "unable_to_judge_insufficient_data"
+  ],
+  "confidence_enum": [
+    "low",
+    "medium",
+    "high"
+  ],
+  "reviews": [
+    {
+      "rank": 1,
+      "ticker": "000902.SZ",
+      "adjusted_composite": 97.32,
+      "label": "worth_further_research",
+      "confidence": "medium",
+      "reason": "认可，分析师评级买入3"
+    },
+    {
+      "rank": 2,
+      "ticker": "002236.SZ",
+      "adjusted_composite": 95.83420000000001,
+      "label": "worth_further_research",
+      "confidence": "low",
+      "reason": "认可，分析师评级持有5"
+    },
+    {
+      "rank": 3,
+      "ticker": "600690.SH",
+      "adjusted_composite": 95.56,
+      "label": "worth_further_research",
+      "confidence": "high",
+      "reason": "认可，分析师评级买入25，目标价26.83"
+    },
+    {
+      "rank": 4,
+      "ticker": "601717.SH",
+      "adjusted_composite": 95.56,
+      "label": "worth_further_research",
+      "confidence": "medium",
+      "reason": "认可，分析师评级强烈买入1"
+    },
+    {
+      "rank": 5,
+      "ticker": "601216.SH",
+      "adjusted_composite": 94.13,
+      "label": "worth_further_research",
+      "confidence": "medium",
+      "reason": "认可，分析师评级买入1"
+    },
+    {
+      "rank": 6,
+      "ticker": "600897.SH",
+      "adjusted_composite": 94.07,
+      "label": "worth_further_research",
+      "confidence": "low",
+      "reason": "认可，分析师评级持有1"
+    },
+    {
+      "rank": 7,
+      "ticker": "600861.SH",
+      "adjusted_composite": 93.76,
+      "label": "worth_further_research",
+      "confidence": "high",
+      "reason": "认可，分析师评级强烈买入3，目标价28.7"
+    },
+    {
+      "rank": 8,
+      "ticker": "600741.SH",
+      "adjusted_composite": 93.7468,
+      "label": "worth_further_research",
+      "confidence": "high",
+      "reason": "认可，分析师评级买入9"
+    },
+    {
+      "rank": 9,
+      "ticker": "600060.SH",
+      "adjusted_composite": 93.73,
+      "label": "worth_further_research",
+      "confidence": "high",
+      "reason": "认可，分析师评级买入9"
+    },
+    {
+      "rank": 10,
+      "ticker": "000708.SZ",
+      "adjusted_composite": 93.68799999999999,
+      "label": "worth_further_research",
+      "confidence": "high",
+      "reason": "认可，分析师评级强烈买入1"
+    },
+    {
+      "rank": 11,
+      "ticker": "002011.SZ",
+      "adjusted_composite": 93.6488,
+      "label": "worth_further_research",
+      "confidence": "high",
+      "reason": "认可，分析师评级强烈买入2，目标价16.68"
+    },
+    {
+      "rank": 12,
+      "ticker": "600968.SH",
+      "adjusted_composite": 93.27,
+      "label": "worth_further_research",
+      "confidence": "high",
+      "reason": "认可，分析师评级强烈买入3，目标价4.7"
+    },
+    {
+      "rank": 13,
+      "ticker": "601083.SH",
+      "adjusted_composite": 92.82,
+      "label": "worth_further_research",
+      "confidence": "medium",
+      "reason": "认可，分析师评级买入2"
+    },
+    {
+      "rank": 14,
+      "ticker": "601808.SH",
+      "adjusted_composite": 92.45,
+      "label": "worth_further_research",
+      "confidence": "medium",
+      "reason": "认可，分析师评级买入9"
+    },
+    {
+      "rank": 15,
+      "ticker": "002215.SZ",
+      "adjusted_composite": 92.17,
+      "label": "worth_further_research",
+      "confidence": "medium",
+      "reason": "认可，认可，分析师评级强烈买入1，目标价14.4"
+    },
+    {
+      "rank": 16,
+      "ticker": "000612.SZ",
+      "adjusted_composite": 92.08,
+      "label": "worth_further_research",
+      "confidence": "medium",
+      "reason": "认可，分析师评级强烈买入1"
+    },
+    {
+      "rank": 17,
+      "ticker": "000899.SZ",
+      "adjusted_composite": 92.05,
+      "label": "worth_further_research",
+      "confidence": "medium",
+      "reason": "认可，分析师评级买入1"
+    },
+    {
+      "rank": 18,
+      "ticker": "000719.SZ",
+      "adjusted_composite": 91.80640000000001,
+      "label": "worth_further_research",
+      "confidence": "medium",
+      "reason": "认可，分析师评级买入1"
+    },
+    {
+      "rank": 19,
+      "ticker": "000425.SZ",
+      "adjusted_composite": 91.79,
+      "label": "worth_further_research",
+      "confidence": "high",
+      "reason": "认可，分析师评级强烈买入12，目标价12.28"
+    },
+    {
+      "rank": 20,
+      "ticker": "600873.SH",
+      "adjusted_composite": 91.4634,
+      "label": "worth_further_research",
+      "confidence": "high",
+      "reason": "认可，分析师评级强烈买入3，目标价13.45"
+    }
+  ]
+}

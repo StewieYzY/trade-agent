@@ -203,10 +203,21 @@ def _judge_gate(
     return availability_ok and exception_ok
 
 
+def _l2_execution_gate(funnel: dict, cost: dict, force_l2: bool) -> bool:
+    """force-L2 全量错误且零调用时，禁止最终 full-market Gate 通过."""
+    return not (
+        force_l2
+        and funnel.get("l2_input", 0) > 0
+        and funnel.get("l2_error", 0) == funnel.get("l2_input", 0)
+        and cost.get("call_count", 0) == 0
+    )
+
+
 def _gate_thresholds() -> dict:
     return {
         "min_field_availability": GATE_MIN_FIELD_AVAILABILITY,
         "max_unhandled_exceptions": GATE_MAX_UNHANDLED_EXCEPTIONS,
+        "reject_all_l2_errors_when_force_l2": True,
         "reference_max_elapsed_minutes": GATE_MAX_ELAPSED_MINUTES,
         "reference_max_l2_cost_yuan": GATE_MAX_L2_COST_YUAN,
     }
@@ -318,6 +329,7 @@ async def run_full_market_evidence(
 
     l2_results, usage_summary, failure_summary = await scout_batch(
         candidates, force=force_l2, run_identity=run_identity,
+        freshness_policy=freshness_policy,
     )
     l2_elapsed = time.monotonic() - l2_start
 
@@ -369,6 +381,7 @@ async def run_full_market_evidence(
         cost,
         unhandled_count,
     )
+    l2_execution_passed = _l2_execution_gate(funnel, cost, force_l2)
     observed_metrics = {
         "total_elapsed_seconds": timing["total_elapsed_seconds"],
         "l1_elapsed_seconds": timing["l1_elapsed_seconds"],
@@ -394,6 +407,9 @@ async def run_full_market_evidence(
         "coverage": coverage,
         "mode": "live",
         "timing": timing,
+        # G1 6.1/6.2：归档 heat-filter 后有序候选（与 L2 输入同源），
+        # 供 Top 20 派生离线消费；8-12 run 只存聚合指标导致候选排序不可复现。
+        "l1_candidates": candidates,
         "funnel": funnel,
         "field_availability": field_availability,
         "cost": cost,
@@ -414,7 +430,8 @@ async def run_full_market_evidence(
         "gate_thresholds": _gate_thresholds(),
         "hard_gate_passed": hard_gate_passed,
         "metrics_gate_passed": hard_gate_passed,
-        "gate_passed": hard_gate_passed and coverage == "full_market",
+        "l2_execution_passed": l2_execution_passed,
+        "gate_passed": hard_gate_passed and l2_execution_passed and coverage == "full_market",
         "evidence_notes": evidence_notes,
     }
     return bundle

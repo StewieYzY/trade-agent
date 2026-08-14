@@ -30,8 +30,8 @@
 
 ## 6. 产品 Gate
 
-- [ ] 6.1 固定通过工程 Gate 的 ScreeningProfile 和 run，完成用户 Top 20 逐只复核
-- [ ] 6.2 证明至少 70% Top 20 被判断为值得进一步研究；若失败，建立新的校准 child change 后重跑
+- [x] 6.1 固定通过工程 Gate 的 ScreeningProfile 和 run，完成用户 Top 20 逐只复核。最终 evidence：`openspec/changes/g1-top20-style-review/evidence/2026-08-14_b4862934/top20_gate_evidence.json`；固定 `run_id=b4862934-907a-441a-9503-8fbc2c3f57e4`、`profile_version=g1-2026-07-21`、`input_ticker_set_hash=9d20ac29743c`
+- [x] 6.2 证明至少 70% Top 20 被判断为值得进一步研究；本次 `20/20`（100%）通过，最终 evidence：`openspec/changes/g1-top20-style-review/evidence/2026-08-14_b4862934/top20_gate_evidence.json`
 
 ## 7. Umbrella Closure
 

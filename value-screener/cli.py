@@ -524,6 +524,7 @@ def top20_derive(
         Top20ValidationError,
         build_review_template,
         derive_top20,
+        derive_top20_from_pinned_bundle,
         load_pinned_run,
         save_json,
     )
@@ -547,26 +548,33 @@ def top20_derive(
         f"pinned run: {pinned_run['run_id']} profile={pinned_run['profile_version']} "
         f"input_hash={pinned_run['input_ticker_set_hash']} tickers={len(pinned_run['input_tickers'])}"
     )
-    warmth = _check_cache_warmth(pinned_run["input_tickers"])
-    if not warmth["cache_warm"]:
-        freshness = warmth["data_freshness"]
+    if pinned_run.get("l1_candidates"):
         typer.echo(
-            "离线预检失败：pinned run 输入集合的本地 L1 缓存不完整"
-            f"（missing={freshness['missing']} invalid={freshness['invalid']} / "
-            f"total_slots={freshness['total_slots']}）。"
-            "缓存缺失时 allow_stale 会退回 provider 抓取，违反本 Gate 的离线约束；"
-            "请先恢复或经授权重建 pinned run 的数据快照后再执行 derive。",
-            err=True,
+            "pinned bundle 内含 l1_candidates 归档 → 直接离线消费"
+            "（无缓存依赖、无 provider/LLM 调用）"
         )
-        raise typer.Exit(code=2)
+        derivation = derive_top20_from_pinned_bundle(pinned_path, limit=limit)
+    else:
+        warmth = _check_cache_warmth(pinned_run["input_tickers"])
+        if not warmth["cache_warm"]:
+            freshness = warmth["data_freshness"]
+            typer.echo(
+                "离线预检失败：pinned run 输入集合的本地 L1 缓存不完整"
+                f"（missing={freshness['missing']} invalid={freshness['invalid']} / "
+                f"total_slots={freshness['total_slots']}）。"
+                "缓存缺失时 allow_stale 会退回 provider 抓取，违反本 Gate 的离线约束；"
+                "请先恢复或经授权重建 pinned run 的数据快照后再执行 derive。",
+                err=True,
+            )
+            raise typer.Exit(code=2)
 
-    typer.echo("开始离线 L1 再派生（allow_stale，无 provider/LLM 调用）...")
-    l1_output = screen_a_shares(
-        pinned_run["input_tickers"],
-        freshness_policy="allow_stale",
-    )
+        typer.echo("开始离线 L1 再派生（allow_stale，无 provider/LLM 调用）...")
+        l1_output = screen_a_shares(
+            pinned_run["input_tickers"],
+            freshness_policy="allow_stale",
+        )
 
-    derivation = derive_top20(pinned_run, l1_output, limit=limit)
+        derivation = derive_top20(pinned_run, l1_output, limit=limit)
     out_dir = Path(output_dir)
     derivation_path = save_json(derivation, out_dir / "top20_derivation.json")
     typer.echo(f"derivation 已写入 {derivation_path}（status={derivation['status']}）")
@@ -578,7 +586,10 @@ def top20_derive(
 
     template = build_review_template(derivation)
     template_path = save_json(template, out_dir / "user_review_template.json")
-    typer.echo(f"用户复核模板已写入 {template_path}（{len(template['reviews'])} 只待逐只填写 label/reason）")
+    typer.echo(
+        f"用户复核模板已写入 {template_path}"
+        f"（{len(template['reviews'])} 只待逐只填写 label/confidence/reason）"
+    )
 
 
 @top20_app.command(name="finalize")

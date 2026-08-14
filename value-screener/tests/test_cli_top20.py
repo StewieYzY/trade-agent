@@ -118,3 +118,47 @@ def test_derive_proceeds_when_cache_warm(monkeypatch, tmp_path):
     template = json.loads((out_dir / "user_review_template.json").read_text(encoding="utf-8"))
     assert len(template["reviews"]) == 1
     assert template["reviews"][0]["label"] is None
+
+
+def test_derive_consumes_embedded_candidates_without_cache_or_provider(monkeypatch, tmp_path):
+    """bundle 内嵌 l1_candidates → 无需 warm cache、不进入 screen_a_shares，直接离线派生.
+
+    cold cache（tmp_path 下无任何缓存）+ 爆炸 stub：若实现误走 replay 路径必然失败。
+    """
+    monkeypatch.chdir(tmp_path)
+    tickers = ["600001.SH", "600002.SH"]
+    bundle_path = tmp_path / "pinned.json"
+    _write_pinned_bundle(bundle_path, tickers)
+    bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+    bundle["l1_candidates"] = [
+        {
+            "ticker": "600001.SH",
+            "factor_scores": {"composite": 88.0},
+            "anti_trap": {"score": 95.0, "flags": []},
+            "adjusted_composite": 83.6,
+        },
+        {
+            "ticker": "600002.SH",
+            "factor_scores": {"composite": 80.0},
+            "anti_trap": {"score": 90.0, "flags": []},
+            "adjusted_composite": 72.0,
+        },
+    ]
+    bundle_path.write_text(json.dumps(bundle, ensure_ascii=False), encoding="utf-8")
+
+    def _screen_a_shares_boom(*args, **kwargs):
+        raise AssertionError("内嵌候选路径不得进入 screen_a_shares")
+
+    monkeypatch.setattr("screener.main.screen_a_shares", _screen_a_shares_boom)
+
+    result = runner.invoke(app, ["top20", "derive", "--pinned", str(bundle_path)])
+    assert result.exit_code == 0, result.output
+    out_dir = tmp_path / "data/evidence/g1-top20-style-review"
+    derivation = json.loads((out_dir / "top20_derivation.json").read_text(encoding="utf-8"))
+    assert derivation["status"] == "derived"
+    assert derivation["derivation_run"]["derivation_kind"] == "pinned_bundle_l1_candidates"
+    assert derivation["derivation_run"]["run_id"] == bundle["run_id"]
+    assert len(derivation["top20"]) == 2
+    template = json.loads((out_dir / "user_review_template.json").read_text(encoding="utf-8"))
+    assert len(template["reviews"]) == 2
+    assert all(r["label"] is None for r in template["reviews"])

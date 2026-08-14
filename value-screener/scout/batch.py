@@ -43,6 +43,7 @@ async def scout_batch(
     candidates: list[dict],
     force: bool = False,
     run_identity: dict | None = None,
+    freshness_policy: str = "require_fresh",
 ) -> tuple[list[dict], dict, dict]:
     """并发对 ~200 只股票做 LLM 初筛，返回 (full_results, usage_summary, failure_summary).
 
@@ -52,6 +53,8 @@ async def scout_batch(
         run_identity: g1-canonical-run-identity 从 L1 继承的运行身份
             {run_id, profile_version, input_ticker_set_hash}。None 时 fallback 生成
             并标注 run_id_source="scout_fallback"（纯 L2 单跑，非来自 L1）。
+        freshness_policy: 传递给 L2 特征快照的缓存新鲜度策略；默认严格读取 fresh
+            缓存，`allow_stale` 时读取结构有效但过期的 L1 缓存。
 
     Returns:
         (full_results, usage_summary, failure_summary)：
@@ -178,7 +181,11 @@ async def scout_batch(
                     }
 
             # 2. 组装特征快照（f2 §6: L2 降级模式——financials 不齐但 critical 齐时降级）
-            features = assemble_snapshot(ticker, degrade_on_financials_gap=True)
+            features = assemble_snapshot(
+                ticker,
+                degrade_on_financials_gap=True,
+                freshness_policy=freshness_policy,
+            )
 
             # Insufficient data guard（critical 缺失 → fail-fast，不降级）
             # g1-l2-full-result-contract review 修复：error result 补全 full-result 契约字段

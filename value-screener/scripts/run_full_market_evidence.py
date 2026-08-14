@@ -84,6 +84,8 @@ async def main():
     parser.add_argument("--freshness-policy", type=str, default="require_fresh",
                         choices=["require_fresh", "allow_stale"],
                         help="L1 cache policy: require_fresh refreshes stale; allow_stale reads valid local cache only")
+    parser.add_argument("--force-l2", action="store_true",
+                        help="L2 强制真实 LLM 调用（绕过 scout-cache 复用）；受控 Gate run 必须显式开启")
     args = parser.parse_args()
 
     from performance.run_evidence import run_full_market_evidence, save_evidence_bundle, build_failure_bundle
@@ -114,7 +116,7 @@ async def main():
         print()
 
         bundle = await run_full_market_evidence(
-            tickers, exclude_cyclicals=False, force_l2=False,
+            tickers, exclude_cyclicals=False, force_l2=args.force_l2,
             coverage=coverage, ticker_source=source,
             freshness_policy=args.freshness_policy,
         )
@@ -148,6 +150,7 @@ async def main():
     print(f"timing: total={t['total_elapsed_seconds']:.1f}s, "
           f"L1={t['l1_elapsed_seconds']:.1f}s, L2={t['l2_elapsed_seconds']:.1f}s")
     print(f"funnel: {bundle['funnel']}")
+    print(f"l1_candidates archived: {len(bundle.get('l1_candidates') or [])}")
     avail = bundle["field_availability"]
     print(f"field_availability: {avail['rate']:.4f} "
           f"({avail['missing_count']} missing / {avail['total_fields']} total)")

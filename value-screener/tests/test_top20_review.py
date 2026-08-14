@@ -19,10 +19,12 @@ import pytest
 
 from data.lib.identity import compute_input_ticker_set_hash
 from screener.top20_review import (
+    REVIEW_CONFIDENCE_LEVELS,
     REVIEW_LABELS,
     Top20ValidationError,
     build_review_template,
     derive_top20,
+    derive_top20_from_pinned_bundle,
     evaluate_gate,
     finalize_top20,
     load_pinned_run,
@@ -130,6 +132,7 @@ def _valid_review_records(derivation: dict, labels: list[str]) -> dict:
             "rank": item["rank"],
             "ticker": item["ticker"],
             "label": label,
+            "confidence": "high",
             "reason": f"理由-{item['rank']}",
         })
     return {
@@ -316,6 +319,24 @@ def test_validate_review_rejects_empty_reason():
     assert derivation["top20"][5]["ticker"] in str(exc_info.value)
 
 
+def test_validate_review_rejects_missing_confidence():
+    pinned, l1 = _make_pinned()
+    derivation = derive_top20(pinned, l1)
+    doc = _valid_review_records(derivation, ["worth_further_research"] * 20)
+    del doc["reviews"][0]["confidence"]
+    with pytest.raises(Top20ValidationError, match="confidence"):
+        validate_user_review(doc, derivation)
+
+
+def test_validate_review_rejects_invalid_confidence():
+    pinned, l1 = _make_pinned()
+    derivation = derive_top20(pinned, l1)
+    doc = _valid_review_records(derivation, ["worth_further_research"] * 20)
+    doc["reviews"][0]["confidence"] = "certain"
+    with pytest.raises(Top20ValidationError, match="confidence"):
+        validate_user_review(doc, derivation)
+
+
 def test_validate_review_rejects_identity_mismatch():
     pinned, l1 = _make_pinned()
     derivation = derive_top20(pinned, l1)
@@ -467,8 +488,10 @@ def test_build_review_template_has_empty_labels_and_full_context():
     assert len(template["reviews"]) == len(derivation["top20"])
     for item in template["reviews"]:
         assert item["label"] is None
+        assert item["confidence"] is None
         assert item["reason"] in (None, "")
         assert item["rank"] and item["ticker"]
+    assert template["confidence_enum"] == list(REVIEW_CONFIDENCE_LEVELS)
 
 
 def test_save_and_load_roundtrip(tmp_path):
@@ -480,3 +503,96 @@ def test_save_and_load_roundtrip(tmp_path):
     assert out.exists()
     loaded = json.loads(out.read_text(encoding="utf-8"))
     assert loaded["status"] == "derived"
+
+
+# ---------------------------------------------------------------------------
+# 2.8 pinned bundle 内嵌 l1_candidates 的直接离线消费
+#
+# 8-12 run 的 bundle 没有逐票候选，Top 20 只能靠 warm cache 重放 L1；
+# warm cache 丢失后 6.1/6.2 被阻塞。新 run 的 bundle 归档 l1_candidates 后，
+# derive 必须能直接离线消费（无缓存依赖、无 provider/LLM），且身份绑定、
+# 漏斗一致性、候选完整性检查仍然生效。
+# ---------------------------------------------------------------------------
+
+
+def _bundle_with_candidates(n_input: int = 30, n_candidates: int = 25) -> dict:
+    """构造含 l1_candidates 归档的 pinned bundle（候选与 funnel 一致）."""
+    tickers = _tickers(n_input)
+    bundle = _pinned_bundle(tickers, funnel_overrides={
+        "after_heat_filter": n_candidates,
+        "l2_input": n_candidates,
+    })
+    bundle["l1_candidates"] = _l1_output(tickers, n_candidates)["candidates"]
+    return bundle
+
+
+def test_load_pinned_run_exposes_l1_candidates():
+    pinned = load_pinned_run(_bundle_with_candidates())
+    assert isinstance(pinned["l1_candidates"], list)
+    assert len(pinned["l1_candidates"]) == 25
+    # 旧 bundle 无归档 → None（调用方据此选择 replay 路径）
+    pinned_old = load_pinned_run(_pinned_bundle(_tickers(30)))
+    assert pinned_old["l1_candidates"] is None
+
+
+def test_derive_from_pinned_bundle_consumes_candidates_offline():
+    bundle = _bundle_with_candidates()
+    derivation = derive_top20_from_pinned_bundle(bundle)
+    assert derivation["status"] == "derived"
+    dr = derivation["derivation_run"]
+    # 消费的是 pinned run 自身归档的候选：同一 run、同一 profile、同一输入身份
+    assert dr["derivation_kind"] == "pinned_bundle_l1_candidates"
+    assert dr["run_id"] == PINNED_RUN_ID
+    assert dr["profile_version"] == PROFILE_VERSION
+    assert dr["input_ticker_set_hash"] == bundle["input_ticker_set_hash"]
+    assert len(derivation["top20"]) == 20
+    # Top 20 = 归档候选的前 20（保序）
+    assert [item["ticker"] for item in derivation["top20"]] == \
+        [c["ticker"] for c in bundle["l1_candidates"][:20]]
+    for item in derivation["top20"]:
+        assert item["pinned_run_id"] == PINNED_RUN_ID
+        assert item["profile_version"] == PROFILE_VERSION
+        assert item["input_ticker_set_hash"] == bundle["input_ticker_set_hash"]
+
+
+def test_derive_from_pinned_bundle_requires_candidates():
+    bundle = _pinned_bundle(_tickers(30))
+    with pytest.raises(Top20ValidationError, match="l1_candidates"):
+        derive_top20_from_pinned_bundle(bundle)
+    bundle["l1_candidates"] = []
+    with pytest.raises(Top20ValidationError, match="l1_candidates"):
+        derive_top20_from_pinned_bundle(bundle)
+
+
+def test_derive_from_pinned_bundle_candidate_count_drift_not_evaluable():
+    bundle = _bundle_with_candidates()
+    bundle["funnel"]["after_heat_filter"] = 24  # 漏斗与归档候选数量不一致
+    derivation = derive_top20_from_pinned_bundle(bundle)
+    assert derivation["status"] == "not_evaluable"
+    assert any("候选数量漂移" in r for r in derivation["reason"])
+
+
+def test_derive_from_pinned_bundle_candidate_missing_ticker_not_evaluable():
+    bundle = _bundle_with_candidates()
+    bundle["l1_candidates"][3]["ticker"] = None
+    derivation = derive_top20_from_pinned_bundle(bundle)
+    assert derivation["status"] == "not_evaluable"
+    assert any("ticker" in r for r in derivation["reason"])
+
+
+def test_derive_top20_replay_candidate_missing_ticker_not_evaluable():
+    """replay 路径同样必须拒绝缺 ticker 的候选（不得产出 None ticker 的 Top 20）."""
+    pinned, l1 = _make_pinned()
+    l1["candidates"][0]["ticker"] = None
+    derivation = derive_top20(pinned, l1)
+    assert derivation["status"] == "not_evaluable"
+    assert any("ticker" in r for r in derivation["reason"])
+
+
+def test_derive_from_pinned_bundle_accepts_file_path(tmp_path):
+    bundle = _bundle_with_candidates()
+    path = tmp_path / "pinned.json"
+    path.write_text(json.dumps(bundle, ensure_ascii=False), encoding="utf-8")
+    derivation = derive_top20_from_pinned_bundle(path)
+    assert derivation["status"] == "derived"
+    assert derivation["pinned_run"]["source_path"] == str(path)
