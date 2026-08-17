@@ -292,7 +292,7 @@ scope:
 | `g1-field-qualification-canonical-promotion` | 22/22 | archived / integrated at `main@1ff6678` | R-G1-001/R-G1-002 closed |
 | `g1-r-g1-002-source-plan-matrix-completeness` | 14/14 | archived / integrated at `main@1ff6678` | R-G1-002 closed after independent review |
 | `g1-r-g1-003-rejected-canonical-visibility` | 4/4 | archived / integrated at `main@98570a1` | R-G1-003 closed after independent re-review |
-| `g2-strong-single-agent-fallback` | archived | archived / integrated at `main@552179a` | R-G2-001/R-G2-002/R-G2-003 closed after CR2 repair |
+| `g2-strong-single-agent-fallback` | archived | archived; CR2 repair `552179a` pending independent review/integration | R-G2-001/R-G2-003 closed; R-G2-002 regressed and remains PR-blocking |
 | `g2-deep-investment-thesis` | 0/27 | in-progress | G2 umbrella，含 M4.5 |
 | `f3c-r1-crosstalk-root-cause` | 5/17 | in-progress | M0 前置未闭 |
 | `g1-4-data-source-resilience` | 0/48 | in-progress | P2 已映射到既有 D1/D6 |
@@ -351,7 +351,7 @@ PR #1: REQUEST CHANGES
 | `R-G1-003` | M2 | `g1-r-g1-003-rejected-canonical-visibility` | closed | 1 | 否 |
 | `R-G1-004` | M1/M2 | `g1-provider-health-and-failure-visibility` | closed | 1 | 否 |
 | `R-G2-001` | M0/M5 foundation | `g2-strong-single-agent-fallback` | closed | 1 | 否 |
-| `R-G2-002` | M0/M5 foundation | `g2-strong-single-agent-fallback` | closed | 2 | 否 |
+| `R-G2-002` | M0/M5 foundation | `g2-strong-single-agent-fallback` | regressed | 2 | 是 |
 | `R-G2-003` | M0/M5 foundation | `g2-strong-single-agent-fallback` | closed | 1 | 否 |
 
 独立 review 有 6 个 P1 finding。Production-path finding 跨 G1/G2 合同，为保持
@@ -724,11 +724,14 @@ R-G2-001
 → fallback archive decision
 ```
 
-状态：`closed`，原 child 已完成独立 re-review，archive target 为
-`openspec/changes/archive/2026-08-14-g2-strong-single-agent-fallback/`。
-该闭环仅关闭 R-G2-001/002/003，不代表 G2 capability passed，也不放行 G3 runtime。
-下一允许工作仍需回到 G2 umbrella 的 identity/audit-chain 与 incomplete-cache child，
-不得把本 foundation 当作最终 InvestmentThesis。
+状态：原 child 已 archive，CR2 runtime repair `552179a` 已完成本地验证，当前为
+`independent_review` / integration pending。`R-G2-001`、`R-G2-003` 保持 closed；
+`R-G2-002` 因嵌入上下文短 credential redaction 回归处于 `regressed`（attempt 2，
+PR-blocking），必须通过 fresh read-only re-review 后才能重新 closed 并合入 main。
+archive target 为 `openspec/changes/archive/2026-08-14-g2-strong-single-agent-fallback/`。
+该工程闭环不代表 G2 capability passed，也不放行 G3 runtime。下一允许工作仍需回到
+G2 umbrella 的 identity/audit-chain 与 incomplete-cache child，不得把本 foundation
+当作最终 InvestmentThesis。
 
 ### Queue 3：既有 G1-4
 
