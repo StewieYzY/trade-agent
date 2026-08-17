@@ -437,6 +437,92 @@ def test_fallback_redacts_short_credentials_from_schema_valid_artifacts(
     )
 
 
+@pytest.mark.parametrize(
+    "credential",
+    [
+        "Bearer abcd",
+        "Token abcdef",
+        "Bearer eyJhbGciOiJIUzI1NiJ9.payload.signature",
+        "Bearer format",
+        "Token format",
+    ],
+    ids=[
+        "bearer-4-char",
+        "token-6-char",
+        "bearer-jwt",
+        "bearer-format-credential",
+        "token-format-credential",
+    ],
+)
+def test_fallback_redacts_embedded_long_credentials_from_schema_valid_artifacts(
+    tmp_path, monkeypatch, credential
+):
+    """Regression: credentials in ordinary error prose must not reach result.json."""
+    raw_response = _raw_output(core_thesis=f"provider failed {credential}")
+
+    async def fake_call(*_args, **_kwargs):
+        return raw_response, {"note": f"provider failed {credential}"}
+
+    monkeypatch.setattr(fallback, "call_llm", fake_call)
+    monkeypatch.setattr(fallback, "_build_user_message", lambda *args, **kwargs: "user")
+    monkeypatch.setattr(fallback, "get_prompt_builder", lambda _agent: lambda: "system")
+    monkeypatch.setenv("LLM_MODEL_HEAVY", "strong-from-env")
+
+    result = asyncio.run(
+        fallback.run_fallback(
+            ticker="600009.SH",
+            features=_dossier(),
+            output_root=tmp_path,
+            run_id="embedded-long-schema",
+        )
+    )
+    serialized = (tmp_path / "embedded-long-schema" / "result.json").read_text(
+        encoding="utf-8"
+    )
+
+    assert credential not in serialized
+    assert result["usage"]["note"] == "provider failed " + (
+        "Bearer <redacted>"
+        if credential.startswith("Bearer ")
+        else "Token <redacted>"
+    )
+    assert result["agent_output"]["core_thesis"] == result["usage"]["note"]
+
+
+def test_fallback_redacts_x_api_key_from_schema_valid_artifacts(
+    tmp_path, monkeypatch
+):
+    """Regression: common API-key header aliases are sensitive structured values."""
+    raw_response = json.dumps(
+        _agent_output(extra={"headers": {"X-API-Key": "short4"}}).to_dict(),
+        ensure_ascii=False,
+    )
+
+    async def fake_call(*_args, **_kwargs):
+        return raw_response, {"headers": {"X-API-Key": "short4"}}
+
+    monkeypatch.setattr(fallback, "call_llm", fake_call)
+    monkeypatch.setattr(fallback, "_build_user_message", lambda *args, **kwargs: "user")
+    monkeypatch.setattr(fallback, "get_prompt_builder", lambda _agent: lambda: "system")
+    monkeypatch.setenv("LLM_MODEL_HEAVY", "strong-from-env")
+
+    result = asyncio.run(
+        fallback.run_fallback(
+            ticker="600009.SH",
+            features=_dossier(),
+            output_root=tmp_path,
+            run_id="x-api-key-schema",
+        )
+    )
+    serialized = (tmp_path / "x-api-key-schema" / "result.json").read_text(
+        encoding="utf-8"
+    )
+
+    assert "short4" not in serialized
+    assert result["usage"]["headers"]["X-API-Key"] == "<redacted>"
+    assert result["agent_output"]["extra"]["headers"]["X-API-Key"] == "<redacted>"
+
+
 def test_fallback_redacts_sensitive_malformed_raw_response(tmp_path, monkeypatch):
     raw_response = (
         'not-json api_key=unit-test-secret token=unit-test-secret '

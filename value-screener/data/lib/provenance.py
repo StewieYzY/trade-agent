@@ -69,9 +69,19 @@ class ProvenanceContractError(ValueError):
 def redact_sensitive_text(text: Any) -> str:
     value = str(text)
 
-    def _redact_standalone(match: re.Match[str]) -> str:
+    def _is_non_credential_term(match: re.Match[str]) -> bool:
         secret = match.group("secret")
         if secret.casefold() in _NON_CREDENTIAL_TERMS:
+            return True
+        if secret.casefold() != "format":
+            return False
+        return (
+            match.group("scheme").casefold() == "token"
+            and match.string[: match.start()].casefold().endswith("invalid ")
+        )
+
+    def _redact_standalone(match: re.Match[str]) -> str:
+        if _is_non_credential_term(match):
             return match.group(0)
         return f"{match.group('scheme').title()} <redacted>"
 
@@ -92,13 +102,7 @@ def redact_sensitive_text(text: Any) -> str:
         secret = match.group("secret")
         if secret.startswith("<redacted>"):
             return match.group(0)
-        if secret.casefold() in _NON_CREDENTIAL_TERMS:
-            return match.group(0)
-        looks_sensitive = (
-            any(marker in secret.lower() for marker in ("secret", "token", "key", "sk-"))
-            or len(secret) >= 16
-        )
-        if not prefix and not looks_sensitive and len(secret) > 3:
+        if _is_non_credential_term(match):
             return match.group(0)
         suffix = (
             match.group("at_end")
@@ -125,9 +129,7 @@ def redact_sensitive_text(text: Any) -> str:
 
     def _redact_embedded_credential(match: re.Match[str]) -> str:
         secret = match.group("secret")
-        if secret.startswith("<redacted>") or secret.casefold() in _NON_CREDENTIAL_TERMS:
-            return match.group(0)
-        if match.group("context") is None and len(secret) > 3:
+        if secret.startswith("<redacted>") or _is_non_credential_term(match):
             return match.group(0)
         suffix = (
             match.group("at_end")
@@ -184,6 +186,7 @@ def redact_sensitive_value(value: Any) -> Any:
             normalized_key = re.sub(r"[^a-z0-9]", "", str(key).lower())
             if (
                 normalized_key in _SENSITIVE_KEY_NAMES
+                or normalized_key.endswith("apikey")
                 or normalized_key.endswith("token")
                 or normalized_key.endswith("secret")
             ):

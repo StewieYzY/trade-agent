@@ -1185,6 +1185,63 @@ def test_authorization_redaction_survives_persisted_snapshot_and_consumer(tmp_pa
     assert consumed.get("600519.SH", "last_price").value is None
 
 
+@pytest.mark.parametrize(
+    "credential",
+    [
+        "Bearer abcd",
+        "Token abcdef",
+        "Bearer eyJhbGciOiJIUzI1NiJ9.payload.signature",
+        "Bearer format",
+        "Token format",
+    ],
+    ids=[
+        "bearer-4-char",
+        "token-6-char",
+        "bearer-jwt",
+        "bearer-format-credential",
+        "token-format-credential",
+    ],
+)
+def test_embedded_long_credential_redaction_survives_persisted_snapshot_and_consumer(
+    tmp_path, credential
+):
+    from data.lib.canonical_snapshot_consumer import consume_snapshot
+
+    result = BatchAdapter(
+        [
+            ProviderSpec(
+                "fixture",
+                "provider",
+                lambda _request: (_ for _ in ()).throw(
+                    RuntimeError(f"provider failed {credential}")
+                ),
+            )
+        ]
+    ).run(
+        tickers=["600519.SH"],
+        method="quote",
+        fields=["last_price"],
+        run_id="redaction-persisted-embedded-long",
+        output_root=tmp_path,
+    )
+
+    run_dir = Path(result["manifest"]["snapshot_output"])
+    artifacts = {
+        name: (run_dir / name).read_text(encoding="utf-8")
+        for name in ("manifest.json", "records.json", "provenance.json")
+    }
+    consumed = consume_snapshot(
+        run_dir,
+        expected_run_id="redaction-persisted-embedded-long",
+        expected_plan_version="g1-provider-batch-adapter-v1",
+        expected_tickers=["600519.SH"],
+    )
+
+    for serialized in artifacts.values():
+        assert credential not in serialized
+    assert consumed.get("600519.SH", "last_price").value is None
+
+
 def test_available_none_is_not_canonical_consumable():
     def fetch(_request):
         return {
