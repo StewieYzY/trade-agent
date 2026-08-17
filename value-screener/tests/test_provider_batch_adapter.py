@@ -999,6 +999,29 @@ def test_redaction_masks_lowercase_embedded_short_bearer_credential():
     assert "Bearer <redacted>" in reason
 
 
+def test_redaction_masks_wrapped_embedded_short_token():
+    result = BatchAdapter(
+        [
+            ProviderSpec(
+                "fixture",
+                "provider",
+                lambda _request: (_ for _ in ()).throw(
+                    RuntimeError("upstream failed; Token x: retry")
+                ),
+            )
+        ]
+    ).run(
+        tickers=["600519.SH"],
+        method="quote",
+        fields=["last_price"],
+        run_id="redaction-wrapped-token",
+    )
+
+    reason = result["evidence"][0]["reason"]
+    assert "Token x" not in reason
+    assert "Token <redacted>: retry" in reason
+
+
 def test_available_none_is_not_canonical_consumable():
     def fetch(_request):
         return {

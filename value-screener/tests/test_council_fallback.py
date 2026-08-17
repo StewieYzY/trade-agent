@@ -260,8 +260,22 @@ def test_fallback_redacts_sensitive_error_content(tmp_path, monkeypatch, error_v
             "upstream failed: [Token x], retry",
             "RuntimeError: upstream failed: [Token <redacted>], retry",
         ),
+        (
+            "provider error (Bearer x)",
+            "RuntimeError: provider error (Bearer <redacted>)",
+        ),
+        (
+            "upstream failed; Token x: retry",
+            "RuntimeError: upstream failed; Token <redacted>: retry",
+        ),
     ],
-    ids=["parenthesized", "quoted-with-period", "bracketed-with-comma"],
+    ids=[
+        "parenthesized",
+        "quoted-with-period",
+        "bracketed-with-comma",
+        "parenthesized-without-colon",
+        "semicolon-with-colon-terminator",
+    ],
 )
 def test_fallback_redacts_embedded_short_credentials_from_artifacts(
     tmp_path, monkeypatch, error_value, expected_error
@@ -297,6 +311,90 @@ def test_fallback_redacts_embedded_short_credentials_from_artifacts(
     assert error_value not in serialized
     assert result["error"] == expected_error
     assert "<redacted>" in serialized
+
+
+@pytest.mark.parametrize(
+    "credential_text",
+    [
+        "Bearer x",
+        "bearer x",
+        "(Bearer x)",
+        '"bearer x".',
+        "[Token x], retry",
+    ],
+    ids=[
+        "bare-bearer",
+        "lowercase-bearer",
+        "parenthesized-bearer",
+        "quoted-bearer",
+        "bracketed-token",
+    ],
+)
+def test_fallback_redacts_short_credentials_from_malformed_raw_artifacts(
+    tmp_path, monkeypatch, credential_text
+):
+    raw_response = f"not-json upstream failed: {credential_text}"
+
+    async def fake_call(*_args, **_kwargs):
+        return raw_response, {}
+
+    monkeypatch.setattr(fallback, "call_llm", fake_call)
+    monkeypatch.setattr(fallback, "_build_user_message", lambda *args, **kwargs: "user")
+    monkeypatch.setattr(fallback, "get_prompt_builder", lambda _agent: lambda: "system")
+    monkeypatch.setenv("LLM_MODEL_HEAVY", "strong-from-env")
+
+    result = asyncio.run(
+        fallback.run_fallback(
+            ticker="600009.SH",
+            features=_dossier(),
+            output_root=tmp_path,
+            run_id="wrapped-short-raw",
+        )
+    )
+    serialized = (
+        (tmp_path / "wrapped-short-raw" / "result.json").read_text(encoding="utf-8")
+        + (tmp_path / "wrapped-short-raw" / "manifest.json").read_text(encoding="utf-8")
+    )
+
+    assert result["quality_status"] == "blocked"
+    assert credential_text not in result["raw"]
+    assert credential_text not in serialized
+    assert "<redacted>" in result["raw"]
+
+
+def test_fallback_redacts_short_credentials_from_schema_valid_artifacts(
+    tmp_path, monkeypatch
+):
+    raw_response = _raw_output(core_thesis="upstream failed: (Bearer x)")
+
+    async def fake_call(*_args, **_kwargs):
+        return raw_response, {"note": "upstream failed: [Token x], retry"}
+
+    monkeypatch.setattr(fallback, "call_llm", fake_call)
+    monkeypatch.setattr(fallback, "_build_user_message", lambda *args, **kwargs: "user")
+    monkeypatch.setattr(fallback, "get_prompt_builder", lambda _agent: lambda: "system")
+    monkeypatch.setenv("LLM_MODEL_HEAVY", "strong-from-env")
+
+    result = asyncio.run(
+        fallback.run_fallback(
+            ticker="600009.SH",
+            features=_dossier(),
+            output_root=tmp_path,
+            run_id="wrapped-short-schema",
+        )
+    )
+    serialized = (
+        (tmp_path / "wrapped-short-schema" / "result.json").read_text(encoding="utf-8")
+        + (tmp_path / "wrapped-short-schema" / "manifest.json").read_text(encoding="utf-8")
+    )
+
+    assert result["quality_status"] == "passed"
+    assert "Bearer x" not in serialized
+    assert "Token x" not in serialized
+    assert result["usage"]["note"] == "upstream failed: [Token <redacted>], retry"
+    assert result["agent_output"]["core_thesis"] == (
+        "upstream failed: (Bearer <redacted>)"
+    )
 
 
 def test_fallback_redacts_sensitive_malformed_raw_response(tmp_path, monkeypatch):
