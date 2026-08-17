@@ -976,6 +976,29 @@ def test_redaction_masks_embedded_short_bearer_credential():
     assert "Bearer <redacted>" in reason
 
 
+def test_redaction_masks_lowercase_embedded_short_bearer_credential():
+    result = BatchAdapter(
+        [
+            ProviderSpec(
+                "fixture",
+                "provider",
+                lambda _request: (_ for _ in ()).throw(
+                    RuntimeError("upstream failed: bearer x")
+                ),
+            )
+        ]
+    ).run(
+        tickers=["600519.SH"],
+        method="quote",
+        fields=["last_price"],
+        run_id="redaction-embedded-lowercase-bearer",
+    )
+
+    reason = result["evidence"][0]["reason"]
+    assert "bearer x" not in reason
+    assert "Bearer <redacted>" in reason
+
+
 def test_available_none_is_not_canonical_consumable():
     def fetch(_request):
         return {

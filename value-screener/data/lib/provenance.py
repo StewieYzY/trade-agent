@@ -97,7 +97,7 @@ def redact_sensitive_text(text: Any) -> str:
         value,
     )
     value = re.sub(
-        r"(?P<scheme>\bBearer|\bToken)\s+(?P<secret>\S+)"
+        r"(?i)(?:(?<=^)|(?<=[:=]))\s*(?P<scheme>bearer|token)\s+(?P<secret>\S+)"
         r"(?=\s*$|[.,;!?]\s|[)\]}])",
         lambda match: f"{match.group('scheme').title()} <redacted>",
         value,
