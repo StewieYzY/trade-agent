@@ -24,7 +24,7 @@
 - [x] 4.1 `R-G2-001`：显式 dossier 的 canonical `core_snapshot.ticker` 必填，顶层与 nested optional section identity mismatch 在共享 Council/fallback preflight 中 fail closed；focused identity tests 覆盖 missing/empty/mismatch/normal path，确认 LLM/artifact/cache/watchlist 零副作用
 - [x] 4.2 `R-G2-002`：fallback 复用 shared `redact_sensitive_text()`；focused tests 覆盖 error 与 malformed raw 中的 api_key、token、Bearer、URL credential、嵌套 mapping/list，并确认 error/raw/result/manifest 不含原始敏感值
 - [x] 4.3 `R-G2-003`：fallback 复用 shared `validate_g1_output_root()`；focused tests 覆盖 cache/watchlist/debate/data/snapshots exact/descendant/ancestor/symlink 拒绝、外部 tmp root 允许及拒绝时零副作用
-- [x] 4.4 验证证据：fallback focused 27 passed；Council preflight/dossier 16 passed；production-path 20 passed；provenance/provider-redaction 53 passed；最终全量 `value-screener/tests` 920 passed；OpenSpec strict 29/29；compileall、diff check 通过
+- [x] 4.4 验证证据：fallback focused 27 passed；Council preflight/dossier 16 passed；production-path 20 passed；provenance/provider-redaction 53 passed；最终全量 `value-screener/tests` 927 passed；OpenSpec strict 29/29；compileall、diff check 通过
 
 ## 5. Post-archive CR repair closure
 
@@ -38,3 +38,4 @@
 - [x] 5.8 修复小写嵌入 credential redaction，并在 CR2 repair 合入前将 R-G2-002 标为 `regressed`
 - [x] 5.9 修复包围符与句末标点语境中的短 `Bearer`/`Token` credential 落盘泄露；fallback regression 覆盖 `result.json` 与 `manifest.json`，状态保持 `independent_review` / integration pending
 - [x] 5.10 扩展常见括号/分号/冒号终止语境的短 credential redaction；补充 malformed raw、schema-valid JSON、usage 与 provider-batch artifact/消费路径回归
+- [x] 5.11 收紧短 token 形状并保持换行、相邻标点与重复 redaction 的幂等性；补充 `Token expired`、`bearer bond` 等普通诊断负例和 provider snapshot consumer 回归

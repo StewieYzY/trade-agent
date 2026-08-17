@@ -268,6 +268,18 @@ def test_fallback_redacts_sensitive_error_content(tmp_path, monkeypatch, error_v
             "upstream failed; Token x: retry",
             "RuntimeError: upstream failed; Token <redacted>: retry",
         ),
+        (
+            "upstream failed: Bearer x\nretry",
+            "RuntimeError: upstream failed: Bearer <redacted>\nretry",
+        ),
+        (
+            "upstream failed: Bearer x\t",
+            "RuntimeError: upstream failed: Bearer <redacted>\t",
+        ),
+        (
+            "upstream failed: [Token x],retry",
+            "RuntimeError: upstream failed: [Token <redacted>],retry",
+        ),
     ],
     ids=[
         "parenthesized",
@@ -275,6 +287,9 @@ def test_fallback_redacts_sensitive_error_content(tmp_path, monkeypatch, error_v
         "bracketed-with-comma",
         "parenthesized-without-colon",
         "semicolon-with-colon-terminator",
+        "newline-terminator",
+        "tab-terminator",
+        "adjacent-punctuation",
     ],
 )
 def test_fallback_redacts_embedded_short_credentials_from_artifacts(

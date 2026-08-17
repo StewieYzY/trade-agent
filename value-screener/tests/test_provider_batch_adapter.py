@@ -1022,6 +1022,66 @@ def test_redaction_masks_wrapped_embedded_short_token():
     assert "Token <redacted>: retry" in reason
 
 
+@pytest.mark.parametrize(
+    "diagnostic",
+    ["Token expired", "bearer bond", "Bearer authentication failed"],
+)
+def test_redaction_preserves_short_diagnostic_terms(diagnostic):
+    result = BatchAdapter(
+        [
+            ProviderSpec(
+                "fixture",
+                "provider",
+                lambda _request: (_ for _ in ()).throw(RuntimeError(diagnostic)),
+            )
+        ]
+    ).run(
+        tickers=["600519.SH"],
+        method="quote",
+        fields=["last_price"],
+        run_id="redaction-diagnostic-terms",
+    )
+
+    assert result["evidence"][0]["reason"] == f"RuntimeError: {diagnostic}"
+
+
+def test_redaction_survives_persisted_snapshot_and_consumer(tmp_path):
+    from data.lib.canonical_snapshot_consumer import consume_snapshot
+
+    result = BatchAdapter(
+        [
+            ProviderSpec(
+                "fixture",
+                "provider",
+                lambda _request: (_ for _ in ()).throw(
+                    RuntimeError("upstream failed; Token x: retry")
+                ),
+            )
+        ]
+    ).run(
+        tickers=["600519.SH"],
+        method="quote",
+        fields=["last_price"],
+        run_id="redaction-persisted-token",
+        output_root=tmp_path,
+    )
+
+    run_dir = Path(result["manifest"]["snapshot_output"])
+    serialized = "".join(
+        (run_dir / name).read_text(encoding="utf-8")
+        for name in ("manifest.json", "records.json", "provenance.json")
+    )
+    consumed = consume_snapshot(
+        run_dir,
+        expected_run_id="redaction-persisted-token",
+        expected_plan_version="g1-provider-batch-adapter-v1",
+        expected_tickers=["600519.SH"],
+    )
+
+    assert "Token x" not in serialized
+    assert consumed.get("600519.SH", "last_price").value is None
+
+
 def test_available_none_is_not_canonical_consumable():
     def fetch(_request):
         return {

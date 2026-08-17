@@ -69,7 +69,11 @@ def redact_sensitive_text(text: Any) -> str:
     value = str(text)
     value = re.sub(
         r"(?i)^\s*(?P<scheme>basic|bearer|token)\s+(?P<secret>\S+)\s*$",
-        lambda match: f"{match.group('scheme').title()} <redacted>",
+        lambda match: (
+            f"{match.group('scheme').title()} <redacted>"
+            if len(match.group("secret")) <= 3
+            else match.group(0)
+        ),
         value,
     )
     value = re.sub(
@@ -82,6 +86,8 @@ def redact_sensitive_text(text: Any) -> str:
         prefix = match.group("prefix") or ""
         scheme = match.group("scheme")
         secret = match.group("secret")
+        if secret.startswith("<redacted>"):
+            return match.group(0)
         looks_sensitive = (
             any(marker in secret.lower() for marker in ("secret", "token", "key", "sk-"))
             or len(secret) >= 16
@@ -96,16 +102,34 @@ def redact_sensitive_text(text: Any) -> str:
         _redact_auth,
         value,
     )
+    def _redact_embedded_credential(match: re.Match[str]) -> str:
+        secret = match.group("secret")
+        if len(secret) > 3:
+            return match.group(0)
+        suffix = (
+            match.group("at_end")
+            or match.group("wrapped")
+            or match.group("delimiter")
+            or match.group("terminated")
+            or match.group("whitespace")
+            or ""
+        )
+        return (
+            f"{match.group('context') or ''}{match.group('prefix')}"
+            f"{match.group('scheme').title()} <redacted>{suffix}"
+        )
+
     value = re.sub(
-        r"(?i)(?:(?<=^)|(?<=[:=;,(]))"
+        r"(?i)(?:(?P<start>^)|(?P<context>[:=;,(]))"
         r"(?P<prefix>\s*(?:[\(\[\{'\"]\s*)?)"
-        r"(?P<scheme>bearer|token)\s+(?P<secret>\S+?)"
-        r"(?:(?P<at_end>[\)\]\}'\"]*)$|"
-        r"(?P<terminated>[\)\]\}'\"]*[.,;!?:])(?=\s|$))",
-        lambda match: (
-            f"{match.group('prefix')}{match.group('scheme').title()} <redacted>"
-            f"{match.group('at_end') or match.group('terminated') or ''}"
-        ),
+        r"(?P<scheme>bearer|token)\s+"
+        r"(?P<secret>[^\s.,;!?:\)\]\}'\"]+)"
+        r"(?:(?P<at_end>[\)\]\}'\"]*[.,;!?:]?)$|"
+        r"(?P<wrapped>[\)\]\}'\"]+[.,;!?:])|"
+        r"(?P<delimiter>[;:])|"
+        r"(?P<terminated>[.,!?])(?=\s|$)|"
+        r"(?P<whitespace>\s+))",
+        _redact_embedded_credential,
         value,
     )
     value = re.sub(
