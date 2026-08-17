@@ -292,7 +292,7 @@ scope:
 | `g1-field-qualification-canonical-promotion` | 22/22 | archived / integrated at `main@1ff6678` | R-G1-001/R-G1-002 closed |
 | `g1-r-g1-002-source-plan-matrix-completeness` | 14/14 | archived / integrated at `main@1ff6678` | R-G1-002 closed after independent review |
 | `g1-r-g1-003-rejected-canonical-visibility` | 4/4 | archived / integrated at `main@98570a1` | R-G1-003 closed after independent re-review |
-| `g2-strong-single-agent-fallback` | archived | archived; CR2 repair chain ending `0e463eb` failed repeated independent re-review | R-G2-001/R-G2-003 closed; R-G2-002 is design_escalation and remains PR-blocking |
+| `g2-strong-single-agent-fallback` | archived | archived; CR2 repair chain ending `e698b4f` awaiting fresh review | R-G2-001/R-G2-003 closed; R-G2-002 remains design_escalation and PR-blocking |
 | `g2-deep-investment-thesis` | 0/27 | in-progress | G2 umbrella，含 M4.5 |
 | `f3c-r1-crosstalk-root-cause` | 5/17 | in-progress | M0 前置未闭 |
 | `g1-4-data-source-resilience` | 0/48 | in-progress | P2 已映射到既有 D1/D6 |
@@ -724,12 +724,11 @@ R-G2-001
 → fallback archive decision
 ```
 
-状态：原 child 已 archive，CR2 runtime repair chain ending `0e463eb` 已完成本地验证，
-但连续 independent re-review 仍发现短 credential matcher 的合同缺口，当前为
-`design_escalation` / integration blocked。`R-G2-001`、`R-G2-003` 保持 closed；
-`R-G2-002` 为 `design_escalation`（attempt 2，PR-blocking）。停止继续 regex patch：
-必须先重新审查 credential/dynamic-diagnostic 的识别合同，并获得用户对下一次实现的
-明确批准，才能重开实现与 re-review。archive target 为
+状态：原 child 已 archive，CR2 runtime repair chain ending `e698b4f` 已完成本次
+限定 focused 验证，当前为 `design_escalation` / fresh review pending。
+`R-G2-001`、`R-G2-003` 保持 closed；`R-G2-002` 为 `design_escalation`
+（attempt 2，PR-blocking）。用户已明确批准本次限定 repair；仍需 fresh review
+通过后才能考虑重新 closed 并合入 main。archive target 为
 `openspec/changes/archive/2026-08-14-g2-strong-single-agent-fallback/`。该工程状态
 不代表 G2 capability passed，也不放行 G3 runtime。
 
@@ -990,7 +989,8 @@ latest full suite:
   927 passed in 55.23s
 
 latest CR-boundary focused suite:
-  12 passed in 0.95s
+  97 passed in 1.51s
+  full suite intentionally not rerun for this narrow repair
 
 active OpenSpec strict validation:
   29 passed, 0 failed
