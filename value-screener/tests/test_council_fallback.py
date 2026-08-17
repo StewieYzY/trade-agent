@@ -245,6 +245,60 @@ def test_fallback_redacts_sensitive_error_content(tmp_path, monkeypatch, error_v
     assert "<redacted>" in serialized
 
 
+@pytest.mark.parametrize(
+    ("error_value", "expected_error"),
+    [
+        (
+            "upstream failed: (Bearer x)",
+            "RuntimeError: upstream failed: (Bearer <redacted>)",
+        ),
+        (
+            'upstream failed: "bearer x".',
+            'RuntimeError: upstream failed: "Bearer <redacted>".',
+        ),
+        (
+            "upstream failed: [Token x], retry",
+            "RuntimeError: upstream failed: [Token <redacted>], retry",
+        ),
+    ],
+    ids=["parenthesized", "quoted-with-period", "bracketed-with-comma"],
+)
+def test_fallback_redacts_embedded_short_credentials_from_artifacts(
+    tmp_path, monkeypatch, error_value, expected_error
+):
+    """Bug caught: wrapped short credentials bypass the shared redactor."""
+    async def fake_call(*_args, **_kwargs):
+        raise RuntimeError(error_value)
+
+    monkeypatch.setattr(fallback, "call_llm", fake_call)
+    monkeypatch.setattr(fallback, "_build_user_message", lambda *args, **kwargs: "user")
+    monkeypatch.setattr(fallback, "get_prompt_builder", lambda _agent: lambda: "system")
+    monkeypatch.setenv("LLM_MODEL_HEAVY", "strong-from-env")
+
+    result = asyncio.run(
+        fallback.run_fallback(
+            ticker="600009.SH",
+            features=_dossier(),
+            output_root=tmp_path,
+            run_id="wrapped-short-credential",
+        )
+    )
+    serialized = (
+        (tmp_path / "wrapped-short-credential" / "result.json").read_text(
+            encoding="utf-8"
+        )
+        + (tmp_path / "wrapped-short-credential" / "manifest.json").read_text(
+            encoding="utf-8"
+        )
+    )
+
+    assert result["quality_status"] == "blocked"
+    assert error_value not in result["error"]
+    assert error_value not in serialized
+    assert result["error"] == expected_error
+    assert "<redacted>" in serialized
+
+
 def test_fallback_redacts_sensitive_malformed_raw_response(tmp_path, monkeypatch):
     raw_response = (
         'not-json api_key=unit-test-secret token=unit-test-secret '
