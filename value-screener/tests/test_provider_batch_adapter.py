@@ -1047,7 +1047,22 @@ def test_redaction_masks_authorization_token_and_preserves_suffix():
 
 @pytest.mark.parametrize(
     "credential",
-    ["Bearer abcd", "Token abcdef", "Bearer eyJhbGciOiJIUzI1NiJ9.payload.signature"],
+    [
+        "Bearer xyz",
+        "Bearer abcd",
+        "Bearer " + "a" * 15,
+        "Bearer " + "a" * 16,
+        "Token abcdef",
+        "Bearer eyJhbGciOiJIUzI1NiJ9.payload.signature",
+    ],
+    ids=[
+        "bearer-3-char",
+        "bearer-4-char",
+        "bearer-15-char",
+        "bearer-16-char",
+        "token-6-char",
+        "bearer-jwt",
+    ],
 )
 def test_redaction_masks_standalone_credentials(credential):
     result = BatchAdapter(
@@ -1127,6 +1142,46 @@ def test_redaction_survives_persisted_snapshot_and_consumer(tmp_path):
     )
 
     assert "Token x" not in serialized
+    assert consumed.get("600519.SH", "last_price").value is None
+
+
+def test_authorization_redaction_survives_persisted_snapshot_and_consumer(tmp_path):
+    from data.lib.canonical_snapshot_consumer import consume_snapshot
+
+    result = BatchAdapter(
+        [
+            ProviderSpec(
+                "fixture",
+                "provider",
+                lambda _request: (_ for _ in ()).throw(
+                    RuntimeError("Authorization: Bearer x],retry")
+                ),
+            )
+        ]
+    ).run(
+        tickers=["600519.SH"],
+        method="quote",
+        fields=["last_price"],
+        run_id="redaction-persisted-authorization",
+        output_root=tmp_path,
+    )
+
+    run_dir = Path(result["manifest"]["snapshot_output"])
+    artifacts = {
+        name: (run_dir / name).read_text(encoding="utf-8")
+        for name in ("manifest.json", "records.json", "provenance.json")
+    }
+    consumed = consume_snapshot(
+        run_dir,
+        expected_run_id="redaction-persisted-authorization",
+        expected_plan_version="g1-provider-batch-adapter-v1",
+        expected_tickers=["600519.SH"],
+    )
+
+    for serialized in artifacts.values():
+        assert "Bearer x" not in serialized
+    for name in ("manifest.json", "provenance.json"):
+        assert "Authorization: Bearer <redacted>],retry" in artifacts[name]
     assert consumed.get("600519.SH", "last_price").value is None
 
 

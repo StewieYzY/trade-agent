@@ -24,7 +24,7 @@
 - [x] 4.1 `R-G2-001`：显式 dossier 的 canonical `core_snapshot.ticker` 必填，顶层与 nested optional section identity mismatch 在共享 Council/fallback preflight 中 fail closed；focused identity tests 覆盖 missing/empty/mismatch/normal path，确认 LLM/artifact/cache/watchlist 零副作用
 - [x] 4.2 `R-G2-002`：fallback 复用 shared `redact_sensitive_text()`；focused tests 覆盖 error 与 malformed raw 中的 api_key、token、Bearer、URL credential、嵌套 mapping/list，并确认 error/raw/result/manifest 不含原始敏感值
 - [x] 4.3 `R-G2-003`：fallback 复用 shared `validate_g1_output_root()`；focused tests 覆盖 cache/watchlist/debate/data/snapshots exact/descendant/ancestor/symlink 拒绝、外部 tmp root 允许及拒绝时零副作用
-- [x] 4.4 验证证据：fallback focused 27 passed；Council preflight/dossier 16 passed；production-path 20 passed；provenance/provider-redaction 53 passed；最终全量 `value-screener/tests` 927 passed；OpenSpec strict 29/29；compileall、diff check 通过
+- [x] 4.4 验证证据：CR2 前最近一次全量 `value-screener/tests` 927 passed；OpenSpec strict 29/29；compileall、diff check 通过
 
 ## 5. Post-archive CR repair closure
 
@@ -40,4 +40,4 @@
 - [x] 5.10 扩展常见括号/分号/冒号终止语境的短 credential redaction；补充 malformed raw、schema-valid JSON、usage 与 provider-batch artifact/消费路径回归
 - [x] 5.11 收紧短 token 形状并保持换行、相邻标点与重复 redaction 的幂等性；补充 `Token expired`、`bearer bond` 等普通诊断负例和 provider snapshot consumer 回归
 - [x] 5.12 修复普通空格左边界短 credential 泄露与 `Authorization:` 尾部吞文本；相关 fallback/provider-batch 测试 `97 passed`，未运行全量 suite
-- [x] 5.13 分离 standalone 与 embedded/Authorization redaction；恢复 4–15 字符与 JWT-like credential 脱敏，补 provider-batch Authorization 尾部回归；相关 fallback/provider-batch 测试 `104 passed`，未运行全量 suite
+- [x] 5.13 分离 standalone 与 embedded/Authorization redaction；恢复 4–15 字符与 JWT-like credential 脱敏，补 provider-batch Authorization 尾部回归；相关 fallback/provider-batch 测试 `108 passed`，未运行全量 suite

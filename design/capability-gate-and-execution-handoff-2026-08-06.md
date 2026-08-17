@@ -989,7 +989,7 @@ latest full suite:
   927 passed in 55.23s
 
 latest CR-boundary focused suite:
-  104 passed in 1.54s
+  108 passed in 1.52s
   full suite intentionally not rerun for this narrow repair
 
 active OpenSpec strict validation:
