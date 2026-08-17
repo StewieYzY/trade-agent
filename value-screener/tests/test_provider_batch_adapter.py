@@ -953,6 +953,238 @@ def test_redaction_preserves_token_budget_diagnostic_phrase():
     assert "Token budget exhausted" in reason
 
 
+def test_redaction_masks_embedded_short_bearer_credential():
+    result = BatchAdapter(
+        [
+            ProviderSpec(
+                "fixture",
+                "provider",
+                lambda _request: (_ for _ in ()).throw(
+                    RuntimeError("upstream failed: Bearer x")
+                ),
+            )
+        ]
+    ).run(
+        tickers=["600519.SH"],
+        method="quote",
+        fields=["last_price"],
+        run_id="redaction-embedded-bearer",
+    )
+
+    reason = result["evidence"][0]["reason"]
+    assert "Bearer x" not in reason
+    assert "Bearer <redacted>" in reason
+
+
+def test_redaction_masks_lowercase_embedded_short_bearer_credential():
+    result = BatchAdapter(
+        [
+            ProviderSpec(
+                "fixture",
+                "provider",
+                lambda _request: (_ for _ in ()).throw(
+                    RuntimeError("upstream failed: bearer x")
+                ),
+            )
+        ]
+    ).run(
+        tickers=["600519.SH"],
+        method="quote",
+        fields=["last_price"],
+        run_id="redaction-embedded-lowercase-bearer",
+    )
+
+    reason = result["evidence"][0]["reason"]
+    assert "bearer x" not in reason
+    assert "Bearer <redacted>" in reason
+
+
+def test_redaction_masks_wrapped_embedded_short_token():
+    result = BatchAdapter(
+        [
+            ProviderSpec(
+                "fixture",
+                "provider",
+                lambda _request: (_ for _ in ()).throw(
+                    RuntimeError("upstream failed; Token x: retry")
+                ),
+            )
+        ]
+    ).run(
+        tickers=["600519.SH"],
+        method="quote",
+        fields=["last_price"],
+        run_id="redaction-wrapped-token",
+    )
+
+    reason = result["evidence"][0]["reason"]
+    assert "Token x" not in reason
+    assert "Token <redacted>: retry" in reason
+
+
+def test_redaction_masks_authorization_token_and_preserves_suffix():
+    result = BatchAdapter(
+        [
+            ProviderSpec(
+                "fixture",
+                "provider",
+                lambda _request: (_ for _ in ()).throw(
+                    RuntimeError("Authorization: Bearer x],retry")
+                ),
+            )
+        ]
+    ).run(
+        tickers=["600519.SH"],
+        method="quote",
+        fields=["last_price"],
+        run_id="redaction-authorization-suffix",
+    )
+
+    reason = result["evidence"][0]["reason"]
+    assert "Bearer x" not in reason
+    assert "Authorization: Bearer <redacted>],retry" in reason
+
+
+@pytest.mark.parametrize(
+    "credential",
+    [
+        "Bearer xyz",
+        "Bearer abcd",
+        "Bearer " + "a" * 15,
+        "Bearer " + "a" * 16,
+        "Token abcdef",
+        "Bearer eyJhbGciOiJIUzI1NiJ9.payload.signature",
+    ],
+    ids=[
+        "bearer-3-char",
+        "bearer-4-char",
+        "bearer-15-char",
+        "bearer-16-char",
+        "token-6-char",
+        "bearer-jwt",
+    ],
+)
+def test_redaction_masks_standalone_credentials(credential):
+    result = BatchAdapter(
+        [
+            ProviderSpec(
+                "fixture",
+                "provider",
+                lambda _request: (_ for _ in ()).throw(RuntimeError(credential)),
+            )
+        ]
+    ).run(
+        tickers=["600519.SH"],
+        method="quote",
+        fields=["last_price"],
+        run_id="redaction-standalone-credential",
+    )
+
+    reason = result["evidence"][0]["reason"]
+    assert credential not in reason
+    assert "<redacted>" in reason
+
+
+@pytest.mark.parametrize(
+    "diagnostic",
+    ["Token expired", "bearer bond", "Bearer authentication failed"],
+)
+def test_redaction_preserves_short_diagnostic_terms(diagnostic):
+    result = BatchAdapter(
+        [
+            ProviderSpec(
+                "fixture",
+                "provider",
+                lambda _request: (_ for _ in ()).throw(RuntimeError(diagnostic)),
+            )
+        ]
+    ).run(
+        tickers=["600519.SH"],
+        method="quote",
+        fields=["last_price"],
+        run_id="redaction-diagnostic-terms",
+    )
+
+    assert result["evidence"][0]["reason"] == f"RuntimeError: {diagnostic}"
+
+
+def test_redaction_survives_persisted_snapshot_and_consumer(tmp_path):
+    from data.lib.canonical_snapshot_consumer import consume_snapshot
+
+    result = BatchAdapter(
+        [
+            ProviderSpec(
+                "fixture",
+                "provider",
+                lambda _request: (_ for _ in ()).throw(
+                    RuntimeError("upstream failed; Token x: retry")
+                ),
+            )
+        ]
+    ).run(
+        tickers=["600519.SH"],
+        method="quote",
+        fields=["last_price"],
+        run_id="redaction-persisted-token",
+        output_root=tmp_path,
+    )
+
+    run_dir = Path(result["manifest"]["snapshot_output"])
+    serialized = "".join(
+        (run_dir / name).read_text(encoding="utf-8")
+        for name in ("manifest.json", "records.json", "provenance.json")
+    )
+    consumed = consume_snapshot(
+        run_dir,
+        expected_run_id="redaction-persisted-token",
+        expected_plan_version="g1-provider-batch-adapter-v1",
+        expected_tickers=["600519.SH"],
+    )
+
+    assert "Token x" not in serialized
+    assert consumed.get("600519.SH", "last_price").value is None
+
+
+def test_authorization_redaction_survives_persisted_snapshot_and_consumer(tmp_path):
+    from data.lib.canonical_snapshot_consumer import consume_snapshot
+
+    result = BatchAdapter(
+        [
+            ProviderSpec(
+                "fixture",
+                "provider",
+                lambda _request: (_ for _ in ()).throw(
+                    RuntimeError("Authorization: Bearer x],retry")
+                ),
+            )
+        ]
+    ).run(
+        tickers=["600519.SH"],
+        method="quote",
+        fields=["last_price"],
+        run_id="redaction-persisted-authorization",
+        output_root=tmp_path,
+    )
+
+    run_dir = Path(result["manifest"]["snapshot_output"])
+    artifacts = {
+        name: (run_dir / name).read_text(encoding="utf-8")
+        for name in ("manifest.json", "records.json", "provenance.json")
+    }
+    consumed = consume_snapshot(
+        run_dir,
+        expected_run_id="redaction-persisted-authorization",
+        expected_plan_version="g1-provider-batch-adapter-v1",
+        expected_tickers=["600519.SH"],
+    )
+
+    for serialized in artifacts.values():
+        assert "Bearer x" not in serialized
+    for name in ("manifest.json", "provenance.json"):
+        assert "Authorization: Bearer <redacted>],retry" in artifacts[name]
+    assert consumed.get("600519.SH", "last_price").value is None
+
+
 def test_available_none_is_not_canonical_consumable():
     def fetch(_request):
         return {

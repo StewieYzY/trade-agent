@@ -20,11 +20,14 @@
 > `ec47837 docs(g1): sync full-market gate status`
 >
 > 当前 main/docs baseline：
-> `main@ebcbb91`；G1 closure artifacts are recorded in the current working
-> tree and remain separate from existing user WIP.
+> `main@d8b18e0`；`main` 与 `origin/main` 一致。tracked files clean；既有
+> untracked user WIP 保持 untouched。
 >
-> 当前 GitHub 审查入口：
+> 历史 GitHub 审查入口：
 > `PR #1 codex/mainline-sync-2026-08-05 → main`
+>
+> 当前集成以 `main@d8b18e0` / `origin/main@d8b18e0` 为准；PR #1 以下信息仅作
+> 历史审查快照，不再作为当前 branch 或 merge 状态判断依据。
 >
 > 当前直接执行阶段：
 > `g1-full-market-performance-cost` 已 archived / integrated at
@@ -228,15 +231,17 @@ passed InvestmentThesis
 ```text
 path:   /Users/admin/Documents/trade-agent
 branch: main
-HEAD:   2f13be9bd35d569b730addb1995534a628708396
+HEAD:   d8b18e0
 upstream: origin/main
-relation before governance checkpoint:
-  origin/main is an ancestor
-  local main ahead by 35 commits
-status: clean
+relation:
+  local main == origin/main
+status:
+  tracked files clean; existing untracked user WIP preserved
 ```
 
 ### 5.2 PR #1
+
+> Historical snapshot only; current integration is `main@d8b18e0`.
 
 ```text
 number: #1
@@ -250,7 +255,7 @@ review verdict: REQUEST CHANGES
 ```
 
 `mergeable_state=clean` 只表示 Git 可以合并，不表示合同、工程或 Capability 已
-ready。
+ready；本节不作为当前集成状态来源。
 
 PR #1 必须保持 Draft，直到所有 PR-blocking Repair ID closed 并通过整体
 independent re-review。
@@ -287,7 +292,7 @@ scope:
 | `g1-field-qualification-canonical-promotion` | 22/22 | archived / integrated at `main@1ff6678` | R-G1-001/R-G1-002 closed |
 | `g1-r-g1-002-source-plan-matrix-completeness` | 14/14 | archived / integrated at `main@1ff6678` | R-G1-002 closed after independent review |
 | `g1-r-g1-003-rejected-canonical-visibility` | 4/4 | archived / integrated at `main@98570a1` | R-G1-003 closed after independent re-review |
-| `g2-strong-single-agent-fallback` | archived | archived / integrated at `main@da9e2c5` | R-G2-001/R-G2-002/R-G2-003 closed after CR repair |
+| `g2-strong-single-agent-fallback` | archived | archived; CR2 repair chain ending `654a09b` awaiting fresh review | R-G2-001/R-G2-003 closed; R-G2-002 remains design_escalation and PR-blocking |
 | `g2-deep-investment-thesis` | 0/27 | in-progress | G2 umbrella，含 M4.5 |
 | `f3c-r1-crosstalk-root-cause` | 5/17 | in-progress | M0 前置未闭 |
 | `g1-4-data-source-resilience` | 0/48 | in-progress | P2 已映射到既有 D1/D6 |
@@ -346,7 +351,7 @@ PR #1: REQUEST CHANGES
 | `R-G1-003` | M2 | `g1-r-g1-003-rejected-canonical-visibility` | closed | 1 | 否 |
 | `R-G1-004` | M1/M2 | `g1-provider-health-and-failure-visibility` | closed | 1 | 否 |
 | `R-G2-001` | M0/M5 foundation | `g2-strong-single-agent-fallback` | closed | 1 | 否 |
-| `R-G2-002` | M0/M5 foundation | `g2-strong-single-agent-fallback` | closed | 1 | 否 |
+| `R-G2-002` | M0/M5 foundation | `g2-strong-single-agent-fallback` | design_escalation | 2 | 是 |
 | `R-G2-003` | M0/M5 foundation | `g2-strong-single-agent-fallback` | closed | 1 | 否 |
 
 独立 review 有 6 个 P1 finding。Production-path finding 跨 G1/G2 合同，为保持
@@ -719,11 +724,13 @@ R-G2-001
 → fallback archive decision
 ```
 
-状态：`closed`，原 child 已完成独立 re-review，archive target 为
-`openspec/changes/archive/2026-08-14-g2-strong-single-agent-fallback/`。
-该闭环仅关闭 R-G2-001/002/003，不代表 G2 capability passed，也不放行 G3 runtime。
-下一允许工作仍需回到 G2 umbrella 的 identity/audit-chain 与 incomplete-cache child，
-不得把本 foundation 当作最终 InvestmentThesis。
+状态：原 child 已 archive，CR2 runtime repair chain ending `654a09b` 已完成本次
+限定 focused 验证，当前为 `design_escalation` / fresh review pending。
+`R-G2-001`、`R-G2-003` 保持 closed；`R-G2-002` 为 `design_escalation`
+（attempt 2，PR-blocking）。用户已明确批准本次限定 repair；仍需 fresh review
+通过后才能考虑重新 closed 并合入 main。archive target 为
+`openspec/changes/archive/2026-08-14-g2-strong-single-agent-fallback/`。该工程状态
+不代表 G2 capability passed，也不放行 G3 runtime。
 
 ### Queue 3：既有 G1-4
 
@@ -979,14 +986,16 @@ M6 runtime: locked
 
 ```text
 latest full suite:
-  651 passed in 52.75s
+  927 passed in 55.23s
 
-independent review safe focused suite:
-  135 passed in 6.60s
+latest CR-boundary focused suite:
+  108 passed in 1.52s
+  full suite intentionally not rerun for this narrow repair
 
 active OpenSpec strict validation:
-  previously passed
-  repair tasks 尚未同步，因此不能作为 archive readiness
+  29 passed, 0 failed
+  archived repair tasks 5.7–5.13 synced; R-G2-002 still awaits independent
+  re-review/integration, so this is engineering evidence rather than Gate closure
 ```
 
 ### Whitespace
@@ -1005,7 +1014,7 @@ prospective range check。`R-DOC-001` 在该 checkpoint 集成到 PR head 后改
 
 ### GitNexus
 
-GitNexus 索引落后当前 head 50 commits。尝试使用 `gitnexus 1.6.6
+GitNexus 索引与当前 head 不同步。尝试使用 `gitnexus 1.6.6
 --index-only` 刷新时，其发布包导入未声明/未构建的 `tree-sitter-swift` 而失败。
 
 因此本次 review 不使用 stale graph，findings 以实际 diff、源码、spec 和最小

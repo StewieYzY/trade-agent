@@ -59,6 +59,7 @@ _SENSITIVE_KEY_NAMES = {
     "secret",
     "token",
 }
+_NON_CREDENTIAL_TERMS = {"authentication", "bond", "budget", "expired"}
 
 
 class ProvenanceContractError(ValueError):
@@ -67,9 +68,16 @@ class ProvenanceContractError(ValueError):
 
 def redact_sensitive_text(text: Any) -> str:
     value = str(text)
+
+    def _redact_standalone(match: re.Match[str]) -> str:
+        secret = match.group("secret")
+        if secret.casefold() in _NON_CREDENTIAL_TERMS:
+            return match.group(0)
+        return f"{match.group('scheme').title()} <redacted>"
+
     value = re.sub(
         r"(?i)^\s*(?P<scheme>basic|bearer|token)\s+(?P<secret>\S+)\s*$",
-        lambda match: f"{match.group('scheme').title()} <redacted>",
+        _redact_standalone,
         value,
     )
     value = re.sub(
@@ -82,18 +90,69 @@ def redact_sensitive_text(text: Any) -> str:
         prefix = match.group("prefix") or ""
         scheme = match.group("scheme")
         secret = match.group("secret")
+        if secret.startswith("<redacted>"):
+            return match.group(0)
+        if secret.casefold() in _NON_CREDENTIAL_TERMS:
+            return match.group(0)
         looks_sensitive = (
             any(marker in secret.lower() for marker in ("secret", "token", "key", "sk-"))
             or len(secret) >= 16
         )
-        if not prefix and not looks_sensitive:
+        if not prefix and not looks_sensitive and len(secret) > 3:
             return match.group(0)
-        return f"{prefix}{scheme.title()} <redacted>"
+        suffix = (
+            match.group("at_end")
+            or match.group("wrapped")
+            or match.group("delimiter")
+            or match.group("terminated")
+            or match.group("whitespace")
+            or ""
+        )
+        return f"{prefix}{scheme.title()} <redacted>{suffix}"
 
     value = re.sub(
         r"(?i)(?P<prefix>\bauthorization\s*[:=]\s*)?"
-        r"(?P<scheme>basic|bearer|token)\s+(?P<secret>\S+)",
+        r"(?P<scheme>basic|bearer|token)\s+"
+        r"(?P<secret>[^\s.,;!?:\)\]\}'\"]+)"
+        r"(?:(?P<at_end>[\)\]\}'\"]*[.,;!?:]?)$|"
+        r"(?P<wrapped>[\)\]\}'\"]+[.,;!?:])|"
+        r"(?P<delimiter>[;:])|"
+        r"(?P<terminated>[.,!?])(?=\s|$)|"
+        r"(?P<whitespace>\s+))",
         _redact_auth,
+        value,
+    )
+
+    def _redact_embedded_credential(match: re.Match[str]) -> str:
+        secret = match.group("secret")
+        if secret.startswith("<redacted>") or secret.casefold() in _NON_CREDENTIAL_TERMS:
+            return match.group(0)
+        if match.group("context") is None and len(secret) > 3:
+            return match.group(0)
+        suffix = (
+            match.group("at_end")
+            or match.group("wrapped")
+            or match.group("delimiter")
+            or match.group("terminated")
+            or match.group("whitespace")
+            or ""
+        )
+        return (
+            f"{match.group('context') or ''}{match.group('prefix')}"
+            f"{match.group('scheme').title()} <redacted>{suffix}"
+        )
+
+    value = re.sub(
+        r"(?i)(?:(?P<context>[:=;,(])|(?P<word_boundary>(?<!\w)))"
+        r"(?P<prefix>\s*(?:[\(\[\{'\"]\s*)?)"
+        r"(?P<scheme>bearer|token)\s+"
+        r"(?P<secret>\S+?)"
+        r"(?:(?P<at_end>[\)\]\}'\"]*[.,;!?:]?)$|"
+        r"(?P<wrapped>[\)\]\}'\"]+[.,;!?:])|"
+        r"(?P<delimiter>[;:])|"
+        r"(?P<terminated>[.,!?])(?=\s|$)|"
+        r"(?P<whitespace>\s+))",
+        _redact_embedded_credential,
         value,
     )
     value = re.sub(
