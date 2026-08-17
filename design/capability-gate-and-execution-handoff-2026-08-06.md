@@ -1,6 +1,6 @@
 # trade-agent Capability Gate 与完整执行 Handoff
 
-> 日期：2026-08-14
+> 日期：2026-08-17
 >
 > Master ID：`MASTER-2026-08-06`
 >
@@ -20,13 +20,13 @@
 > `ec47837 docs(g1): sync full-market gate status`
 >
 > 当前 main/docs baseline：
-> `main@d8b18e0`；`main` 与 `origin/main` 一致。tracked files clean；既有
+> `main@0a9fb8a`；`main` 与 `origin/main` 一致。tracked files clean；既有
 > untracked user WIP 保持 untouched。
 >
 > 历史 GitHub 审查入口：
 > `PR #1 codex/mainline-sync-2026-08-05 → main`
 >
-> 当前集成以 `main@d8b18e0` / `origin/main@d8b18e0` 为准；PR #1 以下信息仅作
+> 当前集成以 `main@0a9fb8a` / `origin/main@0a9fb8a` 为准；PR #1 以下信息仅作
 > 历史审查快照，不再作为当前 branch 或 merge 状态判断依据。
 >
 > 当前直接执行阶段：
@@ -231,7 +231,7 @@ passed InvestmentThesis
 ```text
 path:   /Users/admin/Documents/trade-agent
 branch: main
-HEAD:   d8b18e0
+HEAD:   0a9fb8a
 upstream: origin/main
 relation:
   local main == origin/main
@@ -241,7 +241,7 @@ status:
 
 ### 5.2 PR #1
 
-> Historical snapshot only; current integration is `main@d8b18e0`.
+> Historical snapshot only; current integration is `main@0a9fb8a`.
 
 ```text
 number: #1
@@ -292,7 +292,7 @@ scope:
 | `g1-field-qualification-canonical-promotion` | 22/22 | archived / integrated at `main@1ff6678` | R-G1-001/R-G1-002 closed |
 | `g1-r-g1-002-source-plan-matrix-completeness` | 14/14 | archived / integrated at `main@1ff6678` | R-G1-002 closed after independent review |
 | `g1-r-g1-003-rejected-canonical-visibility` | 4/4 | archived / integrated at `main@98570a1` | R-G1-003 closed after independent re-review |
-| `g2-strong-single-agent-fallback` | archived | archived; CR2 repair chain closed and integrated at `main@2fbbbaa` after fresh independent review | R-G2-001/R-G2-002/R-G2-003 closed |
+| `g2-strong-single-agent-fallback` | archived | archived; CR2 repair chain closed and governance synced at `main@0a9fb8a` after fresh independent review | R-G2-001/R-G2-002/R-G2-003 closed |
 | `g2-deep-investment-thesis` | 0/27 | in-progress | G2 umbrella，含 M4.5 |
 | `f3c-r1-crosstalk-root-cause` | 5/17 | in-progress | M0 前置未闭 |
 | `g1-4-data-source-resilience` | 0/48 | in-progress | P2 已映射到既有 D1/D6 |
@@ -735,7 +735,7 @@ R-G2-001
 ```
 
 状态：原 child 已 archive，第三次限定 repair chain 已完成 focused/full 验证、strict
-validation 和 fresh independent review，并以 `main@2fbbbaa` 合入。`R-G2-001`、
+validation 和 fresh independent review，并以 `main@0a9fb8a` 完成治理收口。`R-G2-001`、
 `R-G2-002`、`R-G2-003` 均为 `closed`；archive target 为
 `openspec/changes/archive/2026-08-14-g2-strong-single-agent-fallback/`。该工程状态不代表
 G2 capability passed，也不放行 G3 runtime。
