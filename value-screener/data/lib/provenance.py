@@ -92,13 +92,27 @@ def redact_sensitive_text(text: Any) -> str:
             any(marker in secret.lower() for marker in ("secret", "token", "key", "sk-"))
             or len(secret) >= 16
         )
-        if not prefix and not looks_sensitive:
+        if not looks_sensitive and len(secret) > 3:
             return match.group(0)
-        return f"{prefix}{scheme.title()} <redacted>"
+        suffix = (
+            match.group("at_end")
+            or match.group("wrapped")
+            or match.group("delimiter")
+            or match.group("terminated")
+            or match.group("whitespace")
+            or ""
+        )
+        return f"{prefix}{scheme.title()} <redacted>{suffix}"
 
     value = re.sub(
         r"(?i)(?P<prefix>\bauthorization\s*[:=]\s*)?"
-        r"(?P<scheme>basic|bearer|token)\s+(?P<secret>\S+)",
+        r"(?P<scheme>basic|bearer|token)\s+"
+        r"(?P<secret>[^\s.,;!?:\)\]\}'\"]+)"
+        r"(?:(?P<at_end>[\)\]\}'\"]*[.,;!?:]?)$|"
+        r"(?P<wrapped>[\)\]\}'\"]+[.,;!?:])|"
+        r"(?P<delimiter>[;:])|"
+        r"(?P<terminated>[.,!?])(?=\s|$)|"
+        r"(?P<whitespace>\s+))",
         _redact_auth,
         value,
     )
@@ -120,7 +134,7 @@ def redact_sensitive_text(text: Any) -> str:
         )
 
     value = re.sub(
-        r"(?i)(?:(?P<start>^)|(?P<context>[:=;,(]))"
+        r"(?i)(?:(?P<start>^)|(?P<context>[:=;,(])|(?P<word_boundary>(?<!\w)))"
         r"(?P<prefix>\s*(?:[\(\[\{'\"]\s*)?)"
         r"(?P<scheme>bearer|token)\s+"
         r"(?P<secret>[^\s.,;!?:\)\]\}'\"]+)"

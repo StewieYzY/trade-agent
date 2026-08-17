@@ -280,6 +280,14 @@ def test_fallback_redacts_sensitive_error_content(tmp_path, monkeypatch, error_v
             "upstream failed: [Token x],retry",
             "RuntimeError: upstream failed: [Token <redacted>],retry",
         ),
+        (
+            "upstream failed Bearer x",
+            "RuntimeError: upstream failed Bearer <redacted>",
+        ),
+        (
+            "Authorization: Bearer x],retry",
+            "RuntimeError: Authorization: Bearer <redacted>],retry",
+        ),
     ],
     ids=[
         "parenthesized",
@@ -290,6 +298,8 @@ def test_fallback_redacts_sensitive_error_content(tmp_path, monkeypatch, error_v
         "newline-terminator",
         "tab-terminator",
         "adjacent-punctuation",
+        "space-left-boundary",
+        "authorization-wrapped-token",
     ],
 )
 def test_fallback_redacts_embedded_short_credentials_from_artifacts(
