@@ -40,3 +40,4 @@
 - [x] 5.10 扩展常见括号/分号/冒号终止语境的短 credential redaction；补充 malformed raw、schema-valid JSON、usage 与 provider-batch artifact/消费路径回归
 - [x] 5.11 收紧短 token 形状并保持换行、相邻标点与重复 redaction 的幂等性；补充 `Token expired`、`bearer bond` 等普通诊断负例和 provider snapshot consumer 回归
 - [x] 5.12 修复普通空格左边界短 credential 泄露与 `Authorization:` 尾部吞文本；相关 fallback/provider-batch 测试 `97 passed`，未运行全量 suite
+- [x] 5.13 分离 standalone 与 embedded/Authorization redaction；恢复 4–15 字符与 JWT-like credential 脱敏，补 provider-batch Authorization 尾部回归；相关 fallback/provider-batch 测试 `104 passed`，未运行全量 suite
