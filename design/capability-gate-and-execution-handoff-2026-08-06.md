@@ -20,11 +20,14 @@
 > `ec47837 docs(g1): sync full-market gate status`
 >
 > 当前 main/docs baseline：
-> `main@ebcbb91`；G1 closure artifacts are recorded in the current working
-> tree and remain separate from existing user WIP.
+> `main@d8b18e0`；`main` 与 `origin/main` 一致。tracked files clean；既有
+> untracked user WIP 保持 untouched。
 >
-> 当前 GitHub 审查入口：
+> 历史 GitHub 审查入口：
 > `PR #1 codex/mainline-sync-2026-08-05 → main`
+>
+> 当前集成以 `main@d8b18e0` / `origin/main@d8b18e0` 为准；PR #1 以下信息仅作
+> 历史审查快照，不再作为当前 branch 或 merge 状态判断依据。
 >
 > 当前直接执行阶段：
 > `g1-full-market-performance-cost` 已 archived / integrated at
@@ -228,15 +231,17 @@ passed InvestmentThesis
 ```text
 path:   /Users/admin/Documents/trade-agent
 branch: main
-HEAD:   2f13be9bd35d569b730addb1995534a628708396
+HEAD:   d8b18e0
 upstream: origin/main
-relation before governance checkpoint:
-  origin/main is an ancestor
-  local main ahead by 35 commits
-status: clean
+relation:
+  local main == origin/main
+status:
+  tracked files clean; existing untracked user WIP preserved
 ```
 
 ### 5.2 PR #1
+
+> Historical snapshot only; current integration is `main@d8b18e0`.
 
 ```text
 number: #1
@@ -250,7 +255,7 @@ review verdict: REQUEST CHANGES
 ```
 
 `mergeable_state=clean` 只表示 Git 可以合并，不表示合同、工程或 Capability 已
-ready。
+ready；本节不作为当前集成状态来源。
 
 PR #1 必须保持 Draft，直到所有 PR-blocking Repair ID closed 并通过整体
 independent re-review。
@@ -287,7 +292,7 @@ scope:
 | `g1-field-qualification-canonical-promotion` | 22/22 | archived / integrated at `main@1ff6678` | R-G1-001/R-G1-002 closed |
 | `g1-r-g1-002-source-plan-matrix-completeness` | 14/14 | archived / integrated at `main@1ff6678` | R-G1-002 closed after independent review |
 | `g1-r-g1-003-rejected-canonical-visibility` | 4/4 | archived / integrated at `main@98570a1` | R-G1-003 closed after independent re-review |
-| `g2-strong-single-agent-fallback` | archived | archived / integrated at `main@da9e2c5` | R-G2-001/R-G2-002/R-G2-003 closed after CR repair |
+| `g2-strong-single-agent-fallback` | archived | archived / integrated at `main@161ff14` | R-G2-001/R-G2-002/R-G2-003 closed after CR repair |
 | `g2-deep-investment-thesis` | 0/27 | in-progress | G2 umbrella，含 M4.5 |
 | `f3c-r1-crosstalk-root-cause` | 5/17 | in-progress | M0 前置未闭 |
 | `g1-4-data-source-resilience` | 0/48 | in-progress | P2 已映射到既有 D1/D6 |
