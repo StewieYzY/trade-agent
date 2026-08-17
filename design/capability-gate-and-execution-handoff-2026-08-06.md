@@ -292,7 +292,7 @@ scope:
 | `g1-field-qualification-canonical-promotion` | 22/22 | archived / integrated at `main@1ff6678` | R-G1-001/R-G1-002 closed |
 | `g1-r-g1-002-source-plan-matrix-completeness` | 14/14 | archived / integrated at `main@1ff6678` | R-G1-002 closed after independent review |
 | `g1-r-g1-003-rejected-canonical-visibility` | 4/4 | archived / integrated at `main@98570a1` | R-G1-003 closed after independent re-review |
-| `g2-strong-single-agent-fallback` | archived | archived; CR2 repair chain ending `654a09b` awaiting fresh review | R-G2-001/R-G2-003 closed; R-G2-002 remains design_escalation and PR-blocking |
+| `g2-strong-single-agent-fallback` | archived | archived; CR2 repair chain closed and integrated at `main@2fbbbaa` after fresh independent review | R-G2-001/R-G2-002/R-G2-003 closed |
 | `g2-deep-investment-thesis` | 0/27 | in-progress | G2 umbrella，含 M4.5 |
 | `f3c-r1-crosstalk-root-cause` | 5/17 | in-progress | M0 前置未闭 |
 | `g1-4-data-source-resilience` | 0/48 | in-progress | P2 已映射到既有 D1/D6 |
@@ -351,7 +351,7 @@ PR #1: REQUEST CHANGES
 | `R-G1-003` | M2 | `g1-r-g1-003-rejected-canonical-visibility` | closed | 1 | 否 |
 | `R-G1-004` | M1/M2 | `g1-provider-health-and-failure-visibility` | closed | 1 | 否 |
 | `R-G2-001` | M0/M5 foundation | `g2-strong-single-agent-fallback` | closed | 1 | 否 |
-| `R-G2-002` | M0/M5 foundation | `g2-strong-single-agent-fallback` | design_escalation | 2 | 是 |
+| `R-G2-002` | M0/M5 foundation | `g2-strong-single-agent-fallback` | closed | 3 | 否 |
 | `R-G2-003` | M0/M5 foundation | `g2-strong-single-agent-fallback` | closed | 1 | 否 |
 
 独立 review 有 6 个 P1 finding。Production-path finding 跨 G1/G2 合同，为保持
@@ -627,6 +627,16 @@ Fallback 私有 `_redact_error()` 未复用 shared recursive redactor，不能�
 error 与 malformed raw 的 API key、token、Bearer、URL credential、嵌套 mapping/list
 不会进入 error/raw/result/manifest。未调用真实 provider/LLM。
 
+**Closure evidence (2026-08-17)**：用户批准的第三次限定 repair 已修复普通文本上下文
+中的 4–15 字符与 JWT-like Bearer/Token、`Bearer/Token format` 凭证，以及递归
+`X-API-Key` header alias；同时保留 `invalid token format`、`Token budget exhausted`、
+`bearer bond` 和 `Bearer authentication failed` 等完整诊断短语。fallback `result.json`
+与 provider-batch snapshot/consumer 持久化回归均通过。最终 focused suite `119 passed`，
+全量 `value-screener/tests` `951 passed`，OpenSpec strict `29 passed`，compileall 与
+`git diff --check` 通过；fresh independent review = approve，代码与测试已合入
+`main@2fbbbaa`。本 repair closure 仍仅是 engineering evidence，不代表 G2 capability
+passed，也未调用真实 provider/LLM。
+
 ### R-G2-003：Fallback production-path adoption
 
 **Root cause**
@@ -724,13 +734,11 @@ R-G2-001
 → fallback archive decision
 ```
 
-状态：原 child 已 archive，CR2 runtime repair chain ending `654a09b` 已完成本次
-限定 focused 验证，当前为 `design_escalation` / fresh review pending。
-`R-G2-001`、`R-G2-003` 保持 closed；`R-G2-002` 为 `design_escalation`
-（attempt 2，PR-blocking）。用户已明确批准本次限定 repair；仍需 fresh review
-通过后才能考虑重新 closed 并合入 main。archive target 为
-`openspec/changes/archive/2026-08-14-g2-strong-single-agent-fallback/`。该工程状态
-不代表 G2 capability passed，也不放行 G3 runtime。
+状态：原 child 已 archive，第三次限定 repair chain 已完成 focused/full 验证、strict
+validation 和 fresh independent review，并以 `main@2fbbbaa` 合入。`R-G2-001`、
+`R-G2-002`、`R-G2-003` 均为 `closed`；archive target 为
+`openspec/changes/archive/2026-08-14-g2-strong-single-agent-fallback/`。该工程状态不代表
+G2 capability passed，也不放行 G3 runtime。
 
 ### Queue 3：既有 G1-4
 
@@ -986,16 +994,15 @@ M6 runtime: locked
 
 ```text
 latest full suite:
-  927 passed in 55.23s
+  951 passed in 55.67s
 
 latest CR-boundary focused suite:
-  108 passed in 1.52s
-  full suite intentionally not rerun for this narrow repair
+  119 passed in 1.63s
 
 active OpenSpec strict validation:
   29 passed, 0 failed
-  archived repair tasks 5.7–5.13 synced; R-G2-002 still awaits independent
-  re-review/integration, so this is engineering evidence rather than Gate closure
+  archived repair tasks 5.7–5.14 synced; R-G2-002 closure is engineering evidence
+  rather than Gate closure
 ```
 
 ### Whitespace

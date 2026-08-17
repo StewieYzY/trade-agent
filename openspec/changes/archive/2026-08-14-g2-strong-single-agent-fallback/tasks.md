@@ -41,3 +41,4 @@
 - [x] 5.11 收紧短 token 形状并保持换行、相邻标点与重复 redaction 的幂等性；补充 `Token expired`、`bearer bond` 等普通诊断负例和 provider snapshot consumer 回归
 - [x] 5.12 修复普通空格左边界短 credential 泄露与 `Authorization:` 尾部吞文本；相关 fallback/provider-batch 测试 `97 passed`，未运行全量 suite
 - [x] 5.13 分离 standalone 与 embedded/Authorization redaction；恢复 4–15 字符与 JWT-like credential 脱敏，补 provider-batch Authorization 尾部回归；相关 fallback/provider-batch 测试 `108 passed`，未运行全量 suite
+- [x] 5.14 经用户批准完成第三次限定 repair：修复普通文本中的 4–15 字符/JWT-like 与 `Bearer/Token format` credential 泄露，补充递归 `X-API-Key` header redaction；保留完整诊断短语回归，fallback/provider-batch focused `119 passed`、全量 `951 passed`、strict `29/29`、compileall/diff check 通过，fresh independent review approve，合入 `main@2fbbbaa`
