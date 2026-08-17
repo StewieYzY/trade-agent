@@ -288,6 +288,18 @@ def test_fallback_redacts_sensitive_error_content(tmp_path, monkeypatch, error_v
             "Authorization: Bearer x],retry",
             "RuntimeError: Authorization: Bearer <redacted>],retry",
         ),
+        (
+            "Bearer abcd",
+            "RuntimeError: Bearer <redacted>",
+        ),
+        (
+            "Token abcdef",
+            "RuntimeError: Token <redacted>",
+        ),
+        (
+            "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.payload.signature",
+            "RuntimeError: Authorization: Bearer <redacted>",
+        ),
     ],
     ids=[
         "parenthesized",
@@ -300,6 +312,9 @@ def test_fallback_redacts_sensitive_error_content(tmp_path, monkeypatch, error_v
         "adjacent-punctuation",
         "space-left-boundary",
         "authorization-wrapped-token",
+        "standalone-bearer-4-char",
+        "standalone-token-6-char",
+        "authorization-jwt",
     ],
 )
 def test_fallback_redacts_embedded_short_credentials_from_artifacts(

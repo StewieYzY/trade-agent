@@ -59,6 +59,7 @@ _SENSITIVE_KEY_NAMES = {
     "secret",
     "token",
 }
+_NON_CREDENTIAL_TERMS = {"authentication", "bond", "budget", "expired"}
 
 
 class ProvenanceContractError(ValueError):
@@ -67,13 +68,16 @@ class ProvenanceContractError(ValueError):
 
 def redact_sensitive_text(text: Any) -> str:
     value = str(text)
+
+    def _redact_standalone(match: re.Match[str]) -> str:
+        secret = match.group("secret")
+        if secret.casefold() in _NON_CREDENTIAL_TERMS:
+            return match.group(0)
+        return f"{match.group('scheme').title()} <redacted>"
+
     value = re.sub(
         r"(?i)^\s*(?P<scheme>basic|bearer|token)\s+(?P<secret>\S+)\s*$",
-        lambda match: (
-            f"{match.group('scheme').title()} <redacted>"
-            if len(match.group("secret")) <= 3
-            else match.group(0)
-        ),
+        _redact_standalone,
         value,
     )
     value = re.sub(
@@ -88,11 +92,13 @@ def redact_sensitive_text(text: Any) -> str:
         secret = match.group("secret")
         if secret.startswith("<redacted>"):
             return match.group(0)
+        if secret.casefold() in _NON_CREDENTIAL_TERMS:
+            return match.group(0)
         looks_sensitive = (
             any(marker in secret.lower() for marker in ("secret", "token", "key", "sk-"))
             or len(secret) >= 16
         )
-        if not looks_sensitive and len(secret) > 3:
+        if not prefix and not looks_sensitive and len(secret) > 3:
             return match.group(0)
         suffix = (
             match.group("at_end")
@@ -116,9 +122,12 @@ def redact_sensitive_text(text: Any) -> str:
         _redact_auth,
         value,
     )
+
     def _redact_embedded_credential(match: re.Match[str]) -> str:
         secret = match.group("secret")
-        if len(secret) > 3:
+        if secret.startswith("<redacted>") or secret.casefold() in _NON_CREDENTIAL_TERMS:
+            return match.group(0)
+        if match.group("context") is None and len(secret) > 3:
             return match.group(0)
         suffix = (
             match.group("at_end")
@@ -134,10 +143,10 @@ def redact_sensitive_text(text: Any) -> str:
         )
 
     value = re.sub(
-        r"(?i)(?:(?P<start>^)|(?P<context>[:=;,(])|(?P<word_boundary>(?<!\w)))"
+        r"(?i)(?:(?P<context>[:=;,(])|(?P<word_boundary>(?<!\w)))"
         r"(?P<prefix>\s*(?:[\(\[\{'\"]\s*)?)"
         r"(?P<scheme>bearer|token)\s+"
-        r"(?P<secret>[^\s.,;!?:\)\]\}'\"]+)"
+        r"(?P<secret>\S+?)"
         r"(?:(?P<at_end>[\)\]\}'\"]*[.,;!?:]?)$|"
         r"(?P<wrapped>[\)\]\}'\"]+[.,;!?:])|"
         r"(?P<delimiter>[;:])|"

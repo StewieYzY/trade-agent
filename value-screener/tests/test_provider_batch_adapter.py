@@ -1022,6 +1022,54 @@ def test_redaction_masks_wrapped_embedded_short_token():
     assert "Token <redacted>: retry" in reason
 
 
+def test_redaction_masks_authorization_token_and_preserves_suffix():
+    result = BatchAdapter(
+        [
+            ProviderSpec(
+                "fixture",
+                "provider",
+                lambda _request: (_ for _ in ()).throw(
+                    RuntimeError("Authorization: Bearer x],retry")
+                ),
+            )
+        ]
+    ).run(
+        tickers=["600519.SH"],
+        method="quote",
+        fields=["last_price"],
+        run_id="redaction-authorization-suffix",
+    )
+
+    reason = result["evidence"][0]["reason"]
+    assert "Bearer x" not in reason
+    assert "Authorization: Bearer <redacted>],retry" in reason
+
+
+@pytest.mark.parametrize(
+    "credential",
+    ["Bearer abcd", "Token abcdef", "Bearer eyJhbGciOiJIUzI1NiJ9.payload.signature"],
+)
+def test_redaction_masks_standalone_credentials(credential):
+    result = BatchAdapter(
+        [
+            ProviderSpec(
+                "fixture",
+                "provider",
+                lambda _request: (_ for _ in ()).throw(RuntimeError(credential)),
+            )
+        ]
+    ).run(
+        tickers=["600519.SH"],
+        method="quote",
+        fields=["last_price"],
+        run_id="redaction-standalone-credential",
+    )
+
+    reason = result["evidence"][0]["reason"]
+    assert credential not in reason
+    assert "<redacted>" in reason
+
+
 @pytest.mark.parametrize(
     "diagnostic",
     ["Token expired", "bearer bond", "Bearer authentication failed"],
