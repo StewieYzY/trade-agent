@@ -953,6 +953,29 @@ def test_redaction_preserves_token_budget_diagnostic_phrase():
     assert "Token budget exhausted" in reason
 
 
+def test_redaction_masks_embedded_short_bearer_credential():
+    result = BatchAdapter(
+        [
+            ProviderSpec(
+                "fixture",
+                "provider",
+                lambda _request: (_ for _ in ()).throw(
+                    RuntimeError("upstream failed: Bearer x")
+                ),
+            )
+        ]
+    ).run(
+        tickers=["600519.SH"],
+        method="quote",
+        fields=["last_price"],
+        run_id="redaction-embedded-bearer",
+    )
+
+    reason = result["evidence"][0]["reason"]
+    assert "Bearer x" not in reason
+    assert "Bearer <redacted>" in reason
+
+
 def test_available_none_is_not_canonical_consumable():
     def fetch(_request):
         return {

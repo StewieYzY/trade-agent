@@ -24,7 +24,7 @@
 - [x] 4.1 `R-G2-001`：显式 dossier 的 canonical `core_snapshot.ticker` 必填，顶层与 nested optional section identity mismatch 在共享 Council/fallback preflight 中 fail closed；focused identity tests 覆盖 missing/empty/mismatch/normal path，确认 LLM/artifact/cache/watchlist 零副作用
 - [x] 4.2 `R-G2-002`：fallback 复用 shared `redact_sensitive_text()`；focused tests 覆盖 error 与 malformed raw 中的 api_key、token、Bearer、URL credential、嵌套 mapping/list，并确认 error/raw/result/manifest 不含原始敏感值
 - [x] 4.3 `R-G2-003`：fallback 复用 shared `validate_g1_output_root()`；focused tests 覆盖 cache/watchlist/debate/data/snapshots exact/descendant/ancestor/symlink 拒绝、外部 tmp root 允许及拒绝时零副作用
-- [x] 4.4 验证证据：fallback focused 27 passed；Council preflight/dossier 16 passed；production-path 20 passed；provenance/provider-redaction 53 passed；全量 `value-screener/tests` 893 passed；compileall、diff check 和 strict OpenSpec 均待最终收口命令确认
+- [x] 4.4 验证证据：fallback focused 27 passed；Council preflight/dossier 16 passed；production-path 20 passed；provenance/provider-redaction 53 passed；最终全量 `value-screener/tests` 907 passed；OpenSpec strict 29/29；compileall、diff check 通过
 
 ## 5. Post-archive CR repair closure
 
@@ -34,3 +34,4 @@
 - [x] 5.4 同步 CURRENT handoff baseline、OpenSpec archive 状态和本次 CR closure evidence
 - [x] 5.5 修复裸短 `Bearer`/`Token` credential 与普通诊断短语的边界，并补回归测试
 - [x] 5.6 让 identity walker 覆盖 `collections.abc.Mapping` 的 core/research nested section
+- [x] 5.7 修复嵌入上下文短 `Bearer` credential 落盘泄露，并同步 CURRENT handoff 当前 main/PR/WIP 状态
