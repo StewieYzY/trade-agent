@@ -1,6 +1,6 @@
 # trade-agent Capability Gate 与完整执行 Handoff
 
-> 日期：2026-08-17
+> 日期：2026-08-18
 >
 > Master ID：`MASTER-2026-08-06`
 >
@@ -17,11 +17,12 @@
 > 架构决策：`design/architecture-decisions.md`
 >
 > runtime/integration baseline：
-> `ec47837 docs(g1): sync full-market gate status`
+> `762d98e feat(g2): add identity audit chain`
 >
 > 当前 main/docs baseline：
-> `main@0a9fb8a`；`main` 与 `origin/main` 一致。tracked files clean；既有
-> untracked user WIP 保持 untouched。
+> `main@762d98e`；`main` 相对 `origin/main@990f657` ahead 1，尚未 push。
+> 根目录既有 untracked user WIP（`.cache/`、`data/`、`debate/`、`watchlist/`
+> 等）保持 untouched，未被本次 stage/commit。
 >
 > 历史 GitHub 审查入口：
 > `PR #1 codex/mainline-sync-2026-08-05 → main`
@@ -36,6 +37,22 @@
 > M3 的 4.1、4.2、5.1、5.2、5.3、6.1、6.2 已有真实证据闭环；
 > G1 umbrella 7.1、7.2、7.3 已完成。G1 capability 已通过，并已正式放行
 > G2 formal acceptance；G2 capability/runtime 尚未开始。
+
+## 0.1. 2026-08-18 G2 1.1 child closure sync
+
+- `g2-identity-audit-chain` 已 archive 至
+  `openspec/changes/archive/2026-08-18-g2-identity-audit-chain/`。
+- child commit：`762d98e feat(g2): add identity audit chain`，已 fast-forward
+  合入 `main`；`g2-deep-investment-thesis` umbrella task 1.1 已勾选完成。
+- archive 前 focused Council/fallback/audit suite：`142 passed`。
+- merge 后全量 `value-screener/.venv/bin/python -m pytest value-screener/tests -q`：
+  `990 passed in 59.08s`；compileall、`git diff --check` 和 OpenSpec strict
+  `30 passed` 均通过。
+- 受用户明确授权执行的真实 LLM run 仅为本地 pre-gate engineering diagnostic：
+  使用真实缓存/provider 数据加明确标记的行业 fixture；不作为 G2 capability
+  evidence bundle，不改变 G2 verdict，不放行 G3。
+- 当前仍保持：G2 1.2、1.3、M4、M4.5、M5/A-B、InvestmentThesis interface
+  和 G2 9.3 未完成；G2 capability `not passed`。
 
 ## 1. 本文件的唯一权威地位
 
