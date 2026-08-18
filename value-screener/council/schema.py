@@ -368,6 +368,13 @@ class CouncilResult:
     # f2 §3.5/3.6 运行时降级标记（R1 error rate ≥0.4 触发，跳 R2/R3 + confidence_cap=40）
     council_degraded: bool = False
     degraded_reason: str | None = None
+    run_id: str | None = None
+    profile_version: str | None = None
+    input_hash: str | None = None
+    dossier_snapshot: str | None = None
+    prompt_version: str | None = None
+    model_configuration: dict | None = None
+    audit_manifest_path: str | None = None
 
     def __post_init__(self):
         """单 agent fallback: final_verdict 取 round1[0].signal."""
@@ -392,6 +399,13 @@ class CouncilResult:
             "da_skipped_reason": self.da_skipped_reason,
             "council_degraded": self.council_degraded,
             "degraded_reason": self.degraded_reason,
+            "run_id": self.run_id,
+            "profile_version": self.profile_version,
+            "input_hash": self.input_hash,
+            "dossier_snapshot": self.dossier_snapshot,
+            "prompt_version": self.prompt_version,
+            "model_configuration": self.model_configuration,
+            "audit_manifest_path": self.audit_manifest_path,
         }
         return json.dumps(data, ensure_ascii=False, indent=2)
 

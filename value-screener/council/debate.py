@@ -14,6 +14,7 @@ from __future__ import annotations
 import asyncio
 import json
 import math
+import os
 import re
 from collections.abc import Mapping
 from datetime import date
@@ -196,6 +197,9 @@ async def call_agent(
     other_opinions: list[AgentOutput] | None = None,
     reasoning_level: str = "heavy",
     usage_accumulator: list[dict] | None = None,
+    prompt_recorder: list[dict] | None = None,
+    prompt_stage: str | None = None,
+    model: str | None = None,
 ) -> AgentOutput:
     """调用单个 agent，返回 AgentOutput.
 
@@ -222,9 +226,27 @@ async def call_agent(
     # 构建 user message
     # f3a §3 D3：透传 agent_id 给 _build_user_message 做角色分发
     user_message = _build_user_message(ticker, features, other_opinions, agent_id=agent_id)
+    if prompt_recorder is not None:
+        prompt_recorder.append(
+            {
+                "agent": agent_id,
+                "stage": prompt_stage,
+                "round": reasoning_level,
+                "system_prompt": system_prompt,
+                "user_message": user_message,
+            }
+        )
 
     # 调用 LLM（f1-deviation-fix §7：返回 (content, usage)，usage 供 AD-03 成本累加）
-    raw_json, usage = await call_llm(system_prompt, user_message, reasoning_level)
+    if model is None:
+        raw_json, usage = await call_llm(system_prompt, user_message, reasoning_level)
+    else:
+        raw_json, usage = await call_llm(
+            system_prompt,
+            user_message,
+            reasoning_level,
+            model=model,
+        )
     if usage_accumulator is not None and usage:
         usage_accumulator.append({"agent": agent_id, "round": reasoning_level, **usage})
 
@@ -393,8 +415,8 @@ def _degraded_note(dim: str) -> str:
     return f"你的{dim_cn}维度缺失，请基于核心特征（core_snapshot）判断，勿臆测该维度数据。"
 
 
-def _debate_path(ticker: str) -> Path:
-    """返回辩论记录文件路径（新写入用 canonical 带后缀）：debate/{canonical_ticker}/{YYYY-MM-DD}.md
+def _debate_path(ticker: str, run_id: str | None = None) -> Path:
+    """返回辩论记录路径；audited run 使用 run-scoped 目录.
 
     g1-canonical-run-identity D5 A+：新写入统一 canonical（600519.SH），与
     _write_council_output 的 watchlist 文件名口径一致，消除 600009.json（空壳）/
@@ -404,6 +426,8 @@ def _debate_path(ticker: str) -> Path:
     from data.lib.identity import canonical_ticker
     today = date.today().isoformat()
     canonical = canonical_ticker(ticker)
+    if run_id is not None:
+        return Path(f"debate/{canonical}/{run_id}/{today}.md")
     return Path(f"debate/{canonical}/{today}.md")
 
 
@@ -531,6 +555,8 @@ async def _call_da(
     ticker: str,
     features: dict,
     usage_accumulator: list[dict] | None = None,
+    prompt_recorder: list[dict] | None = None,
+    model: str | None = None,
 ) -> AgentOutput:
     """调用 DA（Devil's Advocate）.
 
@@ -560,8 +586,26 @@ async def _call_da(
             parts.append(json.dumps(agent.to_dict(), ensure_ascii=False, indent=2))
 
     user_message = "\n".join(parts)
+    if prompt_recorder is not None:
+        prompt_recorder.append(
+            {
+                "agent": "da",
+                "stage": "r3",
+                "round": "heavy",
+                "system_prompt": system_prompt,
+                "user_message": user_message,
+            }
+        )
 
-    raw_json, usage = await call_llm(system_prompt, user_message, "heavy")
+    if model is None:
+        raw_json, usage = await call_llm(system_prompt, user_message, "heavy")
+    else:
+        raw_json, usage = await call_llm(
+            system_prompt,
+            user_message,
+            "heavy",
+            model=model,
+        )
     if usage_accumulator is not None and usage:
         usage_accumulator.append({"agent": "da", "round": "heavy", **usage})
     return AgentOutput.from_json("da", raw_json)
@@ -575,6 +619,8 @@ async def _call_synthesizer(
     features: dict,
     usage_accumulator: list[dict] | None = None,
     da_skipped_reason: str | None = None,
+    prompt_recorder: list[dict] | None = None,
+    model: str | None = None,
 ) -> SynthesizerOutput:
     """调用 Synthesizer（共识收敛器）.
 
@@ -621,8 +667,26 @@ async def _call_synthesizer(
         )
 
     user_message = "\n".join(parts)
+    if prompt_recorder is not None:
+        prompt_recorder.append(
+            {
+                "agent": "synthesizer",
+                "stage": "r4",
+                "round": "moderate",
+                "system_prompt": system_prompt,
+                "user_message": user_message,
+            }
+        )
 
-    raw_json, usage = await call_llm(system_prompt, user_message, "moderate")
+    if model is None:
+        raw_json, usage = await call_llm(system_prompt, user_message, "moderate")
+    else:
+        raw_json, usage = await call_llm(
+            system_prompt,
+            user_message,
+            "moderate",
+            model=model,
+        )
     if usage_accumulator is not None and usage:
         usage_accumulator.append({"agent": "synthesizer", "round": "moderate", **usage})
     return SynthesizerOutput.from_json(raw_json)
@@ -783,6 +847,11 @@ async def run_debate(
     agents: list[str] | None = None,
     force: bool = False,
     mock_opinions: dict[str, AgentOutput] | None = None,
+    audit_root: str | Path | None = None,
+    audit_identity=None,
+    profile_version: str | None = None,
+    prompt_version: str | None = None,
+    model_configuration: dict | None = None,
 ) -> CouncilResult:
     """4 轮天团辩论，返回 CouncilResult.
 
@@ -804,18 +873,89 @@ async def run_debate(
     # _check_cache / _write_council_output / CouncilResult 全用 canonical 形式，
     # 无论调用方传纯数字 600519 还是带后缀 600519.SH 都统一。
     from data.lib.identity import canonical_ticker
+    from data.lib.audit_chain import (
+        AuditChainWriter,
+        create_audit_identity,
+        payload_sha256,
+        validate_audit_identity,
+        validate_audit_identity_structure,
+    )
+    if audit_identity is not None:
+        validate_audit_identity_structure(audit_identity)
     ticker = canonical_ticker(ticker)
 
     # 1. 解析并验证输入。所有显式/隐式路径都必须在 cache、文件写入和任意 LLM
     # 调用前收敛为可审计 dossier；失败表示本次 Council 根本未执行。
     features = _prepare_council_input(ticker, features)
+    provided_model_configuration = model_configuration or {}
+    unsupported_model_fields = set(provided_model_configuration) - {
+        "heavy_model",
+        "moderate_model",
+        "reasoning_levels",
+    }
+    if unsupported_model_fields:
+        raise ValueError(
+            "unsupported council model_configuration fields: "
+            + ", ".join(sorted(unsupported_model_fields))
+        )
+    if (
+        "reasoning_levels" in provided_model_configuration
+        and provided_model_configuration["reasoning_levels"] != ["heavy", "moderate"]
+    ):
+        raise ValueError(
+            "reasoning_levels must remain ['heavy', 'moderate'] for Council runtime"
+        )
+    runtime_model_configuration = {
+        "heavy_model": os.environ.get("LLM_MODEL_HEAVY"),
+        "moderate_model": os.environ.get("LLM_MODEL_MODERATE"),
+        "reasoning_levels": ["heavy", "moderate"],
+        **provided_model_configuration,
+    }
+    if audit_identity is not None:
+        if profile_version is not None and profile_version != audit_identity.profile_version:
+            raise ValueError("council profile_version does not match audit identity")
+        if prompt_version is not None and prompt_version != audit_identity.prompt_version:
+            raise ValueError("council prompt_version does not match audit identity")
+        if runtime_model_configuration != audit_identity.model_configuration:
+            raise ValueError("council model_configuration does not match audit identity")
+        validate_audit_identity(audit_identity, ticker=ticker, dossier=features)
+    elif audit_root is not None:
+        audit_identity = create_audit_identity(
+            ticker,
+            dossier=features,
+            profile_version=profile_version or "g2-council-v1",
+            prompt_version=prompt_version or "council-prompt-v1",
+            model_configuration=runtime_model_configuration,
+        )
+    audit_writer = None
+    if audit_identity is not None:
+        try:
+            audit_writer = AuditChainWriter(audit_root or "audit_runs", audit_identity)
+            audit_writer.write(
+                "dossier",
+                {
+                    "ticker": ticker,
+                    "run_id": audit_identity.run_id,
+                    "profile_version": audit_identity.profile_version,
+                    "input_hash": audit_identity.input_hash,
+                    "dossier_snapshot": audit_identity.dossier_snapshot,
+                    "prompt_version": audit_identity.prompt_version,
+                    "model_configuration": audit_identity.model_configuration,
+                    "dossier": features,
+                    "dossier_sha256": payload_sha256(features),
+                },
+            )
+        except Exception:
+            if audit_writer is not None:
+                audit_writer.abort()
+            raise
 
     # 2. 确定 agent 列表
     if agents is None:
         agents = list(AGENT_REGISTRY.keys())
 
     # 3. 检查缓存（除非 force=True）
-    if not force:
+    if not force and audit_writer is None:
         cached = _check_cache(ticker)
         if cached is not None:
             return cached
@@ -823,8 +963,8 @@ async def run_debate(
     # 4. 准备辩论记录文件
     # g1-canonical-run-identity D5 A+：force=True 同时清 canonical + 旧纯数字路径，
     # 避免旧内容残留（既有 debate/{纯数字}/ 旧目录 + 新 debate/{canonical}/ 都清）。
-    path = _debate_path(ticker)
-    if force:
+    path = _debate_path(ticker, audit_identity.run_id if audit_writer else None)
+    if force and audit_writer is None:
         if path.exists():
             path.unlink()
         legacy = _legacy_debate_path(ticker)
@@ -833,6 +973,25 @@ async def run_debate(
 
     # f1-deviation-fix §7：token usage 累加器（供 AD-03 成本实测，写入辩论记录 md，不改 schema）
     usage_log: list[dict] = []
+    prompt_records: list[dict] = []
+    heavy_model = runtime_model_configuration.get("heavy_model")
+    moderate_model = runtime_model_configuration.get("moderate_model")
+    prompt_record_kwargs = {}
+    if audit_writer is not None:
+        prompt_record_kwargs = {
+            "prompt_recorder": prompt_records,
+            "model": heavy_model,
+        }
+    audit_da_kwargs = (
+        {"prompt_recorder": prompt_records, "model": heavy_model}
+        if audit_writer is not None
+        else {}
+    )
+    audit_synth_kwargs = (
+        {"prompt_recorder": prompt_records, "model": moderate_model}
+        if audit_writer is not None
+        else {}
+    )
 
     # f2 §3.5/3.6：R1 用 return_exceptions 收集，统计 error rate
     r1_tasks = [
@@ -840,6 +999,12 @@ async def run_debate(
             agent_id, ticker, features,
             other_opinions=None, reasoning_level="heavy",
             usage_accumulator=usage_log,
+            **(
+                {"prompt_stage": "r1"}
+                if audit_writer is not None
+                else {}
+            ),
+            **prompt_record_kwargs,
         )
         for agent_id in agents
     ]
@@ -869,6 +1034,8 @@ async def run_debate(
     for agent in round1:
         ok_circ, circ_issues = detect_circular_reference(agent)
         if not ok_circ:
+            if audit_writer is not None:
+                audit_writer.abort()
             raise ValueError(
                 f"circular_reference: {agent.name} 的 R1 core_thesis 引用其他 agent"
                 f"（{circ_issues}）。R1 other_opinions=None 本该隔离，引用他人只能是"
@@ -897,6 +1064,8 @@ async def run_debate(
         # 「用幸存 R1 做 R4」前提是有幸存 R1；全空时连 final_verdict 都凑不出，
         # 硬出结论会重新引入 L3 最怕的无依据输出（600900 教训）。与 f1 insufficient_data 同模式。
         if not round1:
+            if audit_writer is not None:
+                audit_writer.abort()
             raise ValueError(
                 f"council_failed: all_agents_failed——R1 全部 {active_count} 个 agent 失败"
                 f"（error_rate=100%），无幸存观点，无法产出 council。"
@@ -935,9 +1104,22 @@ async def run_debate(
                         agent_id, ticker, features,
                         other_opinions=others, reasoning_level="heavy",
                         usage_accumulator=usage_log,
+                        **(
+                            {
+                                **prompt_record_kwargs,
+                                "prompt_stage": "r2",
+                            }
+                            if audit_writer is not None
+                            else {}
+                        ),
                     )
                 )
-            round2 = await asyncio.gather(*r2_tasks)
+            try:
+                round2 = await asyncio.gather(*r2_tasks)
+            except Exception:
+                if audit_writer is not None:
+                    audit_writer.abort()
+                raise
             _append_round(path, 2, round2)
             da_result = None
             _append_round(path, 3, None)
@@ -966,9 +1148,22 @@ async def run_debate(
                             agent_id, ticker, features,
                             other_opinions=others, reasoning_level="heavy",
                             usage_accumulator=usage_log,
+                            **(
+                                {
+                                    **prompt_record_kwargs,
+                                    "prompt_stage": "r2",
+                                }
+                                if audit_writer is not None
+                                else {}
+                            ),
                         )
                     )
-                round2 = await asyncio.gather(*r2_tasks)
+                try:
+                    round2 = await asyncio.gather(*r2_tasks)
+                except Exception:
+                    if audit_writer is not None:
+                        audit_writer.abort()
+                    raise
                 _append_round(path, 2, round2)
 
                 # f2 §3.3/3.4：R2 后聚合 evidence_exhausted，≥3 则跳 R3
@@ -980,9 +1175,19 @@ async def run_debate(
                     da_result = None
                     _append_round(path, 3, None)
                 else:
-                    da_result = await _call_da(
-                        round1, round2, ticker, features, usage_accumulator=usage_log
-                    )
+                    try:
+                        da_result = await _call_da(
+                            round1,
+                            round2,
+                            ticker,
+                            features,
+                            usage_accumulator=usage_log,
+                            **audit_da_kwargs,
+                        )
+                    except Exception:
+                        if audit_writer is not None:
+                            audit_writer.abort()
+                        raise
                     _append_da_round(path, da_result)
 
     # Round 4: 收敛共识（单 agent 或降级时仍跑 R4，用幸存 R1）
@@ -990,11 +1195,17 @@ async def run_debate(
         consensus = None
         _append_round(path, 4, None)
     else:
-        consensus = await _call_synthesizer(
-            round1, round2, da_result, ticker, features,
-            usage_accumulator=usage_log,
-            da_skipped_reason=da_skipped_reason,
-        )
+        try:
+            consensus = await _call_synthesizer(
+                round1, round2, da_result, ticker, features,
+                usage_accumulator=usage_log,
+                da_skipped_reason=da_skipped_reason,
+                **audit_synth_kwargs,
+            )
+        except Exception:
+            if audit_writer is not None:
+                audit_writer.abort()
+            raise
         # f2 §3.5/3.6：运行时降级时 confidence_cap=40
         if runtime_degraded and consensus and consensus.conviction > 40:
             consensus.conviction = 40
@@ -1029,22 +1240,154 @@ async def run_debate(
         degraded_reason=degraded_reason,
     )
 
+    if audit_writer is not None:
+        result.run_id = audit_identity.run_id
+        result.profile_version = audit_identity.profile_version
+        result.input_hash = audit_identity.input_hash
+        result.dossier_snapshot = audit_identity.dossier_snapshot
+        result.prompt_version = audit_identity.prompt_version
+        result.model_configuration = audit_identity.model_configuration
+        result.audit_manifest_path = str(audit_writer.run_root / "manifest.json")
+        prompt_records.sort(
+            key=lambda item: (
+                {"r1": 1, "r2": 2, "r3": 3, "r4": 4}.get(item.get("stage"), 99),
+                item.get("agent", ""),
+                item.get("round", ""),
+            )
+        )
+        prompt_binding = {
+            "ticker": ticker,
+            "run_id": audit_identity.run_id,
+            "profile_version": audit_identity.profile_version,
+            "input_hash": audit_identity.input_hash,
+            "dossier_snapshot": audit_identity.dossier_snapshot,
+            "prompt_version": audit_identity.prompt_version,
+            "model_configuration": audit_identity.model_configuration,
+            "prompts": prompt_records,
+        }
+        output_path = _council_output_path(result, path)
+        staged_output_path = _staged_council_output_path(output_path)
+        try:
+            audit_writer.write(
+                "prompt",
+                {
+                    "ticker": ticker,
+                    "run_id": audit_identity.run_id,
+                    "profile_version": audit_identity.profile_version,
+                    "input_hash": audit_identity.input_hash,
+                    "dossier_snapshot": audit_identity.dossier_snapshot,
+                    "prompt_version": audit_identity.prompt_version,
+                    "model_configuration": audit_identity.model_configuration,
+                    "prompt_binding_sha256": payload_sha256(prompt_binding),
+                    "prompts": prompt_records,
+                },
+            )
+            _write_council_output(result, path, output_path=staged_output_path)
+            output = json.loads(staged_output_path.read_text(encoding="utf-8"))
+            audit_writer.write(
+                "debate",
+                {
+                "ticker": ticker,
+                "run_id": audit_identity.run_id,
+                "profile_version": audit_identity.profile_version,
+                "input_hash": audit_identity.input_hash,
+                "dossier_snapshot": audit_identity.dossier_snapshot,
+                "prompt_version": audit_identity.prompt_version,
+                "model_configuration": audit_identity.model_configuration,
+                "debate_path": str(path),
+                "debate_text": path.read_text(encoding="utf-8"),
+                "debate_text_sha256": payload_sha256(path.read_text(encoding="utf-8")),
+                "result_sha256": payload_sha256(result.to_json()),
+                },
+            )
+            audit_writer.write(
+                "quality_report",
+                {
+                "ticker": ticker,
+                "run_id": audit_identity.run_id,
+                "profile_version": audit_identity.profile_version,
+                "input_hash": audit_identity.input_hash,
+                "dossier_snapshot": audit_identity.dossier_snapshot,
+                "prompt_version": audit_identity.prompt_version,
+                "model_configuration": audit_identity.model_configuration,
+                "r1_quality_warnings": r1_quality_warnings,
+                "council_degraded": council_degraded,
+                "degraded_reason": degraded_reason,
+                },
+            )
+            audit_writer.write(
+                "final_result",
+                {
+                "ticker": ticker,
+                "run_id": audit_identity.run_id,
+                "profile_version": audit_identity.profile_version,
+                "input_hash": audit_identity.input_hash,
+                "dossier_snapshot": audit_identity.dossier_snapshot,
+                "prompt_version": audit_identity.prompt_version,
+                "model_configuration": audit_identity.model_configuration,
+                "published_output_path": str(output_path),
+                "published_output": output,
+                "published_output_sha256": payload_sha256(output),
+                },
+            )
+            audit_writer.finalize()
+            _promote_staged_output(staged_output_path, output_path)
+        except Exception:
+            if _is_promoted_staging_output(staged_output_path, output_path):
+                output_path.unlink(missing_ok=True)
+            staged_output_path.unlink(missing_ok=True)
+            audit_writer.abort()
+            raise
+
     # 10. 写入 L3→L4 接口文件
-    _write_council_output(result, path)
+    if audit_writer is None:
+        _write_council_output(result, path)
 
     return result
 
 
-def _write_council_output(result: CouncilResult, debate_path: Path) -> None:
+def _council_output_path(result: CouncilResult, debate_path: Path) -> Path:
+    from data.lib.identity import canonical_ticker
+
+    canonical = canonical_ticker(result.ticker)
+    date_str = debate_path.stem
+    if result.run_id:
+        return Path("watchlist") / canonical / result.run_id / f"{date_str}.json"
+    return Path("watchlist") / f"{date_str}_{canonical}.json"
+
+
+def _staged_council_output_path(output_path: Path) -> Path:
+    relative = output_path.relative_to("watchlist")
+    return Path("watchlist") / ".staging" / relative
+
+
+def _promote_staged_output(staged_path: Path, output_path: Path) -> None:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        os.link(staged_path, output_path)
+    except FileExistsError as exc:
+        raise FileExistsError(
+            f"refusing to overwrite audited council output: {output_path}"
+        ) from exc
+    staged_path.unlink()
+
+
+def _is_promoted_staging_output(staged_path: Path, output_path: Path) -> bool:
+    try:
+        return staged_path.exists() and output_path.exists() and os.path.samefile(
+            staged_path, output_path
+        )
+    except OSError:
+        return False
+
+
+def _build_council_output(result: CouncilResult, debate_path: Path) -> dict:
     """写入 L3→L4 接口文件（watchlist/{date}_{ticker}.json）.
 
     Args:
         result: CouncilResult 实例
         debate_path: 辩论记录路径（用于提取日期）
     """
-    watchlist_dir = Path("watchlist")
-    watchlist_dir.mkdir(exist_ok=True)
-
     # 从 debate_path 提取日期（debate/{ticker}/{date}.md）
     date_str = debate_path.stem
 
@@ -1077,11 +1420,32 @@ def _write_council_output(result: CouncilResult, debate_path: Path) -> None:
         "da_skipped_reason": result.da_skipped_reason,
         "council_degraded": result.council_degraded,
         "degraded_reason": result.degraded_reason,
+        "run_id": result.run_id,
+        "profile_version": result.profile_version,
+        "input_hash": result.input_hash,
+        "dossier_snapshot": result.dossier_snapshot,
+        "prompt_version": result.prompt_version,
+        "model_configuration": result.model_configuration,
+        "audit_manifest_path": result.audit_manifest_path,
     }
 
     # L4 消费方：文件名用 canonical ticker（含交易所后缀 600519.SH），与字段一致
     # g1-canonical-run-identity D5 A+：canonical 化确保无论 result.ticker 是纯数字还是
     # 带后缀，watchlist 文件名都统一为带后缀（与 _debate_path 口径一致，消除空壳/真数据分裂）。
-    output_path = watchlist_dir / f"{date_str}_{canonical}.json"
-    with open(output_path, "w", encoding="utf-8") as f:
-        json.dump(output, f, ensure_ascii=False, indent=2)
+    return output
+
+
+def _write_council_output(
+    result: CouncilResult,
+    debate_path: Path,
+    *,
+    output_path: Path | None = None,
+) -> Path:
+    output_path = output_path or _council_output_path(result, debate_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    mode = "x" if result.run_id else "w"
+    with output_path.open(mode, encoding="utf-8") as f:
+        json.dump(_build_council_output(result, debate_path), f, ensure_ascii=False, indent=2)
+        f.flush()
+        os.fsync(f.fileno())
+    return output_path

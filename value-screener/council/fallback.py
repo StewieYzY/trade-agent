@@ -12,6 +12,7 @@ import hashlib
 import json
 import os
 import subprocess
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -27,6 +28,15 @@ from data.lib.provenance import redact_sensitive_text, redact_sensitive_value
 from council.verify_quality_gate import (
     detect_circular_reference,
     verify_r1_feature_grounding,
+)
+from data.lib.audit_chain import (
+    AuditChainWriter,
+    AuditIdentity,
+    AuditIdentityError,
+    create_audit_identity,
+    payload_sha256,
+    validate_audit_identity,
+    validate_audit_identity_structure,
 )
 
 DEFAULT_AGENT = "buffett"
@@ -188,6 +198,37 @@ def _write_manifest(
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
+def _staged_fallback_result_path(result_path: Path) -> Path:
+    return result_path.parent / ".staging" / result_path.name
+
+
+def _write_staged_fallback_result(path: Path, result: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("x", encoding="utf-8") as handle:
+        json.dump(result, handle, ensure_ascii=False, indent=2)
+        handle.flush()
+        os.fsync(handle.fileno())
+
+
+def _promote_staged_fallback_result(staged_path: Path, result_path: Path) -> None:
+    try:
+        os.link(staged_path, result_path)
+    except FileExistsError as exc:
+        raise FileExistsError(
+            f"refusing to overwrite fallback result: {result_path}"
+        ) from exc
+    staged_path.unlink()
+
+
+def _is_promoted_staging_result(staged_path: Path, result_path: Path) -> bool:
+    try:
+        return staged_path.exists() and result_path.exists() and os.path.samefile(
+            staged_path, result_path
+        )
+    except OSError:
+        return False
+
+
 async def run_fallback(
     *,
     ticker: str,
@@ -196,56 +237,173 @@ async def run_fallback(
     model: str | None = None,
     output_root: str | Path | None = None,
     run_id: str | None = None,
+    audit_root: str | Path | None = None,
+    audit_identity: AuditIdentity | None = None,
+    profile_version: str | None = None,
+    prompt_version: str | None = None,
 ) -> dict:
     """运行一次 strong single-agent fallback。"""
+    if audit_identity is not None:
+        validate_audit_identity_structure(audit_identity)
     canonical_ticker = _canonical_ticker(ticker)
     if agent_id not in AGENT_REGISTRY:
         raise ValueError(f"unknown fallback agent: {agent_id}")
 
     # 必须在 dossier/provider preflight 和任意 LLM side effect 前拒绝 protected root。
+    if audit_identity is not None and run_id is None:
+        run_id = audit_identity.run_id
+    elif audit_root is not None and run_id is None:
+        run_id = str(uuid.uuid4())
     run_id, run_dir = _resolve_run_dir(output_root, run_id)
+    if audit_root is not None and Path(audit_root).resolve() == run_dir.parent:
+        raise AuditIdentityError("audit_root must differ from fallback output_root")
 
     dossier = _prepare_council_input(canonical_ticker, features)
     selected_model = model or os.environ.get("LLM_MODEL_HEAVY")
     if not selected_model or not selected_model.strip():
         raise ValueError("missing strong model: provide model or LLM_MODEL_HEAVY")
 
+    audit_writer: AuditChainWriter | None = None
+    if audit_identity is not None:
+        if audit_identity.run_id != run_id:
+            raise AuditIdentityError("fallback run_id does not match audit identity")
+        if profile_version is not None and profile_version != audit_identity.profile_version:
+            raise AuditIdentityError("fallback profile_version does not match audit identity")
+        if prompt_version is not None and prompt_version != audit_identity.prompt_version:
+            raise AuditIdentityError("fallback prompt_version does not match audit identity")
+        runtime_model_configuration = {
+            "model": selected_model,
+            "reasoning_level": "heavy",
+        }
+        if runtime_model_configuration != audit_identity.model_configuration:
+            raise AuditIdentityError(
+                "fallback model_configuration does not match audit identity"
+            )
+        validate_audit_identity(
+            audit_identity,
+            ticker=canonical_ticker,
+            dossier=dossier,
+        )
+    elif audit_root is not None:
+        audit_identity = create_audit_identity(
+            canonical_ticker,
+            dossier=dossier,
+            profile_version=profile_version or "g2-fallback-v1",
+            prompt_version=prompt_version or "council-prompt-v1",
+            model_configuration={
+                "model": selected_model,
+                "reasoning_level": "heavy",
+            },
+            run_id=run_id,
+        )
     run_dir.mkdir(parents=True, exist_ok=False)
     manifest_path = run_dir / "manifest.json"
     result_path = run_dir / "result.json"
     code_version = _code_version()
-    _write_manifest(
-        manifest_path,
-        run_id=run_id,
-        state="running",
-        code_version=code_version,
-    )
-
-    system_prompt = get_prompt_builder(agent_id)()
-    user_message = _build_user_message(
-        canonical_ticker,
-        dossier,
-        agent_id=agent_id,
-    )
-    common = {
-        "ticker": canonical_ticker,
-        "agent_id": agent_id,
-        "model": selected_model,
-        "provider_host": _provider_host(),
-        "features_sha256": _sha256(dossier),
-        "system_prompt_sha256": _sha256(system_prompt),
-        "user_message_sha256": _sha256(user_message),
-        "request_fingerprint": _sha256(
-            {
-                "ticker": canonical_ticker,
-                "agent_id": agent_id,
-                "model": selected_model,
-                "features": dossier,
-                "system_prompt": system_prompt,
-                "user_message": user_message,
-            }
-        ),
-    }
+    try:
+        _write_manifest(
+            manifest_path,
+            run_id=run_id,
+            state="running",
+            code_version=code_version,
+        )
+        if audit_identity is not None:
+            audit_writer = AuditChainWriter(
+                audit_root or run_dir / "audit",
+                audit_identity,
+            )
+        system_prompt = get_prompt_builder(agent_id)()
+        user_message = _build_user_message(
+            canonical_ticker,
+            dossier,
+            agent_id=agent_id,
+        )
+        common = {
+            "ticker": canonical_ticker,
+            "agent_id": agent_id,
+            "model": selected_model,
+            "provider_host": _provider_host(),
+            "features_sha256": _sha256(dossier),
+            "system_prompt_sha256": _sha256(system_prompt),
+            "user_message_sha256": _sha256(user_message),
+            "request_fingerprint": _sha256(
+                {
+                    "ticker": canonical_ticker,
+                    "agent_id": agent_id,
+                    "model": selected_model,
+                    "features": dossier,
+                    "system_prompt": system_prompt,
+                    "user_message": user_message,
+                }
+            ),
+        }
+    except Exception:
+        if audit_writer is not None:
+            audit_writer.abort()
+        _write_manifest(
+            manifest_path,
+            run_id=run_id,
+            state="failed",
+            code_version=code_version,
+        )
+        raise
+    if audit_writer is not None:
+        prompt_binding = {
+            "ticker": canonical_ticker,
+            "run_id": audit_identity.run_id,
+            "profile_version": audit_identity.profile_version,
+            "input_hash": audit_identity.input_hash,
+            "dossier_snapshot": audit_identity.dossier_snapshot,
+            "prompt_version": audit_identity.prompt_version,
+            "model_configuration": audit_identity.model_configuration,
+            "prompts": [
+                {
+                    "agent": agent_id,
+                    "stage": "fallback",
+                    "round": "heavy",
+                    "system_prompt": system_prompt,
+                    "user_message": user_message,
+                }
+            ],
+        }
+        try:
+            audit_writer.write(
+                "dossier",
+                {
+                    "ticker": canonical_ticker,
+                    "run_id": audit_identity.run_id,
+                    "profile_version": audit_identity.profile_version,
+                    "input_hash": audit_identity.input_hash,
+                    "dossier_snapshot": audit_identity.dossier_snapshot,
+                    "prompt_version": audit_identity.prompt_version,
+                    "model_configuration": audit_identity.model_configuration,
+                    "dossier": dossier,
+                    "dossier_sha256": payload_sha256(dossier),
+                },
+            )
+            audit_writer.write(
+                "prompt",
+                {
+                    "ticker": canonical_ticker,
+                    "run_id": audit_identity.run_id,
+                    "profile_version": audit_identity.profile_version,
+                    "input_hash": audit_identity.input_hash,
+                    "dossier_snapshot": audit_identity.dossier_snapshot,
+                    "prompt_version": audit_identity.prompt_version,
+                    "model_configuration": audit_identity.model_configuration,
+                    "system_prompt": system_prompt,
+                    "user_message": user_message,
+                    "agent_id": agent_id,
+                    "prompt_stage": "fallback",
+                    "reasoning_level": "heavy",
+                    "prompt_binding_sha256": payload_sha256(prompt_binding),
+                    "system_prompt_sha256": common["system_prompt_sha256"],
+                    "user_message_sha256": common["user_message_sha256"],
+                },
+            )
+        except Exception:
+            audit_writer.abort()
+            raise
 
     raw = ""
     usage: dict = {}
@@ -266,6 +424,14 @@ async def run_fallback(
     except Exception as exc:
         failure_kind = _classify_exception(exc)
         error = f"{type(exc).__name__}: {_redact_error(str(exc))}"
+    if response_sha256 is None:
+        response_sha256 = _sha256(raw)
+    persisted_agent_output = None
+    if agent_output is not None:
+        try:
+            persisted_agent_output = AgentOutput.from_json(agent_id, raw).to_dict()
+        except Exception:
+            persisted_agent_output = redact_sensitive_value(agent_output.to_dict())
 
     if agent_output is None:
         fact_check = {
@@ -300,10 +466,84 @@ async def run_fallback(
         "synthesis": synthesis,
         "generated_at": datetime.now(timezone.utc).isoformat(),
     })
-    result_path.write_text(
-        json.dumps(result, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
+    audit_manifest_path: Path | None = None
+    if audit_writer is not None:
+        audit_manifest_path = audit_writer.run_root / "manifest.json"
+        result.update(audit_identity.to_dict())
+        result["audit_identity"] = audit_identity.to_dict()
+        result["audit_manifest_path"] = str(audit_manifest_path)
+        result["result_path"] = str(result_path)
+        result["manifest_path"] = str(manifest_path)
+        staged_result_path = _staged_fallback_result_path(result_path)
+        try:
+            _write_staged_fallback_result(staged_result_path, result)
+            audit_writer.write(
+                "debate",
+                {
+                    "ticker": canonical_ticker,
+                    "run_id": audit_identity.run_id,
+                    "profile_version": audit_identity.profile_version,
+                    "input_hash": audit_identity.input_hash,
+                    "dossier_snapshot": audit_identity.dossier_snapshot,
+                    "prompt_version": audit_identity.prompt_version,
+                    "model_configuration": audit_identity.model_configuration,
+                    "response": raw,
+                    "agent_id": agent_id,
+                    "agent_output": persisted_agent_output,
+                    "response_sha256": response_sha256,
+                    "agent_output_sha256": payload_sha256(
+                        persisted_agent_output
+                    ),
+                },
+            )
+            audit_writer.write(
+                "quality_report",
+                {
+                    "ticker": canonical_ticker,
+                    "run_id": audit_identity.run_id,
+                    "profile_version": audit_identity.profile_version,
+                    "input_hash": audit_identity.input_hash,
+                    "dossier_snapshot": audit_identity.dossier_snapshot,
+                    "prompt_version": audit_identity.prompt_version,
+                    "model_configuration": audit_identity.model_configuration,
+                    "quality_status": quality_status,
+                    "fact_check": fact_check,
+                },
+            )
+            audit_writer.write(
+                "final_result",
+                {
+                    "ticker": canonical_ticker,
+                    "run_id": audit_identity.run_id,
+                    "profile_version": audit_identity.profile_version,
+                    "input_hash": audit_identity.input_hash,
+                    "dossier_snapshot": audit_identity.dossier_snapshot,
+                    "prompt_version": audit_identity.prompt_version,
+                    "model_configuration": audit_identity.model_configuration,
+                    "quality_status": quality_status,
+                    "result": result,
+                    "result_sha256": payload_sha256(result),
+                },
+            )
+            audit_writer.finalize()
+            _promote_staged_fallback_result(staged_result_path, result_path)
+        except Exception:
+            if _is_promoted_staging_result(staged_result_path, result_path):
+                result_path.unlink(missing_ok=True)
+            staged_result_path.unlink(missing_ok=True)
+            audit_writer.abort()
+            _write_manifest(
+                manifest_path,
+                run_id=run_id,
+                state="failed",
+                code_version=code_version,
+            )
+            raise
+    else:
+        result_path.write_text(
+            json.dumps(result, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
     _write_manifest(
         manifest_path,
         run_id=run_id,
@@ -311,8 +551,8 @@ async def run_fallback(
         code_version=code_version,
         result_path=result_path,
     )
-    result["result_path"] = str(result_path)
-    result["manifest_path"] = str(manifest_path)
+    result.setdefault("result_path", str(result_path))
+    result.setdefault("manifest_path", str(manifest_path))
     return result
 
 

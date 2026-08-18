@@ -4,7 +4,7 @@
 
 ## 1. Identity 与审计前置
 
-- [ ] 1.1 完成并归档 ticker/run audit-chain child change，证明 dossier、prompt、debate、quality report 和最终结果 100% 对应
+- [x] 1.1 完成并归档 ticker/run audit-chain child change，证明 dossier、prompt、debate、quality report 和最终结果 100% 对应
 - [ ] 1.2 完成并归档 incomplete cache/quality status child change，阻止不完整运行伪装为成功缓存
 - [ ] 1.3 完成 `f3c-r1-crosstalk-root-cause` 或等价前置诊断，保存显性与隐性串台根因证据
 
