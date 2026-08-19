@@ -20,14 +20,14 @@
 > `d2d29c8 feat(g2): persist incomplete cache quality status`
 >
 > 当前 main/docs baseline：
-> `main@d2d29c8`；`main` 相对 `origin/main@9fc253c` ahead 1，尚未 push。
+> `main@2b061bd`；`main` 与 `origin/main` 一致，已 push。
 > 根目录既有 untracked user WIP（`.cache/`、`data/`、`debate/`、`watchlist/`
 > 等）保持 untouched，未被本次 stage/commit。
 >
 > 历史 GitHub 审查入口：
 > `PR #1 codex/mainline-sync-2026-08-05 → main`
 >
-> 当前本地集成以 `main@d2d29c8` 为准，远端基线为 `origin/main@9fc253c`；PR #1 以下信息仅作
+> 当前集成以 `main@2b061bd` / `origin/main@2b061bd` 为准；PR #1 以下信息仅作
 > 历史审查快照，不再作为当前 branch 或 merge 状态判断依据。
 >
 > 当前直接执行阶段：
@@ -264,12 +264,12 @@ passed InvestmentThesis
 ```text
 path:   /Users/admin/Documents/trade-agent
 branch: main
-HEAD:   d2d29c8
+HEAD:   2b061bd
 upstream: origin/main
 relation:
-  local main ahead of origin/main by 1 commit
+  local main == origin/main
 status:
-  handoff docs modified; existing untracked user WIP preserved
+  tracked files clean; existing untracked user WIP preserved
 ```
 
 ### 5.2 PR #1
