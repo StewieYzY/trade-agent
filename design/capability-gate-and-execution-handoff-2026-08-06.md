@@ -1,6 +1,6 @@
 # trade-agent Capability Gate 与完整执行 Handoff
 
-> 日期：2026-08-18
+> 日期：2026-08-19
 >
 > Master ID：`MASTER-2026-08-06`
 >
@@ -17,17 +17,17 @@
 > 架构决策：`design/architecture-decisions.md`
 >
 > runtime/integration baseline：
-> `762d98e feat(g2): add identity audit chain`
+> `d2d29c8 feat(g2): persist incomplete cache quality status`
 >
 > 当前 main/docs baseline：
-> `main@762d98e`；`main` 相对 `origin/main@990f657` ahead 1，尚未 push。
+> `main@d2d29c8`；`main` 相对 `origin/main@9fc253c` ahead 1，尚未 push。
 > 根目录既有 untracked user WIP（`.cache/`、`data/`、`debate/`、`watchlist/`
 > 等）保持 untouched，未被本次 stage/commit。
 >
 > 历史 GitHub 审查入口：
 > `PR #1 codex/mainline-sync-2026-08-05 → main`
 >
-> 当前集成以 `main@0a9fb8a` / `origin/main@0a9fb8a` 为准；PR #1 以下信息仅作
+> 当前本地集成以 `main@d2d29c8` 为准，远端基线为 `origin/main@9fc253c`；PR #1 以下信息仅作
 > 历史审查快照，不再作为当前 branch 或 merge 状态判断依据。
 >
 > 当前直接执行阶段：
@@ -36,7 +36,9 @@
 > `openspec/changes/archive/2026-08-12-g1-full-market-performance-cost/evidence/`。
 > M3 的 4.1、4.2、5.1、5.2、5.3、6.1、6.2 已有真实证据闭环；
 > G1 umbrella 7.1、7.2、7.3 已完成。G1 capability 已通过，并已正式放行
-> G2 formal acceptance；G2 capability/runtime 尚未开始。
+> G2 formal acceptance；G2 capability/runtime 仍未通过。
+
+> 以下 0.1 为 2026-08-18 历史快照；当前状态以 0.2 及后续 CURRENT sections 为准。
 
 ## 0.1. 2026-08-18 G2 1.1 child closure sync
 
@@ -53,6 +55,20 @@
   evidence bundle，不改变 G2 verdict，不放行 G3。
 - 当前仍保持：G2 1.2、1.3、M4、M4.5、M5/A-B、InvestmentThesis interface
   和 G2 9.3 未完成；G2 capability `not passed`。
+
+## 0.2. 2026-08-19 G2 1.2 child closure sync
+
+- `g2-incomplete-cache-quality-status` 已 archive 至
+  `openspec/changes/archive/2026-08-19-g2-incomplete-cache-quality-status/`。
+- child commit：`d2d29c8 feat(g2): persist incomplete cache quality status`，已
+  fast-forward 合入 `main`；umbrella task 1.2 已勾选完成。
+- 独立 CR 最后一个 P2 已修复：损坏的最新 quality record 现在 fail closed，
+  不再回溯命中旧成功 cache。
+- 全量 `value-screener/.venv/bin/python -m pytest value-screener/tests -q`：
+  `1041 passed in 57.58s`；compileall、`git diff --check` 均通过。
+- OpenSpec strict：`31 passed, 0 failed`。
+- 当前仍保持：G2 1.3、M4、M4.5、M5/A-B、InvestmentThesis interface 和
+  G2 9.3 未完成；G2 capability `not passed`。
 
 ## 1. 本文件的唯一权威地位
 
@@ -248,12 +264,12 @@ passed InvestmentThesis
 ```text
 path:   /Users/admin/Documents/trade-agent
 branch: main
-HEAD:   0a9fb8a
+HEAD:   d2d29c8
 upstream: origin/main
 relation:
-  local main == origin/main
+  local main ahead of origin/main by 1 commit
 status:
-  tracked files clean; existing untracked user WIP preserved
+  handoff docs modified; existing untracked user WIP preserved
 ```
 
 ### 5.2 PR #1
@@ -310,7 +326,8 @@ scope:
 | `g1-r-g1-002-source-plan-matrix-completeness` | 14/14 | archived / integrated at `main@1ff6678` | R-G1-002 closed after independent review |
 | `g1-r-g1-003-rejected-canonical-visibility` | 4/4 | archived / integrated at `main@98570a1` | R-G1-003 closed after independent re-review |
 | `g2-strong-single-agent-fallback` | archived | archived; CR2 repair chain closed and governance synced at `main@0a9fb8a` after fresh independent review | R-G2-001/R-G2-002/R-G2-003 closed |
-| `g2-deep-investment-thesis` | 0/27 | in-progress | G2 umbrella，含 M4.5 |
+| `g2-incomplete-cache-quality-status` | archived | archived / integrated at `main@d2d29c8` | G2 1.2 closed |
+| `g2-deep-investment-thesis` | 2/27 | in-progress | G2 umbrella，含 M4.5 |
 | `f3c-r1-crosstalk-root-cause` | 5/17 | in-progress | M0 前置未闭 |
 | `g1-4-data-source-resilience` | 0/48 | in-progress | P2 已映射到既有 D1/D6 |
 | `g1-fast-personal-value-screening` | 16/16 | closed for G1 | 4.1/4.2/5.1/5.2/5.3/6.x/7.x 已闭环；G2 仅获准进入正式验收 |
@@ -1073,8 +1090,9 @@ Queue 1 repair closure 已完成：`R-G1-001`、`R-G1-002`、`R-G1-003`、
 `main@8513096`，M3 6.1/6.2 = closed，Top 20 evidence 已保留。
 G1 umbrella 7.1/7.2/7.3 已完成，release decision 已记录
 `G1=passed`、`G2=approved_to_start_formal_acceptance`。
-下一步仅允许推进 G2 formal acceptance；不得将 G2 capability/runtime
-描述为已通过，也不得提前启动 G3 runtime 或产品化。
+G2 1.1、1.2 已完成并归档；下一步仅允许推进 G2 1.3
+`f3c-r1-crosstalk-root-cause` 或按其结论创建的独立修复 child。不得将
+G2 capability/runtime 描述为已通过，也不得提前启动 G3 runtime 或产品化。
 
 ## 23. 下一窗口启动方式
 
