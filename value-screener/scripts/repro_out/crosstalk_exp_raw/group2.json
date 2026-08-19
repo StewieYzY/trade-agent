@@ -1,0 +1,197 @@
+{
+  "id": "group2",
+  "features": "missing",
+  "prompt": "retained",
+  "model": "weak",
+  "status": "complete",
+  "input_mode": "frozen_dossier",
+  "records": [
+    {
+      "agent": "buffett",
+      "status": "ok",
+      "model": "deepseek-v4-flash",
+      "raw_response": "{\n  \"signal\": \"skip\",\n  \"conviction\": 0,\n  \"core_thesis\": \"缺乏特征数据，无法评估内在价值和安全边际\",\n  \"key_metrics\": [],\n  \"risks\": [\n    \"航空业周期性风险\",\n    \"资本开支巨大\",\n    \"宏观经济影响\",\n    \"政策变动风险\"\n  ],\n  \"what_would_change_my_mind\": \"如果提供详细的财务数据、估值指标和护城河分析，我可能会重新评估\",\n  \"out_of_circle\": true,\n  \"historical_parallel\": null,\n  \"new_evidence\": [],\n  \"evidence_exhausted\": false\n}",
+      "usage": {
+        "prompt_tokens": 938,
+        "completion_tokens": 2382,
+        "total_tokens": 3320,
+        "prompt_tokens_details": {
+          "cached_tokens": 896
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 2243
+        },
+        "prompt_cache_hit_tokens": 896,
+        "prompt_cache_miss_tokens": 42
+      },
+      "system_prompt_sha256": "1e55a13cdd15e823462e89c891a815dc95c504afd4d6ee939716510fd297b55c",
+      "user_message_sha256": "5f72743bd9baf3b941d59f1bb3d46f78d3ca42a22791e9a3d4cc8f22e41ca591",
+      "dossier_sha256": "f588d5bf911aefd90348d9a7d150280847b9af938bf5b06d8548a3afeb2a00c9",
+      "output": {
+        "name": "buffett",
+        "signal": "skip",
+        "conviction": 0,
+        "core_thesis": "缺乏特征数据，无法评估内在价值和安全边际",
+        "key_metrics": [],
+        "risks": [
+          "航空业周期性风险",
+          "资本开支巨大",
+          "宏观经济影响",
+          "政策变动风险"
+        ],
+        "what_would_change_my_mind": "如果提供详细的财务数据、估值指标和护城河分析，我可能会重新评估",
+        "out_of_circle": true,
+        "historical_parallel": null,
+        "new_evidence": [],
+        "evidence_exhausted": false
+      },
+      "run_id": "5ca41c68-2015-42f2-8c9f-ddc778c95053"
+    },
+    {
+      "agent": "munger",
+      "status": "ok",
+      "model": "deepseek-v4-flash",
+      "raw_response": "{\n  \"signal\": \"skip\",\n  \"conviction\": 0,\n  \"core_thesis\": \"信息不足时贸然下注是愚蠢的，我宁愿错过也不愿犯错。缺乏关键财务与估值数据，无法进行逆向分析和格栅验证。\",\n  \"key_metrics\": [],\n  \"risks\": [\n    \"数据缺失导致判断失真\",\n    \"航空需求复苏不及预期\",\n    \"免税政策变化削弱核心现金流\"\n  ],\n  \"what_would_change_my_mind\": \"若获得完整财报、免税合同细节和当前估值水平，显示其价格低于内在价值且具备安全边际，我可能重新评估。\",\n  \"out_of_circle\": false,\n  \"historical_parallel\": null,\n  \"new_evidence\": [],\n  \"evidence_exhausted\": false\n}",
+      "usage": {
+        "prompt_tokens": 900,
+        "completion_tokens": 1736,
+        "total_tokens": 2636,
+        "prompt_tokens_details": {
+          "cached_tokens": 768
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 1562
+        },
+        "prompt_cache_hit_tokens": 768,
+        "prompt_cache_miss_tokens": 132
+      },
+      "system_prompt_sha256": "2aba70d52b4118c8f8571acc18ed2b9ca43c25a19ddfb3c437ceba22d56872cb",
+      "user_message_sha256": "5f72743bd9baf3b941d59f1bb3d46f78d3ca42a22791e9a3d4cc8f22e41ca591",
+      "dossier_sha256": "f588d5bf911aefd90348d9a7d150280847b9af938bf5b06d8548a3afeb2a00c9",
+      "output": {
+        "name": "munger",
+        "signal": "skip",
+        "conviction": 0,
+        "core_thesis": "信息不足时贸然下注是愚蠢的，我宁愿错过也不愿犯错。缺乏关键财务与估值数据，无法进行逆向分析和格栅验证。",
+        "key_metrics": [],
+        "risks": [
+          "数据缺失导致判断失真",
+          "航空需求复苏不及预期",
+          "免税政策变化削弱核心现金流"
+        ],
+        "what_would_change_my_mind": "若获得完整财报、免税合同细节和当前估值水平，显示其价格低于内在价值且具备安全边际，我可能重新评估。",
+        "out_of_circle": false,
+        "historical_parallel": null,
+        "new_evidence": [],
+        "evidence_exhausted": false
+      },
+      "run_id": "5ca41c68-2015-42f2-8c9f-ddc778c95053"
+    },
+    {
+      "agent": "duan",
+      "status": "ok",
+      "model": "deepseek-v4-flash",
+      "raw_response": "{\n  \"signal\": \"skip\",\n  \"conviction\": 0,\n  \"core_thesis\": \"无数据支撑，无法判断，且超出能力圈\",\n  \"key_metrics\": [],\n  \"risks\": [\n    \"信息不足，无法评估公司基本面风险\",\n    \"机场业务属重资产，资本开支大，可能影响股东回报\",\n    \"管理层本分度无法验证\"\n  ],\n  \"what_would_change_my_mind\": \"提供详细的财务数据、业务结构、管理层行为等信息，且确认在能力圈内\",\n  \"out_of_circle\": true,\n  \"historical_parallel\": null,\n  \"new_evidence\": [],\n  \"evidence_exhausted\": false\n}",
+      "usage": {
+        "prompt_tokens": 680,
+        "completion_tokens": 1020,
+        "total_tokens": 1700,
+        "prompt_tokens_details": {
+          "cached_tokens": 640
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 867
+        },
+        "prompt_cache_hit_tokens": 640,
+        "prompt_cache_miss_tokens": 40
+      },
+      "system_prompt_sha256": "e1289ad6fe3b91f0bac2b17b67bb79b6fddb7977d428e9a77f7cb1be1e898d4f",
+      "user_message_sha256": "5f72743bd9baf3b941d59f1bb3d46f78d3ca42a22791e9a3d4cc8f22e41ca591",
+      "dossier_sha256": "f588d5bf911aefd90348d9a7d150280847b9af938bf5b06d8548a3afeb2a00c9",
+      "output": {
+        "name": "duan",
+        "signal": "skip",
+        "conviction": 0,
+        "core_thesis": "无数据支撑，无法判断，且超出能力圈",
+        "key_metrics": [],
+        "risks": [
+          "信息不足，无法评估公司基本面风险",
+          "机场业务属重资产，资本开支大，可能影响股东回报",
+          "管理层本分度无法验证"
+        ],
+        "what_would_change_my_mind": "提供详细的财务数据、业务结构、管理层行为等信息，且确认在能力圈内",
+        "out_of_circle": true,
+        "historical_parallel": null,
+        "new_evidence": [],
+        "evidence_exhausted": false
+      },
+      "run_id": "5ca41c68-2015-42f2-8c9f-ddc778c95053"
+    },
+    {
+      "agent": "feng_liu",
+      "status": "ok",
+      "model": "deepseek-v4-flash",
+      "raw_response": "{\n  \"signal\": \"bullish\",\n  \"conviction\": 65,\n  \"core_thesis\": \"市场对上海机场的悲观情绪过度，忽视了国际枢纽的长期稀缺价值和疫后出行恢复带来的业绩弹性。\",\n  \"key_metrics\": [\"国际旅客吞吐量同比变化\", \"免税收入占比\", \"客流恢复至2019年比例\", \"免税合同条款变化\"],\n  \"risks\": [\"国际客流恢复不及预期\", \"免税政策进一步收紧\", \"地缘政治影响国际航线\"],\n  \"what_would_change_my_mind\": \"如果国际旅客吞吐量连续两年未能恢复至2019年的70%，或免税收入持续恶化超出预期，我将重新评估。\",\n  \"out_of_circle\": false,\n  \"historical_parallel\": \"类似2003年非典后机场股因客流骤降而大幅下跌，随后在客流恢复后实现价值回归。\",\n  \"new_evidence\": [],\n  \"evidence_exhausted\": false,\n  \"market_consensus\": \"市场认为上海机场的盈利模式已经因免税协议重签而永久恶化，且国际客流恢复遥遥无期。\",\n  \"consensus_flaw\": \"分析差：市场线性外推疫情期间的低客流和低盈利能力，忽略了航空出行的自然恢复以及上海机场作为国际门户的不可替代性。\",\n  \"odds_assessment\": \"赔率约3:1，下行空间有限（受制于基础设施垄断性），上行空间较大（若客流恢复至2019年水平）。\",\n  \"is_reversible\": true,\n  \"catalyst\": \"国际航班进一步放开，出境游政策放宽，以及新一轮免税或商业合作协议的签订。\"\n}",
+      "usage": {
+        "prompt_tokens": 891,
+        "completion_tokens": 1780,
+        "total_tokens": 2671,
+        "prompt_tokens_details": {
+          "cached_tokens": 768
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 1423
+        },
+        "prompt_cache_hit_tokens": 768,
+        "prompt_cache_miss_tokens": 123
+      },
+      "system_prompt_sha256": "52a984258e3a7db0d4bf975e0d20265deabde979c17c1af5038057d1606634f5",
+      "user_message_sha256": "5f72743bd9baf3b941d59f1bb3d46f78d3ca42a22791e9a3d4cc8f22e41ca591",
+      "dossier_sha256": "f588d5bf911aefd90348d9a7d150280847b9af938bf5b06d8548a3afeb2a00c9",
+      "output": {
+        "name": "feng_liu",
+        "signal": "bullish",
+        "conviction": 65,
+        "core_thesis": "市场对上海机场的悲观情绪过度，忽视了国际枢纽的长期稀缺价值和疫后出行恢复带来的业绩弹性。",
+        "key_metrics": [
+          "国际旅客吞吐量同比变化",
+          "免税收入占比",
+          "客流恢复至2019年比例",
+          "免税合同条款变化"
+        ],
+        "risks": [
+          "国际客流恢复不及预期",
+          "免税政策进一步收紧",
+          "地缘政治影响国际航线"
+        ],
+        "what_would_change_my_mind": "如果国际旅客吞吐量连续两年未能恢复至2019年的70%，或免税收入持续恶化超出预期，我将重新评估。",
+        "out_of_circle": false,
+        "historical_parallel": "类似2003年非典后机场股因客流骤降而大幅下跌，随后在客流恢复后实现价值回归。",
+        "new_evidence": [],
+        "evidence_exhausted": false,
+        "market_consensus": "市场认为上海机场的盈利模式已经因免税协议重签而永久恶化，且国际客流恢复遥遥无期。",
+        "consensus_flaw": "分析差：市场线性外推疫情期间的低客流和低盈利能力，忽略了航空出行的自然恢复以及上海机场作为国际门户的不可替代性。",
+        "odds_assessment": "赔率约3:1，下行空间有限（受制于基础设施垄断性），上行空间较大（若客流恢复至2019年水平）。",
+        "is_reversible": true,
+        "catalyst": "国际航班进一步放开，出境游政策放宽，以及新一轮免税或商业合作协议的签订。"
+      },
+      "run_id": "5ca41c68-2015-42f2-8c9f-ddc778c95053"
+    }
+  ],
+  "metrics": {
+    "explicit_crosstalk_rate": 0.0,
+    "implicit_crosstalk_rate": 0.0,
+    "fabricated_number_rate": 0.0,
+    "citation_divergence": {
+      "pairwise_distances": {
+        "buffett|munger": 0.0,
+        "buffett|duan": 0.0,
+        "buffett|feng_liu": 0.0,
+        "duan|munger": 0.0,
+        "feng_liu|munger": 0.0,
+        "duan|feng_liu": 0.0
+      },
+      "mean_distance": 0.0
+    }
+  }
+}
