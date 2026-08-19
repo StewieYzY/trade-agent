@@ -1,0 +1,874 @@
+{
+  "mode": "live",
+  "input_mode": "frozen_dossier",
+  "dossier_path": "value-screener/scripts/repro_out/600009_frozen_dossier.json",
+  "source_sha256": "f588d5bf911aefd90348d9a7d150280847b9af938bf5b06d8548a3afeb2a00c9",
+  "groups": {
+    "group1": {
+      "id": "group1",
+      "features": "sufficient",
+      "prompt": "retained",
+      "model": "weak",
+      "status": "complete",
+      "input_mode": "frozen_dossier",
+      "records": [
+        {
+          "agent": "buffett",
+          "status": "ok",
+          "model": "deepseek-v4-flash",
+          "raw_response": "{\n  \"signal\": \"bullish\",\n  \"conviction\": 68,\n  \"core_thesis\": \"上海机场拥有长三角核心枢纽的特许经营权，类似收费桥梁，当前PB处于5年极低分位，盈利正从疫情冲击中恢复，若国际客流和免税业务持续回暖，当前价格具备安全边际。\",\n  \"key_metrics\": [\n    \"价格22.55元，市值561亿\",\n    \"PE(TTM)26.12倍，PB 1.32倍（5年分位0.16%）\",\n    \"净利润连续三年恢复：9.34亿→19.34亿→21.17亿\",\n    \"非航空性收入占比54.1%，商业餐饮收入占比17.2%\",\n    \"资本开支近三年约13-20亿/年\"\n  ],\n  \"risks\": [\n    \"国际客流恢复不及预期，免税收入增长乏力\",\n    \"免税合同重签后单位旅客价值下降，护城河被侵蚀\",\n    \"大规模资本开支（如四期工程）持续吞噬自由现金流\",\n    \"宏观经济下行或航空突发事件导致需求再次萎缩\",\n    \"机场收费政策管制，航空性收入提价空间有限\"\n  ],\n  \"what_would_change_my_mind\": \"如果连续多个季度国际旅客量和免税收入增长明显低于预期，或公司资本开支导致负债率大幅上升且ROE未见改善，或管理层出现损害股东利益的行为，我将重新评估此投资逻辑。\",\n  \"out_of_circle\": false,\n  \"historical_parallel\": \"类似2003年SARS后机场客流逐步恢复，以及巴菲特投资BNSF铁路——区域垄断基础设施，长期能带来稳定回报，但需承受周期性波动。\",\n  \"new_evidence\": [\n    \"PE TTM 26.12，PB 1.32，PB 5年分位0.16%\",\n    \"近三年净利润分别为9.34亿、19.34亿、21.17亿，呈恢复态势\",\n    \"非航空性收入占比54.1%，其中商业餐饮收入占比17.2%\",\n    \"分析师目标价27.39元，买入评级占比76.98%\",\n    \"资本开支近三年约1244M、1958M、1307M\"\n  ],\n  \"evidence_exhausted\": false\n}",
+          "usage": {
+            "prompt_tokens": 9823,
+            "completion_tokens": 2655,
+            "total_tokens": 12478,
+            "prompt_tokens_details": {
+              "cached_tokens": 896
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 2159
+            },
+            "prompt_cache_hit_tokens": 896,
+            "prompt_cache_miss_tokens": 8927
+          },
+          "system_prompt_sha256": "1e55a13cdd15e823462e89c891a815dc95c504afd4d6ee939716510fd297b55c",
+          "user_message_sha256": "4d82f2cfaa373faa7aab9bc34a8a04632f6659cf39248691a59916ee8052507c",
+          "dossier_sha256": "f588d5bf911aefd90348d9a7d150280847b9af938bf5b06d8548a3afeb2a00c9",
+          "output": {
+            "name": "buffett",
+            "signal": "bullish",
+            "conviction": 68,
+            "core_thesis": "上海机场拥有长三角核心枢纽的特许经营权，类似收费桥梁，当前PB处于5年极低分位，盈利正从疫情冲击中恢复，若国际客流和免税业务持续回暖，当前价格具备安全边际。",
+            "key_metrics": [
+              "价格22.55元，市值561亿",
+              "PE(TTM)26.12倍，PB 1.32倍（5年分位0.16%）",
+              "净利润连续三年恢复：9.34亿→19.34亿→21.17亿",
+              "非航空性收入占比54.1%，商业餐饮收入占比17.2%",
+              "资本开支近三年约13-20亿/年"
+            ],
+            "risks": [
+              "国际客流恢复不及预期，免税收入增长乏力",
+              "免税合同重签后单位旅客价值下降，护城河被侵蚀",
+              "大规模资本开支（如四期工程）持续吞噬自由现金流",
+              "宏观经济下行或航空突发事件导致需求再次萎缩",
+              "机场收费政策管制，航空性收入提价空间有限"
+            ],
+            "what_would_change_my_mind": "如果连续多个季度国际旅客量和免税收入增长明显低于预期，或公司资本开支导致负债率大幅上升且ROE未见改善，或管理层出现损害股东利益的行为，我将重新评估此投资逻辑。",
+            "out_of_circle": false,
+            "historical_parallel": "类似2003年SARS后机场客流逐步恢复，以及巴菲特投资BNSF铁路——区域垄断基础设施，长期能带来稳定回报，但需承受周期性波动。",
+            "new_evidence": [
+              "PE TTM 26.12，PB 1.32，PB 5年分位0.16%",
+              "近三年净利润分别为9.34亿、19.34亿、21.17亿，呈恢复态势",
+              "非航空性收入占比54.1%，其中商业餐饮收入占比17.2%",
+              "分析师目标价27.39元，买入评级占比76.98%",
+              "资本开支近三年约1244M、1958M、1307M"
+            ],
+            "evidence_exhausted": false
+          },
+          "run_id": "5ca41c68-2015-42f2-8c9f-ddc778c95053"
+        },
+        {
+          "agent": "munger",
+          "status": "ok",
+          "model": "deepseek-v4-flash",
+          "raw_response": "{\n  \"signal\": \"bullish\",\n  \"conviction\": 65,\n  \"core_thesis\": \"上海机场拥有不可复制的枢纽区位和长期免税增长潜力，当前盈利处于恢复通道，PB处于五年绝对低位，风险收益比有利。\",\n  \"key_metrics\": [\n    \"PE TTM 26.12\",\n    \"PB 1.32，处于5年0.16%分位\",\n    \"2025年净利润21.17亿元，同比增长约9.5%\",\n    \"2025年毛利率回升至25.2%，而2023年为14.1%\",\n    \"商业餐饮收入10.9亿元，较2019年54.6亿元仍有显著差距，恢复空间大\"\n  ],\n  \"risks\": [\n    \"国际旅客恢复长期低于预期\",\n    \"免税政策调整或竞争加剧\",\n    \"重大资本开支导致折旧激增和自由现金流恶化\",\n    \"宏观经济或地缘政治拖累航空需求\"\n  ],\n  \"what_would_change_my_mind\": \"如果未来两年国际旅客吞吐量恢复到2019年水平的80%以上但商业餐饮收入仍低于2019年的50%，或公司发生损害股东利益的事件，我将重新评估。\",\n  \"out_of_circle\": false,\n  \"historical_parallel\": \"类似2003年非典后的上海机场，疫情冲击后需求复苏，盈利和估值经历双升。\",\n  \"new_evidence\": [\n    \"2023-2025年净利润连续增长，从9.34亿到21.17亿\",\n    \"2025年航空服务毛利率25.2%，远超2023年14.1%\",\n    \"PE百分位62%但PB百分位0.16%，显示盈利尚未恢复而资产价值低估\"\n  ],\n  \"evidence_exhausted\": false\n}",
+          "usage": {
+            "prompt_tokens": 9785,
+            "completion_tokens": 7719,
+            "total_tokens": 17504,
+            "prompt_tokens_details": {
+              "cached_tokens": 768
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 7330
+            },
+            "prompt_cache_hit_tokens": 768,
+            "prompt_cache_miss_tokens": 9017
+          },
+          "system_prompt_sha256": "2aba70d52b4118c8f8571acc18ed2b9ca43c25a19ddfb3c437ceba22d56872cb",
+          "user_message_sha256": "4d82f2cfaa373faa7aab9bc34a8a04632f6659cf39248691a59916ee8052507c",
+          "dossier_sha256": "f588d5bf911aefd90348d9a7d150280847b9af938bf5b06d8548a3afeb2a00c9",
+          "output": {
+            "name": "munger",
+            "signal": "bullish",
+            "conviction": 65,
+            "core_thesis": "上海机场拥有不可复制的枢纽区位和长期免税增长潜力，当前盈利处于恢复通道，PB处于五年绝对低位，风险收益比有利。",
+            "key_metrics": [
+              "PE TTM 26.12",
+              "PB 1.32，处于5年0.16%分位",
+              "2025年净利润21.17亿元，同比增长约9.5%",
+              "2025年毛利率回升至25.2%，而2023年为14.1%",
+              "商业餐饮收入10.9亿元，较2019年54.6亿元仍有显著差距，恢复空间大"
+            ],
+            "risks": [
+              "国际旅客恢复长期低于预期",
+              "免税政策调整或竞争加剧",
+              "重大资本开支导致折旧激增和自由现金流恶化",
+              "宏观经济或地缘政治拖累航空需求"
+            ],
+            "what_would_change_my_mind": "如果未来两年国际旅客吞吐量恢复到2019年水平的80%以上但商业餐饮收入仍低于2019年的50%，或公司发生损害股东利益的事件，我将重新评估。",
+            "out_of_circle": false,
+            "historical_parallel": "类似2003年非典后的上海机场，疫情冲击后需求复苏，盈利和估值经历双升。",
+            "new_evidence": [
+              "2023-2025年净利润连续增长，从9.34亿到21.17亿",
+              "2025年航空服务毛利率25.2%，远超2023年14.1%",
+              "PE百分位62%但PB百分位0.16%，显示盈利尚未恢复而资产价值低估"
+            ],
+            "evidence_exhausted": false
+          },
+          "run_id": "5ca41c68-2015-42f2-8c9f-ddc778c95053"
+        },
+        {
+          "agent": "duan",
+          "status": "ok",
+          "model": "deepseek-v4-flash",
+          "raw_response": "{\n  \"signal\": \"neutral\",\n  \"conviction\": 60,\n  \"core_thesis\": \"上海机场是国际枢纽，有垄断流量，但生意本质是收租，缺乏定价权，受制于民航管制和免税协议，当前盈利非完全恢复，估值不便宜，不是一眼定生意的类型。\",\n  \"key_metrics\": [\n    \"PE TTM 26.12，PB 1.32，市值561亿\",\n    \"PB处于5年0.16%分位，PE处于62%分位\",\n    \"净利润：9.34亿→19.34亿→21.17亿（TTM）\",\n    \"资本开支：2023年12.4亿、2024年19.6亿、2025年13.1亿\",\n    \"2025年航空及相关服务毛利率25.2%，而历史高峰期曾超过50%\",\n    \"商业餐饮收入约10.9亿，相比2019年54.6亿大幅下滑\"\n  ],\n  \"risks\": [\n    \"国际旅客恢复速度慢于预期，免税收入增长乏力\",\n    \"免税合同重签后收入模式受损，长期盈利中枢下移\",\n    \"持续资本开支（扩建）拉低ROE和自由现金流\",\n    \"作为国企，管理层本分度无明确背书，关联交易和价格管制风险\",\n    \"航空性收入受政府定价限制，无自主提价权\"\n  ],\n  \"what_would_change_my_mind\": \"如果国际旅客和免税收入完全恢复至2019年水平，ROE回升至15%以上，同时股价回调至15倍PE以下，我会重新考虑；或者公司大幅提高分红并停止盲目扩建，证明管理层把股东当回事。\",\n  \"out_of_circle\": false,\n  \"historical_parallel\": \"类似有区域垄断但缺乏定价权的重资产收租生意，如大秦铁路或机场类公用事业，但上海机场带一点消费属性。\",\n  \"new_evidence\": [\n    \"PB处于5年极低分位，市场对长期盈利中枢的担忧已在估值中反映\",\n    \"资本开支连续三年超12亿，盈利虽恢复，但自由现金流被压制\",\n    \"商业餐饮收入远低于2019年，显示免税商业模式发生了结构性变化\"\n  ],\n  \"evidence_exhausted\": false\n}",
+          "usage": {
+            "prompt_tokens": 9565,
+            "completion_tokens": 4046,
+            "total_tokens": 13611,
+            "prompt_tokens_details": {
+              "cached_tokens": 640
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 3544
+            },
+            "prompt_cache_hit_tokens": 640,
+            "prompt_cache_miss_tokens": 8925
+          },
+          "system_prompt_sha256": "e1289ad6fe3b91f0bac2b17b67bb79b6fddb7977d428e9a77f7cb1be1e898d4f",
+          "user_message_sha256": "4d82f2cfaa373faa7aab9bc34a8a04632f6659cf39248691a59916ee8052507c",
+          "dossier_sha256": "f588d5bf911aefd90348d9a7d150280847b9af938bf5b06d8548a3afeb2a00c9",
+          "output": {
+            "name": "duan",
+            "signal": "neutral",
+            "conviction": 60,
+            "core_thesis": "上海机场是国际枢纽，有垄断流量，但生意本质是收租，缺乏定价权，受制于民航管制和免税协议，当前盈利非完全恢复，估值不便宜，不是一眼定生意的类型。",
+            "key_metrics": [
+              "PE TTM 26.12，PB 1.32，市值561亿",
+              "PB处于5年0.16%分位，PE处于62%分位",
+              "净利润：9.34亿→19.34亿→21.17亿（TTM）",
+              "资本开支：2023年12.4亿、2024年19.6亿、2025年13.1亿",
+              "2025年航空及相关服务毛利率25.2%，而历史高峰期曾超过50%",
+              "商业餐饮收入约10.9亿，相比2019年54.6亿大幅下滑"
+            ],
+            "risks": [
+              "国际旅客恢复速度慢于预期，免税收入增长乏力",
+              "免税合同重签后收入模式受损，长期盈利中枢下移",
+              "持续资本开支（扩建）拉低ROE和自由现金流",
+              "作为国企，管理层本分度无明确背书，关联交易和价格管制风险",
+              "航空性收入受政府定价限制，无自主提价权"
+            ],
+            "what_would_change_my_mind": "如果国际旅客和免税收入完全恢复至2019年水平，ROE回升至15%以上，同时股价回调至15倍PE以下，我会重新考虑；或者公司大幅提高分红并停止盲目扩建，证明管理层把股东当回事。",
+            "out_of_circle": false,
+            "historical_parallel": "类似有区域垄断但缺乏定价权的重资产收租生意，如大秦铁路或机场类公用事业，但上海机场带一点消费属性。",
+            "new_evidence": [
+              "PB处于5年极低分位，市场对长期盈利中枢的担忧已在估值中反映",
+              "资本开支连续三年超12亿，盈利虽恢复，但自由现金流被压制",
+              "商业餐饮收入远低于2019年，显示免税商业模式发生了结构性变化"
+            ],
+            "evidence_exhausted": false
+          },
+          "run_id": "5ca41c68-2015-42f2-8c9f-ddc778c95053"
+        },
+        {
+          "agent": "feng_liu",
+          "status": "ok",
+          "model": "deepseek-v4-flash",
+          "raw_response": "{\n  \"signal\": \"bullish\",\n  \"conviction\": 65,\n  \"core_thesis\": \"市场过度悲观地将上海机场定位为'免税逻辑破坏'的公用事业股，但PB处于5年0.16%的分位，盈利已连续修复，国际客流恢复与枢纽价值重估将带来可观赔率。\",\n  \"key_metrics\": [\n    \"股价22.55元，市值561亿，PB 1.32（5年百分位0.16%）\",\n    \"PE TTM 26.12（5年百分位62.19%），一致预期EPS 1.173对应远期PE约19倍\",\n    \"净利润连续修复：9.34亿→19.34亿→21.17亿\",\n    \"最新报告期非航收入占比54.1%，其中商业餐饮收入10.9亿仍低于历史峰值\",\n    \"券商覆盖126家，买入+增持占比77%\",\n    \"近三年资本开支12.4/19.6/13.1亿，建设周期资本开支可控\"\n  ],\n  \"risks\": [\n    \"国际客流恢复持续低于预期，非航收入继续低迷\",\n    \"免税合同进一步调整，挤压商业收入天花板\",\n    \"巨额扩建资本开支导致折旧增加，压制短期利润\",\n    \"宏观经济下行导致航空出行需求疲软\"\n  ],\n  \"what_would_change_my_mind\": \"如果国际客流数据连续两年不恢复，或免税合同再次出现重大不利变更，使得长期盈利中枢下修至20亿以下，且PB无法提供保护，我会重新评估。\",\n  \"out_of_circle\": false,\n  \"historical_parallel\": \"类似2013年白酒塑化剂危机中的贵州茅台，市场将一次性冲击视为永久性衰退，给出极端低估，但品牌与枢纽的稀缺性并未改变。\",\n  \"new_evidence\": [\n    \"PB百分位处于5年最低区间，市净率保护充足\",\n    \"非航收入结构显示商业餐饮收入虽下滑但其他非航（物流、广告）保持韧性\",\n    \"资本开支增速放缓，扩建对现金流的压力或低于预期\"\n  ],\n  \"evidence_exhausted\": false,\n  \"market_consensus\": \"市场共识是上海机场的免税红利时代已经结束，增速中枢下移，只配给公用事业级别的估值。\",\n  \"consensus_flaw\": \"分析差：市场用疫情前后的线性外推看待免税收入下滑，忽略了国际客流恢复的非线性弹性，以及浦东机场作为国际枢纽的不可替代性；同时PB跌至0.16%分位属于行为差，恐慌性定价偏离长期价值。\",\n  \"odds_assessment\": \"赔率约3:1——保守情形下盈利稳定在20亿，当前PE 26倍合理；中性情形下盈利回升至30亿，对应PE 19倍；乐观情形下国际客流恢复叠加新产能，盈利达40-50亿，对应PE 11-14倍。下行风险有限，上行空间充足。\",\n  \"is_reversible\": true,\n  \"catalyst\": \"国际航线进一步扩容与客座率提升，免税销售额超预期回暖；公司发布分红或股权激励计划；浦东机场四期产能逐步投产；月度经营数据持续改善。\"\n}",
+          "usage": {
+            "prompt_tokens": 9776,
+            "completion_tokens": 2591,
+            "total_tokens": 12367,
+            "prompt_tokens_details": {
+              "cached_tokens": 768
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 1889
+            },
+            "prompt_cache_hit_tokens": 768,
+            "prompt_cache_miss_tokens": 9008
+          },
+          "system_prompt_sha256": "52a984258e3a7db0d4bf975e0d20265deabde979c17c1af5038057d1606634f5",
+          "user_message_sha256": "4d82f2cfaa373faa7aab9bc34a8a04632f6659cf39248691a59916ee8052507c",
+          "dossier_sha256": "f588d5bf911aefd90348d9a7d150280847b9af938bf5b06d8548a3afeb2a00c9",
+          "output": {
+            "name": "feng_liu",
+            "signal": "bullish",
+            "conviction": 65,
+            "core_thesis": "市场过度悲观地将上海机场定位为'免税逻辑破坏'的公用事业股，但PB处于5年0.16%的分位，盈利已连续修复，国际客流恢复与枢纽价值重估将带来可观赔率。",
+            "key_metrics": [
+              "股价22.55元，市值561亿，PB 1.32（5年百分位0.16%）",
+              "PE TTM 26.12（5年百分位62.19%），一致预期EPS 1.173对应远期PE约19倍",
+              "净利润连续修复：9.34亿→19.34亿→21.17亿",
+              "最新报告期非航收入占比54.1%，其中商业餐饮收入10.9亿仍低于历史峰值",
+              "券商覆盖126家，买入+增持占比77%",
+              "近三年资本开支12.4/19.6/13.1亿，建设周期资本开支可控"
+            ],
+            "risks": [
+              "国际客流恢复持续低于预期，非航收入继续低迷",
+              "免税合同进一步调整，挤压商业收入天花板",
+              "巨额扩建资本开支导致折旧增加，压制短期利润",
+              "宏观经济下行导致航空出行需求疲软"
+            ],
+            "what_would_change_my_mind": "如果国际客流数据连续两年不恢复，或免税合同再次出现重大不利变更，使得长期盈利中枢下修至20亿以下，且PB无法提供保护，我会重新评估。",
+            "out_of_circle": false,
+            "historical_parallel": "类似2013年白酒塑化剂危机中的贵州茅台，市场将一次性冲击视为永久性衰退，给出极端低估，但品牌与枢纽的稀缺性并未改变。",
+            "new_evidence": [
+              "PB百分位处于5年最低区间，市净率保护充足",
+              "非航收入结构显示商业餐饮收入虽下滑但其他非航（物流、广告）保持韧性",
+              "资本开支增速放缓，扩建对现金流的压力或低于预期"
+            ],
+            "evidence_exhausted": false,
+            "market_consensus": "市场共识是上海机场的免税红利时代已经结束，增速中枢下移，只配给公用事业级别的估值。",
+            "consensus_flaw": "分析差：市场用疫情前后的线性外推看待免税收入下滑，忽略了国际客流恢复的非线性弹性，以及浦东机场作为国际枢纽的不可替代性；同时PB跌至0.16%分位属于行为差，恐慌性定价偏离长期价值。",
+            "odds_assessment": "赔率约3:1——保守情形下盈利稳定在20亿，当前PE 26倍合理；中性情形下盈利回升至30亿，对应PE 19倍；乐观情形下国际客流恢复叠加新产能，盈利达40-50亿，对应PE 11-14倍。下行风险有限，上行空间充足。",
+            "is_reversible": true,
+            "catalyst": "国际航线进一步扩容与客座率提升，免税销售额超预期回暖；公司发布分红或股权激励计划；浦东机场四期产能逐步投产；月度经营数据持续改善。"
+          },
+          "run_id": "5ca41c68-2015-42f2-8c9f-ddc778c95053"
+        }
+      ],
+      "metrics": {
+        "explicit_crosstalk_rate": 0.0,
+        "implicit_crosstalk_rate": 0.0,
+        "fabricated_number_rate": 1.0,
+        "citation_divergence": {
+          "pairwise_distances": {
+            "buffett|munger": 0.8823529411764706,
+            "buffett|duan": 0.75,
+            "buffett|feng_liu": 0.65,
+            "duan|munger": 0.5882352941176471,
+            "feng_liu|munger": 0.7619047619047619,
+            "duan|feng_liu": 0.47619047619047616
+          },
+          "mean_distance": 0.6847805788982259
+        }
+      }
+    },
+    "group2": {
+      "id": "group2",
+      "features": "missing",
+      "prompt": "retained",
+      "model": "weak",
+      "status": "complete",
+      "input_mode": "frozen_dossier",
+      "records": [
+        {
+          "agent": "buffett",
+          "status": "ok",
+          "model": "deepseek-v4-flash",
+          "raw_response": "{\n  \"signal\": \"skip\",\n  \"conviction\": 0,\n  \"core_thesis\": \"缺乏特征数据，无法评估内在价值和安全边际\",\n  \"key_metrics\": [],\n  \"risks\": [\n    \"航空业周期性风险\",\n    \"资本开支巨大\",\n    \"宏观经济影响\",\n    \"政策变动风险\"\n  ],\n  \"what_would_change_my_mind\": \"如果提供详细的财务数据、估值指标和护城河分析，我可能会重新评估\",\n  \"out_of_circle\": true,\n  \"historical_parallel\": null,\n  \"new_evidence\": [],\n  \"evidence_exhausted\": false\n}",
+          "usage": {
+            "prompt_tokens": 938,
+            "completion_tokens": 2382,
+            "total_tokens": 3320,
+            "prompt_tokens_details": {
+              "cached_tokens": 896
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 2243
+            },
+            "prompt_cache_hit_tokens": 896,
+            "prompt_cache_miss_tokens": 42
+          },
+          "system_prompt_sha256": "1e55a13cdd15e823462e89c891a815dc95c504afd4d6ee939716510fd297b55c",
+          "user_message_sha256": "5f72743bd9baf3b941d59f1bb3d46f78d3ca42a22791e9a3d4cc8f22e41ca591",
+          "dossier_sha256": "f588d5bf911aefd90348d9a7d150280847b9af938bf5b06d8548a3afeb2a00c9",
+          "output": {
+            "name": "buffett",
+            "signal": "skip",
+            "conviction": 0,
+            "core_thesis": "缺乏特征数据，无法评估内在价值和安全边际",
+            "key_metrics": [],
+            "risks": [
+              "航空业周期性风险",
+              "资本开支巨大",
+              "宏观经济影响",
+              "政策变动风险"
+            ],
+            "what_would_change_my_mind": "如果提供详细的财务数据、估值指标和护城河分析，我可能会重新评估",
+            "out_of_circle": true,
+            "historical_parallel": null,
+            "new_evidence": [],
+            "evidence_exhausted": false
+          },
+          "run_id": "5ca41c68-2015-42f2-8c9f-ddc778c95053"
+        },
+        {
+          "agent": "munger",
+          "status": "ok",
+          "model": "deepseek-v4-flash",
+          "raw_response": "{\n  \"signal\": \"skip\",\n  \"conviction\": 0,\n  \"core_thesis\": \"信息不足时贸然下注是愚蠢的，我宁愿错过也不愿犯错。缺乏关键财务与估值数据，无法进行逆向分析和格栅验证。\",\n  \"key_metrics\": [],\n  \"risks\": [\n    \"数据缺失导致判断失真\",\n    \"航空需求复苏不及预期\",\n    \"免税政策变化削弱核心现金流\"\n  ],\n  \"what_would_change_my_mind\": \"若获得完整财报、免税合同细节和当前估值水平，显示其价格低于内在价值且具备安全边际，我可能重新评估。\",\n  \"out_of_circle\": false,\n  \"historical_parallel\": null,\n  \"new_evidence\": [],\n  \"evidence_exhausted\": false\n}",
+          "usage": {
+            "prompt_tokens": 900,
+            "completion_tokens": 1736,
+            "total_tokens": 2636,
+            "prompt_tokens_details": {
+              "cached_tokens": 768
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 1562
+            },
+            "prompt_cache_hit_tokens": 768,
+            "prompt_cache_miss_tokens": 132
+          },
+          "system_prompt_sha256": "2aba70d52b4118c8f8571acc18ed2b9ca43c25a19ddfb3c437ceba22d56872cb",
+          "user_message_sha256": "5f72743bd9baf3b941d59f1bb3d46f78d3ca42a22791e9a3d4cc8f22e41ca591",
+          "dossier_sha256": "f588d5bf911aefd90348d9a7d150280847b9af938bf5b06d8548a3afeb2a00c9",
+          "output": {
+            "name": "munger",
+            "signal": "skip",
+            "conviction": 0,
+            "core_thesis": "信息不足时贸然下注是愚蠢的，我宁愿错过也不愿犯错。缺乏关键财务与估值数据，无法进行逆向分析和格栅验证。",
+            "key_metrics": [],
+            "risks": [
+              "数据缺失导致判断失真",
+              "航空需求复苏不及预期",
+              "免税政策变化削弱核心现金流"
+            ],
+            "what_would_change_my_mind": "若获得完整财报、免税合同细节和当前估值水平，显示其价格低于内在价值且具备安全边际，我可能重新评估。",
+            "out_of_circle": false,
+            "historical_parallel": null,
+            "new_evidence": [],
+            "evidence_exhausted": false
+          },
+          "run_id": "5ca41c68-2015-42f2-8c9f-ddc778c95053"
+        },
+        {
+          "agent": "duan",
+          "status": "ok",
+          "model": "deepseek-v4-flash",
+          "raw_response": "{\n  \"signal\": \"skip\",\n  \"conviction\": 0,\n  \"core_thesis\": \"无数据支撑，无法判断，且超出能力圈\",\n  \"key_metrics\": [],\n  \"risks\": [\n    \"信息不足，无法评估公司基本面风险\",\n    \"机场业务属重资产，资本开支大，可能影响股东回报\",\n    \"管理层本分度无法验证\"\n  ],\n  \"what_would_change_my_mind\": \"提供详细的财务数据、业务结构、管理层行为等信息，且确认在能力圈内\",\n  \"out_of_circle\": true,\n  \"historical_parallel\": null,\n  \"new_evidence\": [],\n  \"evidence_exhausted\": false\n}",
+          "usage": {
+            "prompt_tokens": 680,
+            "completion_tokens": 1020,
+            "total_tokens": 1700,
+            "prompt_tokens_details": {
+              "cached_tokens": 640
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 867
+            },
+            "prompt_cache_hit_tokens": 640,
+            "prompt_cache_miss_tokens": 40
+          },
+          "system_prompt_sha256": "e1289ad6fe3b91f0bac2b17b67bb79b6fddb7977d428e9a77f7cb1be1e898d4f",
+          "user_message_sha256": "5f72743bd9baf3b941d59f1bb3d46f78d3ca42a22791e9a3d4cc8f22e41ca591",
+          "dossier_sha256": "f588d5bf911aefd90348d9a7d150280847b9af938bf5b06d8548a3afeb2a00c9",
+          "output": {
+            "name": "duan",
+            "signal": "skip",
+            "conviction": 0,
+            "core_thesis": "无数据支撑，无法判断，且超出能力圈",
+            "key_metrics": [],
+            "risks": [
+              "信息不足，无法评估公司基本面风险",
+              "机场业务属重资产，资本开支大，可能影响股东回报",
+              "管理层本分度无法验证"
+            ],
+            "what_would_change_my_mind": "提供详细的财务数据、业务结构、管理层行为等信息，且确认在能力圈内",
+            "out_of_circle": true,
+            "historical_parallel": null,
+            "new_evidence": [],
+            "evidence_exhausted": false
+          },
+          "run_id": "5ca41c68-2015-42f2-8c9f-ddc778c95053"
+        },
+        {
+          "agent": "feng_liu",
+          "status": "ok",
+          "model": "deepseek-v4-flash",
+          "raw_response": "{\n  \"signal\": \"bullish\",\n  \"conviction\": 65,\n  \"core_thesis\": \"市场对上海机场的悲观情绪过度，忽视了国际枢纽的长期稀缺价值和疫后出行恢复带来的业绩弹性。\",\n  \"key_metrics\": [\"国际旅客吞吐量同比变化\", \"免税收入占比\", \"客流恢复至2019年比例\", \"免税合同条款变化\"],\n  \"risks\": [\"国际客流恢复不及预期\", \"免税政策进一步收紧\", \"地缘政治影响国际航线\"],\n  \"what_would_change_my_mind\": \"如果国际旅客吞吐量连续两年未能恢复至2019年的70%，或免税收入持续恶化超出预期，我将重新评估。\",\n  \"out_of_circle\": false,\n  \"historical_parallel\": \"类似2003年非典后机场股因客流骤降而大幅下跌，随后在客流恢复后实现价值回归。\",\n  \"new_evidence\": [],\n  \"evidence_exhausted\": false,\n  \"market_consensus\": \"市场认为上海机场的盈利模式已经因免税协议重签而永久恶化，且国际客流恢复遥遥无期。\",\n  \"consensus_flaw\": \"分析差：市场线性外推疫情期间的低客流和低盈利能力，忽略了航空出行的自然恢复以及上海机场作为国际门户的不可替代性。\",\n  \"odds_assessment\": \"赔率约3:1，下行空间有限（受制于基础设施垄断性），上行空间较大（若客流恢复至2019年水平）。\",\n  \"is_reversible\": true,\n  \"catalyst\": \"国际航班进一步放开，出境游政策放宽，以及新一轮免税或商业合作协议的签订。\"\n}",
+          "usage": {
+            "prompt_tokens": 891,
+            "completion_tokens": 1780,
+            "total_tokens": 2671,
+            "prompt_tokens_details": {
+              "cached_tokens": 768
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 1423
+            },
+            "prompt_cache_hit_tokens": 768,
+            "prompt_cache_miss_tokens": 123
+          },
+          "system_prompt_sha256": "52a984258e3a7db0d4bf975e0d20265deabde979c17c1af5038057d1606634f5",
+          "user_message_sha256": "5f72743bd9baf3b941d59f1bb3d46f78d3ca42a22791e9a3d4cc8f22e41ca591",
+          "dossier_sha256": "f588d5bf911aefd90348d9a7d150280847b9af938bf5b06d8548a3afeb2a00c9",
+          "output": {
+            "name": "feng_liu",
+            "signal": "bullish",
+            "conviction": 65,
+            "core_thesis": "市场对上海机场的悲观情绪过度，忽视了国际枢纽的长期稀缺价值和疫后出行恢复带来的业绩弹性。",
+            "key_metrics": [
+              "国际旅客吞吐量同比变化",
+              "免税收入占比",
+              "客流恢复至2019年比例",
+              "免税合同条款变化"
+            ],
+            "risks": [
+              "国际客流恢复不及预期",
+              "免税政策进一步收紧",
+              "地缘政治影响国际航线"
+            ],
+            "what_would_change_my_mind": "如果国际旅客吞吐量连续两年未能恢复至2019年的70%，或免税收入持续恶化超出预期，我将重新评估。",
+            "out_of_circle": false,
+            "historical_parallel": "类似2003年非典后机场股因客流骤降而大幅下跌，随后在客流恢复后实现价值回归。",
+            "new_evidence": [],
+            "evidence_exhausted": false,
+            "market_consensus": "市场认为上海机场的盈利模式已经因免税协议重签而永久恶化，且国际客流恢复遥遥无期。",
+            "consensus_flaw": "分析差：市场线性外推疫情期间的低客流和低盈利能力，忽略了航空出行的自然恢复以及上海机场作为国际门户的不可替代性。",
+            "odds_assessment": "赔率约3:1，下行空间有限（受制于基础设施垄断性），上行空间较大（若客流恢复至2019年水平）。",
+            "is_reversible": true,
+            "catalyst": "国际航班进一步放开，出境游政策放宽，以及新一轮免税或商业合作协议的签订。"
+          },
+          "run_id": "5ca41c68-2015-42f2-8c9f-ddc778c95053"
+        }
+      ],
+      "metrics": {
+        "explicit_crosstalk_rate": 0.0,
+        "implicit_crosstalk_rate": 0.0,
+        "fabricated_number_rate": 0.0,
+        "citation_divergence": {
+          "pairwise_distances": {
+            "buffett|munger": 0.0,
+            "buffett|duan": 0.0,
+            "buffett|feng_liu": 0.0,
+            "duan|munger": 0.0,
+            "feng_liu|munger": 0.0,
+            "duan|feng_liu": 0.0
+          },
+          "mean_distance": 0.0
+        }
+      }
+    },
+    "group3": {
+      "id": "group3",
+      "features": "missing",
+      "prompt": "stripped",
+      "model": "weak",
+      "status": "complete",
+      "input_mode": "frozen_dossier",
+      "records": [
+        {
+          "agent": "buffett",
+          "status": "ok",
+          "model": "deepseek-v4-flash",
+          "raw_response": "{\n  \"signal\": \"skip\",\n  \"conviction\": 30,\n  \"core_thesis\": \"缺乏具体财务数据，无法评估内在价值，按能力圈纪律选择放弃。\",\n  \"key_metrics\": [],\n  \"risks\": [\n    \"无法获取关键运营数据，如客流量、免税收入、资本开支等\",\n    \"机场行业受国际旅行政策及经济周期影响较大\"\n  ],\n  \"what_would_change_my_mind\": \"如果获得完整且可信的财务报告和运营数据，且当前股价显著低于估算的内在价值，我会重新考虑。\",\n  \"out_of_circle\": false,\n  \"historical_parallel\": null,\n  \"new_evidence\": [],\n  \"evidence_exhausted\": false\n}",
+          "usage": {
+            "prompt_tokens": 820,
+            "completion_tokens": 569,
+            "total_tokens": 1389,
+            "prompt_tokens_details": {
+              "cached_tokens": 768
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 407
+            },
+            "prompt_cache_hit_tokens": 768,
+            "prompt_cache_miss_tokens": 52
+          },
+          "system_prompt_sha256": "50e3c7531224d4353f394395cf18fe754f2cf3d11b00252d1941d00758526b98",
+          "user_message_sha256": "5f72743bd9baf3b941d59f1bb3d46f78d3ca42a22791e9a3d4cc8f22e41ca591",
+          "dossier_sha256": "f588d5bf911aefd90348d9a7d150280847b9af938bf5b06d8548a3afeb2a00c9",
+          "output": {
+            "name": "buffett",
+            "signal": "skip",
+            "conviction": 30,
+            "core_thesis": "缺乏具体财务数据，无法评估内在价值，按能力圈纪律选择放弃。",
+            "key_metrics": [],
+            "risks": [
+              "无法获取关键运营数据，如客流量、免税收入、资本开支等",
+              "机场行业受国际旅行政策及经济周期影响较大"
+            ],
+            "what_would_change_my_mind": "如果获得完整且可信的财务报告和运营数据，且当前股价显著低于估算的内在价值，我会重新考虑。",
+            "out_of_circle": false,
+            "historical_parallel": null,
+            "new_evidence": [],
+            "evidence_exhausted": false
+          },
+          "run_id": "5ca41c68-2015-42f2-8c9f-ddc778c95053"
+        },
+        {
+          "agent": "munger",
+          "status": "ok",
+          "model": "deepseek-v4-flash",
+          "raw_response": "{\n  \"signal\": \"skip\",\n  \"conviction\": 0,\n  \"core_thesis\": \"上海机场具备天然的垄断定位和免税流量变现能力，但用户未提供任何经营或估值数据，无法判断其当前投资价值。没有足够信息时，我宁可错过也不做错。\",\n  \"key_metrics\": [],\n  \"risks\": [\n    \"缺乏数据意味着可能存在未知的重大风险\",\n    \"国际旅行恢复的不确定性可能影响未来收益\",\n    \"免税合同重新谈判可能压缩利润空间\"\n  ],\n  \"what_would_change_my_mind\": \"若提供近三年财务报表、旅客吞吐量、免税销售额、当前市值及相关合同细节，我可以重新评估并可能转向中性或乐观，否则维持跳过。\",\n  \"out_of_circle\": true,\n  \"historical_parallel\": null,\n  \"new_evidence\": [],\n  \"evidence_exhausted\": false\n}",
+          "usage": {
+            "prompt_tokens": 840,
+            "completion_tokens": 4457,
+            "total_tokens": 5297,
+            "prompt_tokens_details": {
+              "cached_tokens": 768
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 4263
+            },
+            "prompt_cache_hit_tokens": 768,
+            "prompt_cache_miss_tokens": 72
+          },
+          "system_prompt_sha256": "d5efa283260791f5c6d450622ab907fc863f1e721713925a155332bf51867ef6",
+          "user_message_sha256": "5f72743bd9baf3b941d59f1bb3d46f78d3ca42a22791e9a3d4cc8f22e41ca591",
+          "dossier_sha256": "f588d5bf911aefd90348d9a7d150280847b9af938bf5b06d8548a3afeb2a00c9",
+          "output": {
+            "name": "munger",
+            "signal": "skip",
+            "conviction": 0,
+            "core_thesis": "上海机场具备天然的垄断定位和免税流量变现能力，但用户未提供任何经营或估值数据，无法判断其当前投资价值。没有足够信息时，我宁可错过也不做错。",
+            "key_metrics": [],
+            "risks": [
+              "缺乏数据意味着可能存在未知的重大风险",
+              "国际旅行恢复的不确定性可能影响未来收益",
+              "免税合同重新谈判可能压缩利润空间"
+            ],
+            "what_would_change_my_mind": "若提供近三年财务报表、旅客吞吐量、免税销售额、当前市值及相关合同细节，我可以重新评估并可能转向中性或乐观，否则维持跳过。",
+            "out_of_circle": true,
+            "historical_parallel": null,
+            "new_evidence": [],
+            "evidence_exhausted": false
+          },
+          "run_id": "5ca41c68-2015-42f2-8c9f-ddc778c95053"
+        },
+        {
+          "agent": "duan",
+          "status": "ok",
+          "model": "deepseek-v4-flash",
+          "raw_response": "{\n  \"signal\": \"neutral\",\n  \"conviction\": 55,\n  \"core_thesis\": \"上海机场是垄断性流量入口，但免税协议重签后定价权被削弱，叠加重资产扩张，当前难以看到清晰的超额回报路径。\",\n  \"key_metrics\": [\n    \"2019年免税收入占净利润比例高（约六成）\",\n    \"2021年与日上重签免税合同，保底收入大幅下调\",\n    \"国际客流恢复至2019年水平仍有距离\",\n    \"四期扩建计划带来持续资本开支压力\"\n  ],\n  \"risks\": [\n    \"免税扣点率或销售提成比例长期下行\",\n    \"国际航线及旅客量恢复不及预期\",\n    \"新建产能利用率不足导致折旧吞噬利润\",\n    \"政策变化如免税牌照开放、机场收费调整\",\n    \"国企治理下资本配置效率可能不高\"\n  ],\n  \"what_would_change_my_mind\": \"如果国际旅客量恢复到2019年同期水平，免税坪效和扣点率稳定在合理区间，同时新扩建项目能够明确提升产能利用率和现金流回报，我会重新审视并可能转向积极。\",\n  \"out_of_circle\": false,\n  \"historical_parallel\": null,\n  \"new_evidence\": [\"本轮未提供具体特征数据，基于公开长期经营逻辑判断。\"],\n  \"evidence_exhausted\": false\n}",
+          "usage": {
+            "prompt_tokens": 625,
+            "completion_tokens": 1986,
+            "total_tokens": 2611,
+            "prompt_tokens_details": {
+              "cached_tokens": 512
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 1685
+            },
+            "prompt_cache_hit_tokens": 512,
+            "prompt_cache_miss_tokens": 113
+          },
+          "system_prompt_sha256": "d74ae468007ba4fa8848f2e0dad149dffbd7b114edd231625a2416acec819ebb",
+          "user_message_sha256": "5f72743bd9baf3b941d59f1bb3d46f78d3ca42a22791e9a3d4cc8f22e41ca591",
+          "dossier_sha256": "f588d5bf911aefd90348d9a7d150280847b9af938bf5b06d8548a3afeb2a00c9",
+          "output": {
+            "name": "duan",
+            "signal": "neutral",
+            "conviction": 55,
+            "core_thesis": "上海机场是垄断性流量入口，但免税协议重签后定价权被削弱，叠加重资产扩张，当前难以看到清晰的超额回报路径。",
+            "key_metrics": [
+              "2019年免税收入占净利润比例高（约六成）",
+              "2021年与日上重签免税合同，保底收入大幅下调",
+              "国际客流恢复至2019年水平仍有距离",
+              "四期扩建计划带来持续资本开支压力"
+            ],
+            "risks": [
+              "免税扣点率或销售提成比例长期下行",
+              "国际航线及旅客量恢复不及预期",
+              "新建产能利用率不足导致折旧吞噬利润",
+              "政策变化如免税牌照开放、机场收费调整",
+              "国企治理下资本配置效率可能不高"
+            ],
+            "what_would_change_my_mind": "如果国际旅客量恢复到2019年同期水平，免税坪效和扣点率稳定在合理区间，同时新扩建项目能够明确提升产能利用率和现金流回报，我会重新审视并可能转向积极。",
+            "out_of_circle": false,
+            "historical_parallel": null,
+            "new_evidence": [
+              "本轮未提供具体特征数据，基于公开长期经营逻辑判断。"
+            ],
+            "evidence_exhausted": false
+          },
+          "run_id": "5ca41c68-2015-42f2-8c9f-ddc778c95053"
+        },
+        {
+          "agent": "feng_liu",
+          "status": "ok",
+          "model": "deepseek-v4-flash",
+          "raw_response": "{\n  \"signal\": \"bullish\",\n  \"conviction\": 60,\n  \"core_thesis\": \"市场过度担心上海机场免税红利消失及长期增长逻辑破坏，但国际客流恢复将带来高弹性，当前股价大幅下跌提供高赔率机会。\",\n  \"key_metrics\": [\n    \"2019年净利润约50亿元，当前市值约850亿元，对应正常化PE约17倍\",\n    \"股价从历史高点88元下跌超60%，符合左侧买入条件\",\n    \"国际航线恢复率仍低，但边际改善明确\",\n    \"免税新合同使租金与销售额挂钩，弹性恢复后可带来业绩反转\"\n  ],\n  \"risks\": [\n    \"国际客流恢复速度持续低于预期，甚至出现反复\",\n    \"免税政策进一步利空，如市内店、海南离岛免税加大分流\",\n    \"消费疲软导致人均免税消费额下降，销售额弹性低于预期\",\n    \"公司治理或资本开支带来的额外风险\"\n  ],\n  \"what_would_change_my_mind\": \"若国际客流恢复至2019年以上后，免税销售额仍明显低于2019年水平，或公司难以维持枢纽机场的核心垄断地位，则此前的逻辑错误，需重新评估。\",\n  \"out_of_circle\": false,\n  \"historical_parallel\": \"2003年非典后上海机场股价经历暴跌后随客流恢复大幅反弹，本次疫情冲击与其有相似性，但免税合同变化增加了不确定性。\",\n  \"new_evidence\": [],\n  \"evidence_exhausted\": false,\n  \"market_consensus\": \"上海机场的免税红利已消失，长期增长逻辑被破坏，估值中枢将永久下移。\",\n  \"consensus_flaw\": \"分析差与行为差：市场线性外推当前压力，忽略了国际客流恢复时的基数效应和机场枢纽的长期可逆性；同时股价已超跌，利空被过度反应。\",\n  \"odds_assessment\": \"赔率约3:1（上行空间约60%，下行风险约20%）\",\n  \"is_reversible\": true,\n  \"catalyst\": \"国际航线加速恢复、免税销售额数据回暖、浦东机场四期工程进展、对未来免税合同调整的预期\"\n}",
+          "usage": {
+            "prompt_tokens": 846,
+            "completion_tokens": 2152,
+            "total_tokens": 2998,
+            "prompt_tokens_details": {
+              "cached_tokens": 768
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 1679
+            },
+            "prompt_cache_hit_tokens": 768,
+            "prompt_cache_miss_tokens": 78
+          },
+          "system_prompt_sha256": "13ceb8321e72025386b545c7322df9ecfe4a16dc11099598eed6409562e0a53f",
+          "user_message_sha256": "5f72743bd9baf3b941d59f1bb3d46f78d3ca42a22791e9a3d4cc8f22e41ca591",
+          "dossier_sha256": "f588d5bf911aefd90348d9a7d150280847b9af938bf5b06d8548a3afeb2a00c9",
+          "output": {
+            "name": "feng_liu",
+            "signal": "bullish",
+            "conviction": 60,
+            "core_thesis": "市场过度担心上海机场免税红利消失及长期增长逻辑破坏，但国际客流恢复将带来高弹性，当前股价大幅下跌提供高赔率机会。",
+            "key_metrics": [
+              "2019年净利润约50亿元，当前市值约850亿元，对应正常化PE约17倍",
+              "股价从历史高点88元下跌超60%，符合左侧买入条件",
+              "国际航线恢复率仍低，但边际改善明确",
+              "免税新合同使租金与销售额挂钩，弹性恢复后可带来业绩反转"
+            ],
+            "risks": [
+              "国际客流恢复速度持续低于预期，甚至出现反复",
+              "免税政策进一步利空，如市内店、海南离岛免税加大分流",
+              "消费疲软导致人均免税消费额下降，销售额弹性低于预期",
+              "公司治理或资本开支带来的额外风险"
+            ],
+            "what_would_change_my_mind": "若国际客流恢复至2019年以上后，免税销售额仍明显低于2019年水平，或公司难以维持枢纽机场的核心垄断地位，则此前的逻辑错误，需重新评估。",
+            "out_of_circle": false,
+            "historical_parallel": "2003年非典后上海机场股价经历暴跌后随客流恢复大幅反弹，本次疫情冲击与其有相似性，但免税合同变化增加了不确定性。",
+            "new_evidence": [],
+            "evidence_exhausted": false,
+            "market_consensus": "上海机场的免税红利已消失，长期增长逻辑被破坏，估值中枢将永久下移。",
+            "consensus_flaw": "分析差与行为差：市场线性外推当前压力，忽略了国际客流恢复时的基数效应和机场枢纽的长期可逆性；同时股价已超跌，利空被过度反应。",
+            "odds_assessment": "赔率约3:1（上行空间约60%，下行风险约20%）",
+            "is_reversible": true,
+            "catalyst": "国际航线加速恢复、免税销售额数据回暖、浦东机场四期工程进展、对未来免税合同调整的预期"
+          },
+          "run_id": "5ca41c68-2015-42f2-8c9f-ddc778c95053"
+        }
+      ],
+      "metrics": {
+        "explicit_crosstalk_rate": 0.0,
+        "implicit_crosstalk_rate": 0.0,
+        "fabricated_number_rate": 0.25,
+        "citation_divergence": {
+          "pairwise_distances": {
+            "buffett|munger": 0.0,
+            "buffett|duan": 0.0,
+            "buffett|feng_liu": 1.0,
+            "duan|munger": 0.0,
+            "feng_liu|munger": 1.0,
+            "duan|feng_liu": 1.0
+          },
+          "mean_distance": 0.5
+        }
+      }
+    },
+    "group4": {
+      "id": "group4",
+      "features": "missing",
+      "prompt": "retained",
+      "model": "strong",
+      "status": "complete",
+      "input_mode": "frozen_dossier",
+      "records": [
+        {
+          "agent": "buffett",
+          "status": "ok",
+          "model": "deepseek-v4-pro",
+          "raw_response": "{\n  \"signal\": \"skip\",\n  \"conviction\": 20,\n  \"core_thesis\": \"机场业务本身简单，但上海机场的盈利核心已从稳定的航空性收入转向受政策与合同影响的免税业务，这超出了我的能力圈，且当前缺乏足够安全边际。\",\n  \"key_metrics\": [\n    \"机场区域垄断特性\",\n    \"免税收入曾占利润主要部分\",\n    \"2021年后免税合同由保底变封顶\",\n    \"国际客流恢复缓慢\",\n    \"持续资本开支需求\"\n  ],\n  \"risks\": [\n    \"国际客流恢复不及预期\",\n    \"免税政策与合同进一步不利\",\n    \"资本开支超支\",\n    \"估值未提供足够安全边际\"\n  ],\n  \"what_would_change_my_mind\": \"如果国际客流恢复到疫情前水平且免税合同重新获得有利条款，或者股价出现大幅下跌至能提供明确安全边际的水平，我会重新评估。\",\n  \"out_of_circle\": true,\n  \"historical_parallel\": null,\n  \"new_evidence\": [\n    \"机场区域垄断特性\",\n    \"免税收入曾占利润主要部分\",\n    \"2021年后免税合同由保底变封顶\",\n    \"国际客流恢复缓慢\",\n    \"持续资本开支需求\"\n  ],\n  \"evidence_exhausted\": false\n}",
+          "usage": {
+            "prompt_tokens": 938,
+            "completion_tokens": 1598,
+            "total_tokens": 2536,
+            "prompt_tokens_details": {
+              "cached_tokens": 896
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 1313
+            },
+            "prompt_cache_hit_tokens": 896,
+            "prompt_cache_miss_tokens": 42
+          },
+          "system_prompt_sha256": "1e55a13cdd15e823462e89c891a815dc95c504afd4d6ee939716510fd297b55c",
+          "user_message_sha256": "5f72743bd9baf3b941d59f1bb3d46f78d3ca42a22791e9a3d4cc8f22e41ca591",
+          "dossier_sha256": "f588d5bf911aefd90348d9a7d150280847b9af938bf5b06d8548a3afeb2a00c9",
+          "output": {
+            "name": "buffett",
+            "signal": "skip",
+            "conviction": 20,
+            "core_thesis": "机场业务本身简单，但上海机场的盈利核心已从稳定的航空性收入转向受政策与合同影响的免税业务，这超出了我的能力圈，且当前缺乏足够安全边际。",
+            "key_metrics": [
+              "机场区域垄断特性",
+              "免税收入曾占利润主要部分",
+              "2021年后免税合同由保底变封顶",
+              "国际客流恢复缓慢",
+              "持续资本开支需求"
+            ],
+            "risks": [
+              "国际客流恢复不及预期",
+              "免税政策与合同进一步不利",
+              "资本开支超支",
+              "估值未提供足够安全边际"
+            ],
+            "what_would_change_my_mind": "如果国际客流恢复到疫情前水平且免税合同重新获得有利条款，或者股价出现大幅下跌至能提供明确安全边际的水平，我会重新评估。",
+            "out_of_circle": true,
+            "historical_parallel": null,
+            "new_evidence": [
+              "机场区域垄断特性",
+              "免税收入曾占利润主要部分",
+              "2021年后免税合同由保底变封顶",
+              "国际客流恢复缓慢",
+              "持续资本开支需求"
+            ],
+            "evidence_exhausted": false
+          },
+          "run_id": "5ca41c68-2015-42f2-8c9f-ddc778c95053"
+        },
+        {
+          "agent": "munger",
+          "status": "ok",
+          "model": "deepseek-v4-pro",
+          "raw_response": "{\n  \"signal\": \"skip\",\n  \"conviction\": 10,\n  \"core_thesis\": \"特征数据为空，无法形成有依据的判断；需关键运营数据（国际客流、免税合同条款、资本开支）后再评估。\",\n  \"key_metrics\": [],\n  \"risks\": [\n    \"数据缺失导致误判\",\n    \"机场商业模式受行政与疫情冲击影响大\",\n    \"免税收入占比过高导致盈利波动\"\n  ],\n  \"what_would_change_my_mind\": \"提供近三年国际客流、免税收入占比、资产负债率及自由现金流数据。\",\n  \"out_of_circle\": false,\n  \"historical_parallel\": null,\n  \"new_evidence\": [],\n  \"evidence_exhausted\": false\n}",
+          "usage": {
+            "prompt_tokens": 900,
+            "completion_tokens": 1077,
+            "total_tokens": 1977,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 915
+            },
+            "prompt_cache_hit_tokens": 0,
+            "prompt_cache_miss_tokens": 900
+          },
+          "system_prompt_sha256": "2aba70d52b4118c8f8571acc18ed2b9ca43c25a19ddfb3c437ceba22d56872cb",
+          "user_message_sha256": "5f72743bd9baf3b941d59f1bb3d46f78d3ca42a22791e9a3d4cc8f22e41ca591",
+          "dossier_sha256": "f588d5bf911aefd90348d9a7d150280847b9af938bf5b06d8548a3afeb2a00c9",
+          "output": {
+            "name": "munger",
+            "signal": "skip",
+            "conviction": 10,
+            "core_thesis": "特征数据为空，无法形成有依据的判断；需关键运营数据（国际客流、免税合同条款、资本开支）后再评估。",
+            "key_metrics": [],
+            "risks": [
+              "数据缺失导致误判",
+              "机场商业模式受行政与疫情冲击影响大",
+              "免税收入占比过高导致盈利波动"
+            ],
+            "what_would_change_my_mind": "提供近三年国际客流、免税收入占比、资产负债率及自由现金流数据。",
+            "out_of_circle": false,
+            "historical_parallel": null,
+            "new_evidence": [],
+            "evidence_exhausted": false
+          },
+          "run_id": "5ca41c68-2015-42f2-8c9f-ddc778c95053"
+        },
+        {
+          "agent": "duan",
+          "status": "ok",
+          "model": "deepseek-v4-pro",
+          "raw_response": "{\n  \"signal\": \"skip\",\n  \"conviction\": 65,\n  \"core_thesis\": \"疫情后免税协议重签导致盈利模式弱化，不确定性高，暂时回避。\",\n  \"key_metrics\": [\n    \"2019年免税收入约50亿元，占总收入近50%\",\n    \"2021年与日上上海签订补充协议，免税收入改为与实际客流挂钩，保底大幅下降\",\n    \"2022年公司亏损，2023年扭亏为盈但净利润远低于疫情前\"\n  ],\n  \"risks\": [\n    \"国际客流恢复不及预期\",\n    \"免税消费趋势变化，线上渠道分流\",\n    \"政策风险，如免税牌照放开\",\n    \"扩建资本开支增加折旧压力\"\n  ],\n  \"what_would_change_my_mind\": \"如果国际客流恢复超预期且免税协议重新有利，或者估值跌到具有安全边际，会重新考虑。\",\n  \"out_of_circle\": false,\n  \"historical_parallel\": \"大型基础设施在特定事件后商业模式重塑，类似港口在贸易格局变化后的价值重估。\",\n  \"new_evidence\": [\n    \"2023年上海机场扭亏为盈，但净利润远低于疫情前\",\n    \"疫情前免税收入占比极高，是利润主要来源\"\n  ],\n  \"evidence_exhausted\": false\n}",
+          "usage": {
+            "prompt_tokens": 680,
+            "completion_tokens": 1614,
+            "total_tokens": 2294,
+            "prompt_tokens_details": {
+              "cached_tokens": 640
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 1326
+            },
+            "prompt_cache_hit_tokens": 640,
+            "prompt_cache_miss_tokens": 40
+          },
+          "system_prompt_sha256": "e1289ad6fe3b91f0bac2b17b67bb79b6fddb7977d428e9a77f7cb1be1e898d4f",
+          "user_message_sha256": "5f72743bd9baf3b941d59f1bb3d46f78d3ca42a22791e9a3d4cc8f22e41ca591",
+          "dossier_sha256": "f588d5bf911aefd90348d9a7d150280847b9af938bf5b06d8548a3afeb2a00c9",
+          "output": {
+            "name": "duan",
+            "signal": "skip",
+            "conviction": 65,
+            "core_thesis": "疫情后免税协议重签导致盈利模式弱化，不确定性高，暂时回避。",
+            "key_metrics": [
+              "2019年免税收入约50亿元，占总收入近50%",
+              "2021年与日上上海签订补充协议，免税收入改为与实际客流挂钩，保底大幅下降",
+              "2022年公司亏损，2023年扭亏为盈但净利润远低于疫情前"
+            ],
+            "risks": [
+              "国际客流恢复不及预期",
+              "免税消费趋势变化，线上渠道分流",
+              "政策风险，如免税牌照放开",
+              "扩建资本开支增加折旧压力"
+            ],
+            "what_would_change_my_mind": "如果国际客流恢复超预期且免税协议重新有利，或者估值跌到具有安全边际，会重新考虑。",
+            "out_of_circle": false,
+            "historical_parallel": "大型基础设施在特定事件后商业模式重塑，类似港口在贸易格局变化后的价值重估。",
+            "new_evidence": [
+              "2023年上海机场扭亏为盈，但净利润远低于疫情前",
+              "疫情前免税收入占比极高，是利润主要来源"
+            ],
+            "evidence_exhausted": false
+          },
+          "run_id": "5ca41c68-2015-42f2-8c9f-ddc778c95053"
+        },
+        {
+          "agent": "feng_liu",
+          "status": "ok",
+          "model": "deepseek-v4-pro",
+          "raw_response": "{\n  \"signal\": \"bullish\",\n  \"conviction\": 70,\n  \"core_thesis\": \"市场对上海机场的悲观预期过度聚焦于短期疫情和免税合同重签损失，但忽略了国际客流恢复带来的长期价值回归和枢纽机场的稀缺性。\",\n  \"key_metrics\": [\n    \"国际客流恢复率约70-80%（2024年）\",\n    \"免税合同已重签，保底大幅降低，未来弹性大\",\n    \"PB处于历史低位（约2倍以下）\",\n    \"浦东机场三期扩建增加产能\"\n  ],\n  \"risks\": [\n    \"国际航线恢复不及预期\",\n    \"免税消费习惯改变，线上分流\",\n    \"地缘政治影响国际航班\",\n    \"重资产折旧压力\"\n  ],\n  \"what_would_change_my_mind\": \"如果国际客流恢复停滞或免税合同再次下调保底，且长期逻辑被证伪，我会转为看空。\",\n  \"out_of_circle\": false,\n  \"historical_parallel\": \"类似2003年SARS后的机场股，或2013年塑化剂事件后的白酒股，恐慌性抛售后的价值回归。\",\n  \"new_evidence\": [\n    \"2024年国际航班恢复数据\",\n    \"免税合同补充协议后的实际租金收入\",\n    \"机场商业客单价变化\"\n  ],\n  \"evidence_exhausted\": false,\n  \"market_consensus\": \"上海机场因疫情和免税合同重签，盈利确定性受损，商业模式受挑战。\",\n  \"consensus_flaw\": \"市场用线性外推将疫情冲击视为永久性损失，属于行为差，过度反应了短期利空，忽略了枢纽机场的垄断性和国际客流恢复的必然性。\",\n  \"odds_assessment\": \"赔率约3:1，若国际客流完全恢复，盈利恢复至50亿以上，当前市值下行空间有限。\",\n  \"is_reversible\": true,\n  \"catalyst\": \"国际航班大幅恢复、免税合同重新谈判提高保底或扣点率、消费回流政策。\"\n}",
+          "usage": {
+            "prompt_tokens": 891,
+            "completion_tokens": 1429,
+            "total_tokens": 2320,
+            "prompt_tokens_details": {
+              "cached_tokens": 768
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 987
+            },
+            "prompt_cache_hit_tokens": 768,
+            "prompt_cache_miss_tokens": 123
+          },
+          "system_prompt_sha256": "52a984258e3a7db0d4bf975e0d20265deabde979c17c1af5038057d1606634f5",
+          "user_message_sha256": "5f72743bd9baf3b941d59f1bb3d46f78d3ca42a22791e9a3d4cc8f22e41ca591",
+          "dossier_sha256": "f588d5bf911aefd90348d9a7d150280847b9af938bf5b06d8548a3afeb2a00c9",
+          "output": {
+            "name": "feng_liu",
+            "signal": "bullish",
+            "conviction": 70,
+            "core_thesis": "市场对上海机场的悲观预期过度聚焦于短期疫情和免税合同重签损失，但忽略了国际客流恢复带来的长期价值回归和枢纽机场的稀缺性。",
+            "key_metrics": [
+              "国际客流恢复率约70-80%（2024年）",
+              "免税合同已重签，保底大幅降低，未来弹性大",
+              "PB处于历史低位（约2倍以下）",
+              "浦东机场三期扩建增加产能"
+            ],
+            "risks": [
+              "国际航线恢复不及预期",
+              "免税消费习惯改变，线上分流",
+              "地缘政治影响国际航班",
+              "重资产折旧压力"
+            ],
+            "what_would_change_my_mind": "如果国际客流恢复停滞或免税合同再次下调保底，且长期逻辑被证伪，我会转为看空。",
+            "out_of_circle": false,
+            "historical_parallel": "类似2003年SARS后的机场股，或2013年塑化剂事件后的白酒股，恐慌性抛售后的价值回归。",
+            "new_evidence": [
+              "2024年国际航班恢复数据",
+              "免税合同补充协议后的实际租金收入",
+              "机场商业客单价变化"
+            ],
+            "evidence_exhausted": false,
+            "market_consensus": "上海机场因疫情和免税合同重签，盈利确定性受损，商业模式受挑战。",
+            "consensus_flaw": "市场用线性外推将疫情冲击视为永久性损失，属于行为差，过度反应了短期利空，忽略了枢纽机场的垄断性和国际客流恢复的必然性。",
+            "odds_assessment": "赔率约3:1，若国际客流完全恢复，盈利恢复至50亿以上，当前市值下行空间有限。",
+            "is_reversible": true,
+            "catalyst": "国际航班大幅恢复、免税合同重新谈判提高保底或扣点率、消费回流政策。"
+          },
+          "run_id": "5ca41c68-2015-42f2-8c9f-ddc778c95053"
+        }
+      ],
+      "metrics": {
+        "explicit_crosstalk_rate": 0.0,
+        "implicit_crosstalk_rate": 0.0,
+        "fabricated_number_rate": 0.5,
+        "citation_divergence": {
+          "pairwise_distances": {
+            "buffett|munger": 0.0,
+            "buffett|duan": 1.0,
+            "buffett|feng_liu": 1.0,
+            "duan|munger": 1.0,
+            "feng_liu|munger": 1.0,
+            "duan|feng_liu": 1.0
+          },
+          "mean_distance": 0.8333333333333334
+        }
+      }
+    }
+  },
+  "run_id": "5ca41c68-2015-42f2-8c9f-ddc778c95053"
+}

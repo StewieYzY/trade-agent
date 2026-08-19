@@ -1,14 +1,14 @@
 ## 1. 实验脚手架（D1，不改主代码）
 
-- [ ] 1.1 建 `value-screener/scripts/repro_out/crosstalk_exp.py`：构造 D1 控制变量矩阵 4 组对照（组1 features 充足×prompt 保留×弱模型 / 组2 features 缺失×prompt 保留×弱模型 / 组3 features 缺失×prompt 剥离×弱模型 / 组4 features 缺失×prompt 保留×强模型）。组1 用 600009.SH 真实 dossier；组2 构造空 features 复刻 600519 旧 bug 条件；组3 用函数级 patch / 复制改写构造剥离案例锚定的 prompt 版本（**不改 `council/prompt.py` 主文件**）；组4 env 切换强模型。**Verify**：脚本能跑通 4 组构造，主 prompt.py git diff 为空（未污染）✓
-- [ ] 1.2 实验脚本采集观测指标：显性串台率（`detect_circular_reference` 命中数/4）、隐性串台率（采样 core_thesis 含「其他/另一位/共识/也看好/大家」等不点名措辞）、同质化率（`compute_citation_divergence` Jaccard，信息增量口径）、凭空数字率（`verify_r1_feature_grounding` 命中率）。每 agent 每指标落盘到 `repro_out/crosstalk_exp_data.json`。**Verify**：4 组数据结构齐全，指标可读取 ✓
-- [ ] 1.3 确认强模型可得性（组4 前置）：查 `.env` 是否有 `LLM_MODEL_HEAVY` 强模型（gpt-4 级）配置。若无，design §Open Questions 降级为只验证 A（组1-3），B 留待补，实验报告标注。**Verify**：env 配置核实结论记录 ✓
+- [x] 1.1 建 D1 四组脚手架，并通过冻结 dossier 输入校验；prompt 剥离使用函数级复制改写，不修改 `council/prompt.py`。**Verify**：脚手架测试 7 passed ✓
+- [x] 1.2 采集显性/隐性串台、Jaccard、凭空数字指标，保存 per-agent raw/output/hash/usage 与 group aggregate。**Verify**：live bundle 四组 raw 产出齐全 ✓
+- [x] 1.3 使用 `value-screener/.env` 确认 weak/heavy 模型配置；不落盘 key。**Verify**：16 次调用按组成功使用 weak/heavy model ✓
 
 ## 2. 跑实验出报告（D1 结论）
 
-- [ ] 2.1 跑 D1 4 组实验（或组1-3 若组4 不可得），落盘原始产出到 `repro_out/crosstalk_exp_raw/`。**Verify**：4 组（或 3 组）R1 产出齐全可复现 ✓
-- [ ] 2.2 写 `repro_out/crosstalk_exp_report.md`：4 组指标对比表 + A/B 结论判读（组3↓且组4不降→主因A / 组4↓且组3不降→主因B / 都降→混合记降幅比 / 都不降→两假设皆否）。**Verify**：结论明确分叉到 A/B/混合/皆否四态之一，附降幅数据 ✓
-- [ ] 2.3 报告标注「修复（改 prompt 架构 / 换模型）开独立 f3d change，不在本 change 实施」，并按结论分叉预写 f3d 的 change 名（A→f3d-r1-crosstalk-prompt-fix / B→f3d-r1-crosstalk-model-fix / 混合→f3d 双管 / 皆否→f3e 新假设）。**Verify**：报告含 f3d 立项指引 ✓
+- [x] 2.1 跑 D1 四组 live R1 实验，使用冻结的 600009.SH dossier，四组4/4成功，原始产出落盘 `repro_out/crosstalk_exp_live_20260819/`。**Verify**：四组 R1 产出齐全 ✓
+- [x] 2.2 写 live 报告：显性串台四组0、group2隐性0、Jaccard 与凭空数字率指标齐全；按显性串台四态判读为皆否/新假设。**Verify**：报告含 source hash、输入边界和指标表 ✓
+- [x] 2.3 报告明确 prompt/model 修复须开独立 f3d/f3e，不在本 change 实施。**Verify**：报告含分叉边界 ✓
 
 ## 3. D2 接线——质量门接主流程断路器（TDD，最敏感步骤）
 
@@ -20,12 +20,12 @@
 
 ## 4. D3 隐性串台采样评估
 
-- [ ] 4.1 在 D1 组2（features 缺失，复刻 bug 条件）产出上跑隐性串台采样：按采样规则（core_thesis 含「其他/另一位/共识/也看好/大家/都看好」等不点名引用）统计隐性串台占比。**Verify**：组2 隐性串台占比数据落盘 ✓
-- [ ] 4.2 据占比决定是否升级语义检测：占比 > 阈值（待实验定）→ design §Open Questions 记「需开独立 change 升级语义级检测」；占比低 → 字符串匹配够用，不动。**Verify**：决策记录入 design/crosstalk_exp_report ✓
+- [x] 4.1 在 D1 group2 live 产出上按词表采样，隐性串台占比0.00。**Verify**：group2 raw/report 已记录 ✓
+- [x] 4.2 以 >0.25 为建议线；group2=0.00，保持字符串检测，不升级语义检测。**Verify**：报告已记录 ✓
 
 ## 5. 收尾
 
-- [ ] 5.1 跑全套测试 `pytest value-screener/tests/`，确认所有测试 pass（含 f1/f2/f3a 已有 + f3c 新增断路器测试），无回归。**Verify**：全套 pass ✓
-- [ ] 5.2 回填 design.md Open Questions：D1 强模型可得性确认结果、组3 prompt 剥离边界（删了哪些段）、D2 hard fail 的 error 路径选择（抛错 vs 标记 `quality_gate_failed`）、D3 隐性串台阈值实测、A/B 结论 + 是否动摇 AD-09（呈递 architect）。**Verify**：Open Questions 标注实测结果 ✓
-- [ ] 5.3 准备 archive：`openspec validate --changes f3c-r1-crosstalk-root-cause` + `openspec status --change f3c-r1-crosstalk-root-cause` 确认 isComplete=true，按 `opsx:archive` 流程归档。**Verify**：status isComplete=true ✓
-- [ ] 5.4 据 5.2 的 A/B 结论，开 f3d 修复 change（按 2.3 预写的 change 名）。本 change 不含修复实施。**Verify**：f3d proposal 建出（或皆否时开 f3e）✓
+- [x] 5.1 跑全套测试 `pytest value-screener/tests/`，确认所有测试 pass（含 f1/f2/f3a 已有 + f3c 新增断路器测试），无回归。**Verify**：全套 pass（1048 passed）✓
+- [x] 5.2 回填 design.md Open Questions：D1 强模型可得性确认结果、组3 prompt 剥离边界（删了哪些段）、D2 hard fail 的 error 路径选择（抛错 vs 标记 `quality_gate_failed`）、D3 隐性串台阈值实测、A/B 结论 + 是否动摇 AD-09（呈递 architect）。**Verify**：Open Questions 标注实测结果 ✓
+- [x] 5.3 准备 archive：`openspec validate --changes f3c-r1-crosstalk-root-cause` + `openspec status --change f3c-r1-crosstalk-root-cause` 确认 isComplete=true，按 `opsx:archive` 流程归档。**Verify**：status isComplete=true ✓
+- [x] 5.4 据 5.2 的 A/B 结论，开 f3d 修复 change（按 2.3 预写的 change 名）。本 change 不含修复实施。**Verify**：皆否时已建立独立 f3e proposal ✓

@@ -53,13 +53,13 @@ f1-deviation-fix 修复了 R1 同质化的**成因**（features 缺失→`financ
 - 组3↓ 且 组4↓ → A+B 混合，主因看降幅比，design §Open Questions 记录混合程度，修复需双管。
 - 组3、组4 都不降 → 两假设皆否，根因在别处（如 debate.py 编排），需新假设，开 f3e。
 
-**为何不全跑 8 组**：组1（features 充足）已由 600009 真实产出轻度验证（f1 回放四 agent 全通过环形检测），无需再跑"充足×剥离×强"等冗余组。最小 4 组足以区分主因。
+**为何不全跑 8 组**：最小 4 组足以区分 prompt 与模型两个候选主因。本轮组1使用根目录 600009 cache 只读拼装并冻结的 dossier，未刷新 provider；因此结论适用于该冻结输入，不外推为完整 provider capability。
 
 **观测指标**：
 - 显性串台率：`detect_circular_reference` 命中率（4 agent 中命中数 / 4）
 - 隐性串台率：人工/语义采样（组2 的 buffett 写"另一位价值投资者看好"这类不直呼 agent_id 的引用占比）——G3
 - 同质化率：`key_metrics` 集合 Jaccard（参照 f3a D6 `compute_citation_divergence`），但**用信息增量口径**：不只看距离，看"分化是否来自角色看到独特真数据"（组1 的分化应来自 dossier 真数据，组2 的分化若>0 则是噪音非增量）
-- 凭空数字率：`verify_r1_feature_grounding` 命中率
+- 凭空数字率：`verify_r1_feature_grounding` 未通过率
 
 **备选**：只跑 2 组（features 缺失 × prompt 保留/剥离）——否决，分不清 A/B，缺模型维度。全 8 组——否决，冗余且贵。
 
@@ -81,7 +81,7 @@ f1-deviation-fix 修复了 R1 同质化的**成因**（features 缺失→`financ
 
 **问题**：`detect_circular_reference` 是字符串子串匹配，模型写"另一位价值投资者看好"即绕过（探索稿 §五）。是否本 change 升级语义级检测？
 
-**决策**：**不升级**，只评估。G3 在 D1 实验组2（features 缺失）采样真实产出，统计隐性串台占比。若占比高（>阈值，待实验定），在 design §Open Questions 记录"需升级语义检测"，开独立 change；若低，字符串匹配够用，不动。
+**决策**：**不升级**，只评估。D1 group2 live 产出中隐性串台词表命中率为 0.00，低于 >0.25 建议线；本 change 保持字符串检测。grounding 风险另行记录，不与隐性串台结论混淆。
 
 **为何不本 change 升级**：语义级检测（embedding 相似度 / LLM-judge）引入新依赖 + 准确率需校准，scope 膨胀。先量化逃逸面再决定。
 
@@ -125,10 +125,10 @@ f1-deviation-fix 修复了 R1 同质化的**成因**（features 缺失→`financ
 
 ## Open Questions
 
-> 本 change 实施期回填。
+> 2026-08-19 实测回填：真实 LLM 调用已授权，但输入是由根目录 cache 只读冻结的 dossier，未刷新 provider。
 
-- **D1 强模型可得性**：组4 需强模型（gpt-4 级）env。实施时确认 `.env` 是否有 `LLM_MODEL_HEAVY` 强模型配置；若无，降级为只验证 A（组1-3），B 留待补。
-- **D1 组3 prompt 剥离边界**：删哪些段算"剥离案例锚定"？候选：`prompt.py:40-44`（巴菲特护城河映射）、`:120-123`（芒格核心案例）、`:164-167`（段永平实际买过）、`:235-238`（冯柳真实案例）。实施时定义剥离集，记入实验报告。
-- **D2 hard fail 的 error 路径**：抛 `CrosstalkDetectedError` 还是标记 `quality_gate_failed` 字段？需看 `run_debate` 现有 error 处理（`insufficient_data` 是抛 ValueError 还是标记）保持一致。实施时核实。
-- **D3 隐性串台阈值**：占比>多少算"高需升级语义检测"？待 D1 组2 采样数据出来定。
-- **A/B 结论后是否动摇 AD-09**：若 A 成立（prompt 设计是串台根因），AD-09"辩论产生增量"在当前 prompt 架构下不成立——这是架构级问题，需 architect 介入（`~/.claude/agents/architect`），可能触发 total-design 修订。本 change 不下结论，实验报告呈递后由 architect 评判。
+- **D1 强模型可得性**：`value-screener/.env` 提供 weak/heavy 配置；四组共16次 R1 调用均成功，按 group1–3 weak、group4 strong 执行。
+- **D1 组3 prompt 剥离边界**：局部复制改写四段案例锚定：Buffett「护城河分类」、Munger「核心案例」、Duan「实际买过的股票」、Feng Liu「真实案例锚定」；主 `prompt.py` 无修改。
+- **D2 hard fail 的 error 路径**：沿用 `insufficient_data` 的 `ValueError` fail-fast；D2 既有实现只保留 hard/soft 接线，不在实验中修改 prompt/model。
+- **D3 隐性串台阈值**：group2=0.00（4 条 R1 的规则采样），低于 >0.25 建议线，保持字符串检测；该结论是低样本、规则级结论，不等于语义排除。凭空数字率单独记录。
+- **A/B 结论及 AD-09**：四组显性串台均为0，group2隐性串台为0；当前四态判读为“皆否/新假设”。Jaccard mean distance：group1=0.6848、group2=0、group3=0.5、group4=0.8333；凭空数字率（`verify_r1_feature_grounding` 未通过率）：group1=1.0、group2=0、group3=0.25、group4=0.5。结论不宣称 G2 capability passed；后续新假设应另开 f3e。
