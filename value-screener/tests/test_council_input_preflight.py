@@ -193,7 +193,10 @@ async def test_valid_explicit_dossier_reaches_existing_cache_path():
         result = await run_debate("002156.SZ", features=_valid_dossier(), force=False)
 
     assert result is cached_success
-    mock_cache.assert_called_once_with("002156.SZ")
+    mock_cache.assert_called_once_with(
+        "002156.SZ",
+        expected_execution_mode="council",
+    )
 
 
 @pytest.mark.anyio
@@ -211,7 +214,10 @@ async def test_none_features_builds_then_validates_before_cache():
 
     assert result is cached_success
     mock_dossier.assert_called_once_with("002156.SZ")
-    mock_cache.assert_called_once_with("002156.SZ")
+    mock_cache.assert_called_once_with(
+        "002156.SZ",
+        expected_execution_mode="council",
+    )
 
 
 @pytest.mark.anyio
@@ -230,7 +236,10 @@ async def test_complete_legacy_flat_snapshot_is_normalized_before_cache():
 
     assert result is cached_success
     mock_dossier.assert_called_once_with("002156.SZ", core_snapshot=flat_snapshot)
-    mock_cache.assert_called_once_with("002156.SZ")
+    mock_cache.assert_called_once_with(
+        "002156.SZ",
+        expected_execution_mode="council",
+    )
 
 
 @pytest.mark.anyio

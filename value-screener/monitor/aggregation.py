@@ -128,10 +128,9 @@ def _read_l2_cache(ticker: str, scout_cache: ScoutCache) -> dict[str, Any] | Non
 def _read_l3_output(ticker: str, run_date: str, watchlist_dir: Path) -> dict[str, Any] | None:
     """读取 L3 per-ticker JSON 文件（g1-canonical-run-identity D5 A+: canonical 双向回退）.
 
-    文件名 pattern 按序尝试，优先返回内容完整的真数据文件（非空壳）：
-    1. {date}_{canonical}.json（带后缀，如 2026-07-13_600009.SH.json，真数据）
-    2. {date}_{canonical_code}.json（纯数字，如 2026-07-13_600009.json，可能是空壳）
-    3. {date}_{ticker.replace('.', '_')}.json（旧 replace 形式，向后兼容）
+    优先读取新的 run-scoped Council 输出：
+    `watchlist/{canonical}/{run_id}/{date}.json`。同一 ticker/date 有多次运行时，
+    按文件修改时间选择最新 run，再回退到旧扁平文件并优先内容完整的真数据。
 
     caller 传 canonical ticker（600009.SH）时优先命中带后缀真数据；
     caller 传纯数字 ticker（600009）时回退也试带后缀形式。
@@ -151,7 +150,106 @@ def _read_l3_output(ticker: str, run_date: str, watchlist_dir: Path) -> dict[str
         f"{run_date}_{ticker.replace('.', '_')}.json",  # 旧 replace 形式
     ]
 
-    # 收集所有命中的文件，优先返回内容完整的（非空壳）
+    def extract_l3_data(
+        l3_data: dict[str, Any],
+        *,
+        source_run_id: str | None = None,
+    ) -> dict[str, Any]:
+        from data.lib.quality_status import (
+            is_success_cache_eligible,
+            quality_record_path as build_quality_record_path,
+            read_quality_record,
+        )
+
+        payload_ticker = l3_data.get("ticker")
+        payload_run_id = l3_data.get("run_id")
+        expected_run_id = source_run_id or payload_run_id
+        expected_record_suffix = (
+            f"quality_status/{canonical}/{expected_run_id}/record.json"
+            if expected_run_id
+            else None
+        )
+        quality_record_path = l3_data.get("quality_record_path")
+        quality_proof_valid = (
+            payload_ticker == canonical
+            and payload_run_id == expected_run_id
+            and isinstance(quality_record_path, str)
+            and expected_record_suffix is not None
+            and quality_record_path.replace("\\", "/").endswith(
+                expected_record_suffix
+            )
+        )
+        quality_record = None
+        if quality_proof_valid:
+            quality_root = watchlist_dir.parent
+            expected_quality_path = build_quality_record_path(
+                quality_root,
+                canonical,
+                expected_run_id,
+            ).resolve()
+            try:
+                quality_path = Path(quality_record_path)
+                if not quality_path.is_absolute():
+                    quality_path = quality_root / quality_path
+                quality_proof_valid = (
+                    quality_path.resolve() == expected_quality_path
+                )
+                if quality_proof_valid:
+                    quality_record = read_quality_record(
+                        quality_root,
+                        canonical,
+                        expected_run_id,
+                    )
+                    quality_proof_valid = quality_record is not None
+            except (OSError, TypeError, ValueError):
+                quality_proof_valid = False
+
+        run_quality_status = l3_data.get("run_quality_status")
+        run_quality_reasons = l3_data.get("run_quality_reasons")
+        final_quality_gate = l3_data.get("final_quality_gate")
+        success_cache_eligible = l3_data.get("success_cache_eligible")
+        if quality_record is not None:
+            run_quality_status = quality_record.status
+            run_quality_reasons = list(quality_record.reasons)
+            final_quality_gate = quality_record.final_quality_gate
+            success_cache_eligible = is_success_cache_eligible(quality_record)
+        return {
+            "l3_verdict": l3_data.get("final_verdict", "unknown") or "unknown",
+            "l3_conviction": l3_data.get("conviction"),
+            "key_variables": l3_data.get("key_variables") or None,
+            "consensus_summary": l3_data.get("consensus_summary"),
+            "dissent_points": l3_data.get("dissent_points"),
+            "pending_verification": l3_data.get("pending_verification"),
+            "run_quality_status": run_quality_status,
+            "run_quality_reasons": run_quality_reasons,
+            "final_quality_gate": final_quality_gate,
+            "success_cache_eligible": success_cache_eligible,
+            "quality_record_path": quality_record_path,
+            "l3_run_id": l3_data.get("run_id"),
+            "_quality_proof_valid": quality_proof_valid,
+        }
+
+    run_scoped_paths: list[tuple[int, str, Path]] = []
+    for candidate in (watchlist_dir / canonical).glob(f"*/{run_date}.json"):
+        try:
+            mtime_ns = candidate.stat().st_mtime_ns
+        except OSError:
+            continue
+        run_scoped_paths.append((mtime_ns, candidate.parent.name, candidate))
+    run_scoped_paths.sort(
+        reverse=True,
+    )
+    for _, _, path in run_scoped_paths:
+        try:
+            with path.open(encoding="utf-8") as handle:
+                l3_data = json.load(handle)
+                if l3_data.get("date") != run_date:
+                    continue
+                return extract_l3_data(l3_data, source_run_id=path.parent.name)
+        except (json.JSONDecodeError, OSError):
+            continue
+
+    # 收集旧扁平格式命中的文件，优先返回内容完整的（非空壳）
     candidates: list[dict[str, Any]] = []
     for pattern in patterns:
         p = watchlist_dir / pattern
@@ -161,15 +259,7 @@ def _read_l3_output(ticker: str, run_date: str, watchlist_dir: Path) -> dict[str
                     l3_data = json.load(f)
             except (json.JSONDecodeError, OSError):
                 continue
-            extracted = {
-                "l3_verdict": l3_data.get("final_verdict", "unknown") or "unknown",
-                "l3_conviction": l3_data.get("conviction"),
-                "key_variables": l3_data.get("key_variables") or None,
-                "consensus_summary": l3_data.get("consensus_summary"),
-                "dissent_points": l3_data.get("dissent_points"),
-                "pending_verification": l3_data.get("pending_verification"),
-            }
-            candidates.append(extracted)
+            candidates.append(extract_l3_data(l3_data))
 
     if not candidates:
         return None
@@ -189,6 +279,14 @@ def _check_l3_incomplete(l3_data: dict[str, Any] | None) -> bool:
     """
     if not l3_data:
         return False
+
+    if (
+        l3_data.get("run_quality_status") != "complete"
+        or l3_data.get("final_quality_gate") != "passed"
+        or l3_data.get("success_cache_eligible") is not True
+        or l3_data.get("_quality_proof_valid") is not True
+    ):
+        return True
 
     null_fields = [
         l3_data.get("l3_conviction") is None,
@@ -264,6 +362,22 @@ def aggregate_watchlist(
             "l3_verdict": l3_verdict,
             "l3_conviction": l3_conviction,
             "key_variables": key_variables,
+            "run_quality_status": (
+                l3_data.get("run_quality_status") if l3_data else None
+            ),
+            "run_quality_reasons": (
+                l3_data.get("run_quality_reasons") if l3_data else None
+            ),
+            "final_quality_gate": (
+                l3_data.get("final_quality_gate") if l3_data else None
+            ),
+            "success_cache_eligible": (
+                l3_data.get("success_cache_eligible") if l3_data else None
+            ),
+            "quality_record_path": (
+                l3_data.get("quality_record_path") if l3_data else None
+            ),
+            "l3_run_id": l3_data.get("l3_run_id") if l3_data else None,
             "last_updated": run_date,
         }
 

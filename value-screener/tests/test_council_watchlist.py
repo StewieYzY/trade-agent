@@ -203,7 +203,13 @@ class TestRunDebateWritesWatchlist:
 
         today = date.today().isoformat()
         # g1-canonical-run-identity D5 A+：watchlist 文件名 + ticker 字段统一 canonical（600519.SH）
-        output_path = watchlist_dir / "watchlist" / f"{today}_600519.SH.json"
+        output_path = (
+            watchlist_dir
+            / "watchlist"
+            / "600519.SH"
+            / result.run_id
+            / f"{today}.json"
+        )
         assert output_path.exists()
 
         data = json.loads(output_path.read_text(encoding="utf-8"))

@@ -105,6 +105,10 @@ class TestAggregation:
             "consensus_summary": None,
             "dissent_points": None,
             "pending_verification": None,
+            "run_quality_status": "complete",
+            "final_quality_gate": "passed",
+            "success_cache_eligible": True,
+            "_quality_proof_valid": True,
         }
         assert _check_l3_incomplete(complete_data) is False
 
@@ -496,6 +500,212 @@ class TestReadL3OutputCanonicalFallback:
         result = _read_l3_output("600009", "2026-07-13", temp_watchlist_dir)
         assert result is not None
         assert result["l3_conviction"] == 80, "纯数字输入 SHALL 回退读真数据（非空壳）"
+
+    def test_run_scoped_council_output_preserves_quality_status_for_l4(
+        self, sample_l1_output, temp_watchlist_dir
+    ):
+        """L4 SHALL read newest run-scoped L3 output and retain quality fields."""
+        from monitor.aggregation import aggregate_watchlist
+
+        run_id = "g2-run-001"
+        l3_path = (
+            temp_watchlist_dir
+            / "600519.SH"
+            / run_id
+            / "2026-06-30.json"
+        )
+        l3_path.parent.mkdir(parents=True)
+        l3_path.write_text(
+            json.dumps(
+                {
+                    "ticker": "600519.SH",
+                    "date": "2026-06-30",
+                    "final_verdict": "neutral",
+                    "conviction": 42,
+                    "consensus_summary": "降级结果",
+                    "key_variables": ["现金流"],
+                    "dissent_points": [],
+                    "pending_verification": ["人工复核"],
+                    "run_id": run_id,
+                    "run_quality_status": "runtime_degraded",
+                    "run_quality_reasons": ["high_agent_error_rate"],
+                    "final_quality_gate": "warning",
+                    "success_cache_eligible": False,
+                    "quality_record_path": "quality_status/600519.SH/g2-run-001/record.json",
+                }
+            ),
+            encoding="utf-8",
+        )
+        l1_file = temp_watchlist_dir / "l1.json"
+        l1_file.write_text(json.dumps(sample_l1_output), encoding="utf-8")
+
+        with patch("monitor.aggregation.ScoutCache") as mock_cache_class, \
+             patch("monitor.aggregation.ValuationFetcher") as mock_val_class:
+            mock_cache = MagicMock()
+            mock_cache.get.return_value = None
+            mock_cache_class.return_value = mock_cache
+            mock_val = MagicMock()
+            mock_val.fetch_with_fallback.return_value = {"pe_percentile_5y": 18.5}
+            mock_val_class.return_value = mock_val
+            result = aggregate_watchlist(
+                "2026-06-30",
+                l1_output_file=str(l1_file),
+                watchlist_dir=temp_watchlist_dir,
+            )
+
+        candidate = next(item for item in result["candidates"] if item["ticker"] == "600519.SH")
+        assert candidate["l3_verdict"] == "neutral"
+        assert candidate["run_quality_status"] == "runtime_degraded"
+        assert candidate["run_quality_reasons"] == ["high_agent_error_rate"]
+        assert candidate["final_quality_gate"] == "warning"
+        assert candidate["success_cache_eligible"] is False
+        assert candidate["l3_incomplete"] is True
+
+    def test_legacy_l3_without_quality_proof_is_incomplete(self):
+        from monitor.aggregation import _check_l3_incomplete
+
+        assert _check_l3_incomplete(
+            {
+                "l3_verdict": "bullish",
+                "l3_conviction": 80,
+                "consensus_summary": "legacy complete-looking output",
+                "dissent_points": [],
+                "pending_verification": [],
+            }
+        )
+
+    def test_run_scoped_l3_with_misbound_quality_proof_is_incomplete(
+        self, temp_watchlist_dir
+    ):
+        from monitor.aggregation import _read_l3_output, _check_l3_incomplete
+
+        path = temp_watchlist_dir / "600519.SH" / "run-x" / "2026-06-30.json"
+        path.parent.mkdir(parents=True)
+        path.write_text(
+            json.dumps(
+                {
+                    "ticker": "600519.SH",
+                    "run_id": "run-x",
+                    "date": "2026-06-30",
+                    "final_verdict": "bullish",
+                    "conviction": 80,
+                    "consensus_summary": "伪造 proof",
+                    "final_quality_gate": "passed",
+                    "run_quality_status": "complete",
+                    "success_cache_eligible": True,
+                    "quality_record_path": "quality_status/600519.SH/other-run/record.json",
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        data = _read_l3_output("600519.SH", "2026-06-30", temp_watchlist_dir)
+        assert data is not None
+        assert _check_l3_incomplete(data) is True
+
+    def test_run_scoped_l3_without_readable_quality_record_is_incomplete(
+        self, temp_watchlist_dir
+    ):
+        from monitor.aggregation import _read_l3_output, _check_l3_incomplete
+
+        run_id = "proof-missing"
+        path = temp_watchlist_dir / "600519.SH" / run_id / "2026-06-30.json"
+        path.parent.mkdir(parents=True)
+        path.write_text(
+            json.dumps(
+                {
+                    "ticker": "600519.SH",
+                    "run_id": run_id,
+                    "date": "2026-06-30",
+                    "final_verdict": "bullish",
+                    "conviction": 80,
+                    "consensus_summary": "没有真实 quality record",
+                    "dissent_points": [],
+                    "pending_verification": [],
+                    "run_quality_status": "complete",
+                    "final_quality_gate": "passed",
+                    "success_cache_eligible": True,
+                    "quality_record_path": (
+                        "quality_status/600519.SH/"
+                        f"{run_id}/record.json"
+                    ),
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        data = _read_l3_output("600519.SH", "2026-06-30", temp_watchlist_dir)
+        assert data is not None
+        assert data["_quality_proof_valid"] is False
+        assert _check_l3_incomplete(data) is True
+
+    def test_run_scoped_l3_uses_actual_incomplete_quality_record(
+        self, temp_watchlist_dir
+    ):
+        from data.lib.quality_status import RunQualityRecord, write_quality_record
+        from monitor.aggregation import _read_l3_output, _check_l3_incomplete
+
+        run_id = f"proof-incomplete-{temp_watchlist_dir.name}"
+        write_quality_record(
+            temp_watchlist_dir.parent,
+            RunQualityRecord(
+                canonical_ticker="600519.SH",
+                run_id=run_id,
+                status="incomplete",
+                reasons=("r2_interrupted",),
+                completed_stages=("r1",),
+                final_quality_gate="not_run",
+                execution_mode="council",
+            ),
+        )
+        path = temp_watchlist_dir / "600519.SH" / run_id / "2026-06-30.json"
+        path.parent.mkdir(parents=True)
+        path.write_text(
+            json.dumps(
+                {
+                    "ticker": "600519.SH",
+                    "run_id": run_id,
+                    "date": "2026-06-30",
+                    "final_verdict": "bullish",
+                    "run_quality_status": "complete",
+                    "final_quality_gate": "passed",
+                    "success_cache_eligible": True,
+                    "quality_record_path": (
+                        f"quality_status/600519.SH/{run_id}/record.json"
+                    ),
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        data = _read_l3_output("600519.SH", "2026-06-30", temp_watchlist_dir)
+        assert data is not None
+        assert data["_quality_proof_valid"] is True
+        assert data["run_quality_status"] == "incomplete"
+        assert data["final_quality_gate"] == "not_run"
+        assert data["success_cache_eligible"] is False
+        assert _check_l3_incomplete(data) is True
+
+    def test_run_scoped_l3_payload_date_must_match_requested_date(
+        self, temp_watchlist_dir
+    ):
+        from monitor.aggregation import _read_l3_output
+
+        path = temp_watchlist_dir / "600519.SH" / "run-date-mismatch" / "2026-06-30.json"
+        path.parent.mkdir(parents=True)
+        path.write_text(
+            json.dumps(
+                {
+                    "ticker": "600519.SH",
+                    "run_id": "run-date-mismatch",
+                    "date": "2026-06-29",
+                    "final_verdict": "bullish",
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        assert _read_l3_output("600519.SH", "2026-06-30", temp_watchlist_dir) is None
 
 
 class TestWatchlistRunScoped:

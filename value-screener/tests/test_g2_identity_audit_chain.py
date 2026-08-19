@@ -19,6 +19,7 @@ from data.lib.audit_chain import (
     payload_sha256,
     verify_audit_chain,
 )
+from data.lib.quality_status import read_quality_record
 
 
 def _fallback_dossier() -> dict:
@@ -433,7 +434,14 @@ def test_fallback_removes_audit_manifest_and_staged_result_when_promotion_fails(
         (tmp_path / "fallback" / "fallback-a" / "manifest.json").read_text(
             encoding="utf-8"
         )
-    )["state"] == "failed"
+    )["state"] == "incomplete"
+    record = read_quality_record(
+        tmp_path / "fallback",
+        "600009.SH",
+        "fallback-a",
+    )
+    assert record is not None
+    assert record.status == "incomplete"
 
 
 def test_fallback_does_not_delete_result_written_by_a_racing_publisher(
@@ -483,7 +491,14 @@ def test_fallback_does_not_delete_result_written_by_a_racing_publisher(
         (tmp_path / "fallback" / "fallback-a" / "manifest.json").read_text(
             encoding="utf-8"
         )
-    )["state"] == "failed"
+    )["state"] == "incomplete"
+    record = read_quality_record(
+        tmp_path / "fallback",
+        "600009.SH",
+        "fallback-a",
+    )
+    assert record is not None
+    assert record.status == "incomplete"
 
 
 def test_council_audited_entrypoint_binds_result_to_same_run(tmp_path, monkeypatch):

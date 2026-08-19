@@ -34,6 +34,7 @@ from council.debate import (
     run_debate,
 )
 from council.schema import AgentOutput, CouncilResult, SynthesizerOutput
+from data.lib.quality_status import RunQualityRecord, write_quality_record
 
 
 # ── fixtures ───────────────────────────────────────────────────
@@ -85,6 +86,30 @@ def _valid_dossier(ticker: str) -> dict:
         },
         "pledge": None,
     }
+
+
+def _write_complete_cache_record(path: Path) -> None:
+    run_id = "fixture-complete"
+    run_scoped_path = (
+        Path("debate")
+        / "600519.SH"
+        / run_id
+        / path.name
+    )
+    run_scoped_path.parent.mkdir(parents=True, exist_ok=True)
+    run_scoped_path.write_text(path.read_text(encoding="utf-8"), encoding="utf-8")
+    write_quality_record(
+        Path("."),
+        RunQualityRecord(
+            canonical_ticker="600519.SH",
+            run_id=run_id,
+            status="complete",
+            completed_stages=("r1", "final_validation"),
+            final_quality_gate="passed",
+            artifact_path=str(run_scoped_path),
+            execution_mode="single_agent",
+        ),
+    )
 
 
 # ── _build_user_message ────────────────────────────────────────
@@ -383,11 +408,12 @@ class TestCheckCache:
 
 ## Round 2 · 交叉质疑
 （单 agent 模式，跳过）
-"""
+        """
         from datetime import date
         path = debate_dir / "600519" / f"{date.today().isoformat()}.md"
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(md, encoding="utf-8")
+        _write_complete_cache_record(path)
 
         result = _check_cache("600519.SH")
         assert result is not None
@@ -491,10 +517,11 @@ class TestRunDebate:
 
 ## Round 2 · 交叉质疑
 （单 agent 模式，跳过）
-"""
+        """
         path = debate_dir / "600519" / f"{date.today().isoformat()}.md"
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(md, encoding="utf-8")
+        _write_complete_cache_record(path)
 
         with patch("council.debate.call_llm", new_callable=AsyncMock) as mock_llm:
             result = await run_debate("600519", agents=["buffett"], features=_valid_dossier("600519"))
@@ -545,14 +572,16 @@ class TestRunDebate:
         # g1-canonical-run-identity D5 A+：force=True 同时清 canonical + 旧纯数字路径，
         # 旧 debate/600519/{date}.md（纯数字旧目录）SHALL 被清除（不存在）。
         assert not path.exists(), "旧纯数字记录残留：force=True 未清除旧文件"
-        # 新记录写在 canonical 路径 debate/600519.SH/{date}.md（含新内容，非「缓存命中」）
-        from data.lib.identity import canonical_ticker
-        canonical_path = debate_dir / canonical_ticker("600519").split(".")[0] / f"{date.today().isoformat()}.md"
-        # 注：canonical 路径目录名是 600519.SH（带后缀），修正
-        canonical_path = debate_dir / canonical_ticker("600519") / f"{date.today().isoformat()}.md"
-        if canonical_path.exists():
-            new_md = canonical_path.read_text(encoding="utf-8")
-            assert "缓存命中" not in new_md, "新 canonical 记录不应含旧缓存内容"
+        # 新记录写在 canonical + run-scoped 路径（含新内容，非「缓存命中」）
+        canonical_path = (
+            debate_dir
+            / "600519.SH"
+            / result.run_id
+            / f"{date.today().isoformat()}.md"
+        )
+        assert canonical_path.exists()
+        new_md = canonical_path.read_text(encoding="utf-8")
+        assert "缓存命中" not in new_md, "新 canonical 记录不应含旧缓存内容"
         assert new_md.count("## Round 1") == 1, "Round 1 重复：文件追加而非覆盖"
         assert "好公司" in new_md, "新记录未写入"
 
@@ -931,6 +960,7 @@ class TestFullCouncil:
         path = debate_dir / "600519" / f"{date.today().isoformat()}.md"
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(md, encoding="utf-8")
+        _write_complete_cache_record(path)
 
         result = _check_cache("600519.SH")
         assert result is not None

@@ -487,7 +487,13 @@ def council(
     result = asyncio.run(run_debate(normalized, force=force))
 
     typer.echo(result.to_json())
-    typer.echo(f"\n辩论记录已写入 debate/{normalized}/{date.today().isoformat()}.md")
+    debate_path = Path(result.debate_path) if result.debate_path else (
+        Path("debate")
+        / normalized
+        / (result.run_id or "unknown-run")
+        / f"{date.today().isoformat()}.md"
+    )
+    typer.echo(f"\n辩论记录已写入 {debate_path}")
 
 
 # ---------------------------------------------------------------------------

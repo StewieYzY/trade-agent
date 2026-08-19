@@ -810,35 +810,97 @@ def _parse_debate_markdown(content: str, ticker: str) -> CouncilResult | None:
     )
 
 
-def _check_cache(ticker: str) -> CouncilResult | None:
+def _check_cache(
+    ticker: str,
+    *,
+    expected_execution_mode: str | None = None,
+) -> CouncilResult | None:
     """检查辩论记录缓存，命中则返回 CouncilResult.
 
-    命中条件：debate/{ticker}/{date}.md 存在且至少含 Round 1 节，
-    且 Round 1 中至少有一个可解析的 AgentOutput JSON。
+    命中条件：debate/{ticker}/{date}.md 存在、绑定的 G2 quality record
+    是 complete 且 final quality gate passed，且至少含 Round 1 节。
 
     解析失败（格式损坏）→ 返回 None（降级为重跑）。
 
     Args:
-        ticker: 股票代码
+    ticker: 股票代码
+    expected_execution_mode: 本次请求的编排模式；不匹配的 record 不能命中
 
     Returns:
         CouncilResult 或 None（未命中/解析失败）
     """
-    path = _debate_path(ticker)
-    # g1-canonical-run-identity D5 A+：canonical 路径不存在时回退旧纯数字路径
-    # （兼容既有 debate/600519/ 旧目录，升级后仍可命中）
-    if not path.exists():
-        legacy = _legacy_debate_path(ticker)
-        if legacy.exists():
-            path = legacy
-        else:
+    from data.lib.identity import canonical_ticker
+    from data.lib.quality_status import (
+        is_success_cache_eligible,
+        read_quality_record,
+    )
+
+    canonical = canonical_ticker(ticker)
+    quality_root = Path("quality_status") / canonical
+    matching_quality_record = None
+    record_paths: list[tuple[int, str, Path]] = []
+    for candidate in quality_root.glob("*/record.json"):
+        try:
+            mtime_ns = candidate.stat().st_mtime_ns
+        except OSError:
+            continue
+        record_paths.append((mtime_ns, candidate.parent.name, candidate))
+    record_paths.sort(reverse=True)
+    for _, _, record_path in record_paths:
+        try:
+            record = read_quality_record(
+                ".",
+                canonical,
+                record_path.parent.name,
+            )
+        except (OSError, ValueError):
             return None
+        if record is None:
+            return None
+        if (
+            expected_execution_mode is not None
+            and record.execution_mode != expected_execution_mode
+        ):
+            return None
+        matching_quality_record = record
+        break
+    if (
+        matching_quality_record is None
+        or not is_success_cache_eligible(matching_quality_record)
+        or not matching_quality_record.artifact_path
+    ):
+        return None
+    path = Path(matching_quality_record.artifact_path)
+    expected_artifact_root = (
+        Path("debate")
+        / canonical
+        / matching_quality_record.run_id
+    ).resolve()
+    try:
+        path.resolve().relative_to(expected_artifact_root)
+    except ValueError:
+        return None
+    if path.name != f"{date.today().isoformat()}.md":
+        return None
+    if not path.exists():
+        return None
 
     content = path.read_text(encoding="utf-8")
     if "## Round 1" not in content:
         return None
 
-    return _parse_debate_markdown(content, ticker)
+    result = _parse_debate_markdown(content, ticker)
+    if result is not None:
+        result.run_id = matching_quality_record.run_id
+        result.run_quality_status = matching_quality_record.status
+        result.run_quality_reasons = list(matching_quality_record.reasons)
+        result.final_quality_gate = matching_quality_record.final_quality_gate
+        result.success_cache_eligible = is_success_cache_eligible(matching_quality_record)
+        result.quality_record_path = str(
+            quality_root / matching_quality_record.run_id / "record.json"
+        )
+        result.debate_path = str(path)
+    return result
 
 
 async def run_debate(
@@ -872,7 +934,7 @@ async def run_debate(
     # g1-canonical-run-identity D5 A+：入口 canonicalize ticker，后续 _debate_path /
     # _check_cache / _write_council_output / CouncilResult 全用 canonical 形式，
     # 无论调用方传纯数字 600519 还是带后缀 600519.SH 都统一。
-    from data.lib.identity import canonical_ticker
+    from data.lib.identity import canonical_ticker, generate_run_id
     from data.lib.audit_chain import (
         AuditChainWriter,
         create_audit_identity,
@@ -927,6 +989,26 @@ async def run_debate(
             prompt_version=prompt_version or "council-prompt-v1",
             model_configuration=runtime_model_configuration,
         )
+    if agents is None:
+        agents = list(AGENT_REGISTRY.keys())
+    execution_mode = "single_agent" if len(agents) == 1 else "council"
+    quality_run_id = audit_identity.run_id if audit_identity is not None else generate_run_id()
+    from data.lib.quality_status import RunQualityRecord, write_quality_record
+
+    def persist_early_incomplete(reason: str) -> None:
+        write_quality_record(
+            ".",
+            RunQualityRecord(
+                canonical_ticker=ticker,
+                run_id=quality_run_id,
+                status="incomplete",
+                reasons=(reason,),
+                completed_stages=(),
+                final_quality_gate="not_run",
+                execution_mode=execution_mode,
+            ),
+        )
+
     audit_writer = None
     if audit_identity is not None:
         try:
@@ -945,31 +1027,80 @@ async def run_debate(
                     "dossier_sha256": payload_sha256(features),
                 },
             )
-        except Exception:
+        except (Exception, asyncio.CancelledError):
             if audit_writer is not None:
                 audit_writer.abort()
+            persist_early_incomplete("audit_dossier_interrupted")
             raise
 
     # 2. 确定 agent 列表
-    if agents is None:
-        agents = list(AGENT_REGISTRY.keys())
 
     # 3. 检查缓存（除非 force=True）
     if not force and audit_writer is None:
-        cached = _check_cache(ticker)
+        cached = _check_cache(
+            ticker,
+            expected_execution_mode=execution_mode,
+        )
         if cached is not None:
             return cached
 
     # 4. 准备辩论记录文件
     # g1-canonical-run-identity D5 A+：force=True 同时清 canonical + 旧纯数字路径，
     # 避免旧内容残留（既有 debate/{纯数字}/ 旧目录 + 新 debate/{canonical}/ 都清）。
-    path = _debate_path(ticker, audit_identity.run_id if audit_writer else None)
+    path = _debate_path(ticker, quality_run_id)
     if force and audit_writer is None:
         if path.exists():
             path.unlink()
         legacy = _legacy_debate_path(ticker)
         if legacy.exists():
             legacy.unlink()
+
+    from data.lib.quality_status import (
+        RunQualityRecord,
+        is_success_cache_eligible,
+        replace_quality_record,
+        write_quality_record,
+    )
+
+    completed_stages: list[str] = []
+    quality_path: Path | None = None
+
+    def persist_quality(
+        status: str,
+        *,
+        reasons: tuple[str, ...],
+        final_quality_gate: str,
+    ) -> RunQualityRecord:
+        nonlocal quality_path
+        record = RunQualityRecord(
+            canonical_ticker=ticker,
+            run_id=quality_run_id,
+            status=status,
+            reasons=reasons,
+            completed_stages=tuple(completed_stages),
+            final_quality_gate=final_quality_gate,
+            artifact_path=str(path),
+            execution_mode=execution_mode,
+        )
+        if quality_path is None:
+            quality_path = write_quality_record(".", record)
+        return record
+
+    def persist_incomplete(stage: str) -> None:
+        persist_quality(
+            "incomplete",
+            reasons=(f"{stage}_interrupted",),
+            final_quality_gate="not_run",
+        )
+
+    def append_stage(stage: str, writer, *args) -> None:
+        try:
+            writer(*args)
+        except (Exception, asyncio.CancelledError):
+            persist_incomplete(stage)
+            if audit_writer is not None:
+                audit_writer.abort()
+            raise
 
     # f1-deviation-fix §7：token usage 累加器（供 AD-03 成本实测，写入辩论记录 md，不改 schema）
     usage_log: list[dict] = []
@@ -1008,12 +1139,23 @@ async def run_debate(
         )
         for agent_id in agents
     ]
-    r1_raw = await asyncio.gather(*r1_tasks, return_exceptions=True)
+    try:
+        r1_raw = await asyncio.gather(*r1_tasks, return_exceptions=True)
+    except asyncio.CancelledError:
+        persist_incomplete("r1")
+        if audit_writer is not None:
+            audit_writer.abort()
+        raise
 
     # 分离成功/失败：失败的是 Exception 实例
     round1: list[AgentOutput] = []
     r1_errors: list[Exception] = []
     for item in r1_raw:
+        if isinstance(item, asyncio.CancelledError):
+            persist_incomplete("r1")
+            if audit_writer is not None:
+                audit_writer.abort()
+            raise item
         if isinstance(item, Exception):
             r1_errors.append(item)
         else:
@@ -1034,6 +1176,11 @@ async def run_debate(
     for agent in round1:
         ok_circ, circ_issues = detect_circular_reference(agent)
         if not ok_circ:
+            persist_quality(
+                "failed",
+                reasons=("r1_circular_reference",),
+                final_quality_gate="failed",
+            )
             if audit_writer is not None:
                 audit_writer.abort()
             raise ValueError(
@@ -1047,6 +1194,8 @@ async def run_debate(
             r1_quality_warnings.append(
                 f"{agent.name}: {ground_issues}"
             )
+    if not r1_errors:
+        completed_stages.append("r1")
 
     # f2 §3.5/3.6：error rate ≥ 0.4 触发运行时降级（动态比，spec review #4）
     active_count = len(agents)
@@ -1066,6 +1215,11 @@ async def run_debate(
         if not round1:
             if audit_writer is not None:
                 audit_writer.abort()
+            persist_quality(
+                "failed",
+                reasons=("r1_failed",),
+                final_quality_gate="failed",
+            )
             raise ValueError(
                 f"council_failed: all_agents_failed——R1 全部 {active_count} 个 agent 失败"
                 f"（error_rate=100%），无幸存观点，无法产出 council。"
@@ -1077,19 +1231,19 @@ async def run_debate(
         da_skipped_reason = "runtime_degraded"
         round2 = None
         da_result = None
-        _append_round(path, 1, round1 if round1 else None)
-        _append_round(path, 2, None)  # 跳 R2
-        _append_round(path, 3, None)  # 跳 R3
+        append_stage("r1", _append_round, path, 1, round1 if round1 else None)
+        append_stage("r2", _append_round, path, 2, None)  # 跳 R2
+        append_stage("da", _append_round, path, 3, None)  # 跳 R3
     elif len(agents) == 1 and not mock_opinions:
         # 单 agent 且无 mock 注入：跳过 R2/R3（沿用原逻辑，不调分歧度分流——
         # 单 agent compute_divergence 无意义且会因 other_opinions 缺失影响 R2）
         round2 = None
         da_result = None
-        _append_round(path, 1, round1)
-        _append_round(path, 2, None)
-        _append_round(path, 3, None)
+        append_stage("r1", _append_round, path, 1, round1)
+        append_stage("r2", _append_round, path, 2, None)
+        append_stage("da", _append_round, path, 3, None)
     else:
-        _append_round(path, 1, round1)
+        append_stage("r1", _append_round, path, 1, round1)
 
         if len(agents) == 1:
             # 单 agent + mock_opinions 注入：跑 R2（机制门验证），但不调分流/DA/synth
@@ -1114,19 +1268,27 @@ async def run_debate(
                         ),
                     )
                 )
-            try:
-                round2 = await asyncio.gather(*r2_tasks)
-            except Exception:
-                if audit_writer is not None:
-                    audit_writer.abort()
-                raise
-            _append_round(path, 2, round2)
+                try:
+                    round2 = await asyncio.gather(*r2_tasks)
+                except (Exception, asyncio.CancelledError):
+                    persist_incomplete("r2")
+                    if audit_writer is not None:
+                        audit_writer.abort()
+                    raise
+            append_stage("r2", _append_round, path, 2, round2)
+            completed_stages.append("r2")
             da_result = None
-            _append_round(path, 3, None)
+            append_stage("da", _append_round, path, 3, None)
         else:
             # f2 §3.1/3.2：R1 后分歧度分流（D1）
             from council.divergence import compute_divergence
-            divergence = compute_divergence(round1)
+            try:
+                divergence = compute_divergence(round1)
+            except (Exception, asyncio.CancelledError):
+                persist_incomplete("r2")
+                if audit_writer is not None:
+                    audit_writer.abort()
+                raise
             level = divergence["level"]
 
             if level in ("low", "extreme"):
@@ -1134,8 +1296,8 @@ async def run_debate(
                 da_skipped_reason = "low_divergence" if level == "low" else "extreme_divergence"
                 round2 = None
                 da_result = None
-                _append_round(path, 2, None)
-                _append_round(path, 3, None)
+                append_stage("r2", _append_round, path, 2, None)
+                append_stage("da", _append_round, path, 3, None)
             else:
                 # medium/high：跑 R2
                 r2_tasks = []
@@ -1160,11 +1322,13 @@ async def run_debate(
                     )
                 try:
                     round2 = await asyncio.gather(*r2_tasks)
-                except Exception:
+                except (Exception, asyncio.CancelledError):
+                    persist_incomplete("r2")
                     if audit_writer is not None:
                         audit_writer.abort()
                     raise
-                _append_round(path, 2, round2)
+                append_stage("r2", _append_round, path, 2, round2)
+                completed_stages.append("r2")
 
                 # f2 §3.3/3.4：R2 后聚合 evidence_exhausted，≥3 则跳 R3
                 exhausted_count = sum(
@@ -1173,7 +1337,7 @@ async def run_debate(
                 if exhausted_count >= 3:
                     da_skipped_reason = "evidence_exhausted"
                     da_result = None
-                    _append_round(path, 3, None)
+                    append_stage("da", _append_round, path, 3, None)
                 else:
                     try:
                         da_result = await _call_da(
@@ -1184,16 +1348,18 @@ async def run_debate(
                             usage_accumulator=usage_log,
                             **audit_da_kwargs,
                         )
-                    except Exception:
+                    except (Exception, asyncio.CancelledError):
+                        persist_incomplete("da")
                         if audit_writer is not None:
                             audit_writer.abort()
                         raise
-                    _append_da_round(path, da_result)
+                    append_stage("da", _append_da_round, path, da_result)
+                    completed_stages.append("da")
 
     # Round 4: 收敛共识（单 agent 或降级时仍跑 R4，用幸存 R1）
     if len(agents) == 1 and not runtime_degraded:
         consensus = None
-        _append_round(path, 4, None)
+        append_stage("synthesizer", _append_round, path, 4, None)
     else:
         try:
             consensus = await _call_synthesizer(
@@ -1202,20 +1368,29 @@ async def run_debate(
                 da_skipped_reason=da_skipped_reason,
                 **audit_synth_kwargs,
             )
-        except Exception:
+        except (Exception, asyncio.CancelledError):
+            persist_incomplete("synthesizer")
             if audit_writer is not None:
                 audit_writer.abort()
             raise
         # f2 §3.5/3.6：运行时降级时 confidence_cap=40
         if runtime_degraded and consensus and consensus.conviction > 40:
             consensus.conviction = 40
-        _append_synthesizer_round(path, consensus)
+        append_stage("synthesizer", _append_synthesizer_round, path, consensus)
+        completed_stages.append("synthesizer")
 
     # f1-deviation-fix §7：把 token usage 汇总写入辩论记录（AD-03 成本实测，不改 CouncilResult schema）
-    _append_usage_summary(path, usage_log)
+    append_stage("synthesizer", _append_usage_summary, path, usage_log)
 
     # f2 CR P2：编排状态写入 debate md，供缓存恢复（da_skipped_reason/council_degraded/degraded_reason）
-    _append_orchestration_state(path, da_skipped_reason, council_degraded, degraded_reason)
+    append_stage(
+        "final_validation",
+        _append_orchestration_state,
+        path,
+        da_skipped_reason,
+        council_degraded,
+        degraded_reason,
+    )
 
     # 9. 组装 CouncilResult
     key_variables = CouncilResult.extract_key_variables(round1, round2)
@@ -1239,6 +1414,46 @@ async def run_debate(
         council_degraded=council_degraded,
         degraded_reason=degraded_reason,
     )
+
+    completed_stages.append("final_validation")
+    terminal_observations: list[str] = []
+    if r1_errors:
+        terminal_observations.append(
+            f"r1_agent_errors:{len(r1_errors)}/{len(agents)}"
+        )
+    if r1_quality_warnings:
+        terminal_observations.extend(r1_quality_warnings)
+    if runtime_degraded:
+        terminal_observations.append(degraded_reason or "runtime_degraded")
+    if da_skipped_reason:
+        terminal_observations.append(da_skipped_reason)
+    terminal_reasons = tuple(dict.fromkeys(terminal_observations))
+
+    if runtime_degraded:
+        terminal_status = "runtime_degraded"
+        final_quality_gate = "warning"
+    elif da_skipped_reason:
+        terminal_status = "da_skipped"
+        final_quality_gate = "warning"
+    elif terminal_reasons:
+        terminal_status = "warning"
+        final_quality_gate = "warning"
+    else:
+        terminal_status = "complete"
+        terminal_reasons = ()
+        final_quality_gate = "passed"
+    quality_record = persist_quality(
+        terminal_status,
+        reasons=terminal_reasons,
+        final_quality_gate=final_quality_gate,
+    )
+    result.run_id = quality_run_id
+    result.run_quality_status = quality_record.status
+    result.run_quality_reasons = list(quality_record.reasons)
+    result.final_quality_gate = quality_record.final_quality_gate
+    result.success_cache_eligible = is_success_cache_eligible(quality_record)
+    result.quality_record_path = str(quality_path)
+    result.debate_path = str(path)
 
     if audit_writer is not None:
         result.run_id = audit_identity.run_id
@@ -1332,16 +1547,55 @@ async def run_debate(
             )
             audit_writer.finalize()
             _promote_staged_output(staged_output_path, output_path)
-        except Exception:
+        except (Exception, asyncio.CancelledError):
             if _is_promoted_staging_output(staged_output_path, output_path):
                 output_path.unlink(missing_ok=True)
             staged_output_path.unlink(missing_ok=True)
+            replace_quality_record(
+                ".",
+                RunQualityRecord(
+                    canonical_ticker=ticker,
+                    run_id=quality_run_id,
+                    status="incomplete",
+                    reasons=("final_validation_interrupted",),
+                    completed_stages=tuple(
+                        stage
+                        for stage in completed_stages
+                        if stage != "final_validation"
+                    ),
+                    final_quality_gate="not_run",
+                    artifact_path=str(path),
+                    execution_mode=execution_mode,
+                ),
+            )
             audit_writer.abort()
             raise
 
     # 10. 写入 L3→L4 接口文件
     if audit_writer is None:
-        _write_council_output(result, path)
+        output_path = _council_output_path(result, path)
+        staged_output_path = _staged_council_output_path(output_path)
+        try:
+            _write_council_output(result, path, output_path=staged_output_path)
+            _promote_staged_output(staged_output_path, output_path)
+        except (Exception, asyncio.CancelledError):
+            if _is_promoted_staging_output(staged_output_path, output_path):
+                output_path.unlink(missing_ok=True)
+            staged_output_path.unlink(missing_ok=True)
+            failed_record = RunQualityRecord(
+                canonical_ticker=ticker,
+                run_id=quality_run_id,
+                status="incomplete",
+                reasons=("final_validation_interrupted",),
+                completed_stages=tuple(
+                    stage for stage in completed_stages if stage != "final_validation"
+                ),
+                final_quality_gate="not_run",
+                artifact_path=str(path),
+                execution_mode=execution_mode,
+            )
+            replace_quality_record(".", failed_record)
+            raise
 
     return result
 
@@ -1427,6 +1681,11 @@ def _build_council_output(result: CouncilResult, debate_path: Path) -> dict:
         "prompt_version": result.prompt_version,
         "model_configuration": result.model_configuration,
         "audit_manifest_path": result.audit_manifest_path,
+        "run_quality_status": result.run_quality_status,
+        "run_quality_reasons": result.run_quality_reasons,
+        "final_quality_gate": result.final_quality_gate,
+        "success_cache_eligible": result.success_cache_eligible,
+        "quality_record_path": result.quality_record_path,
     }
 
     # L4 消费方：文件名用 canonical ticker（含交易所后缀 600519.SH），与字段一致

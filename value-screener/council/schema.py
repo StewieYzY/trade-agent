@@ -375,6 +375,11 @@ class CouncilResult:
     prompt_version: str | None = None
     model_configuration: dict | None = None
     audit_manifest_path: str | None = None
+    run_quality_status: str = "incomplete"
+    run_quality_reasons: list[str] = field(default_factory=list)
+    final_quality_gate: str = "not_run"
+    success_cache_eligible: bool = False
+    quality_record_path: str | None = None
 
     def __post_init__(self):
         """单 agent fallback: final_verdict 取 round1[0].signal."""
@@ -406,6 +411,11 @@ class CouncilResult:
             "prompt_version": self.prompt_version,
             "model_configuration": self.model_configuration,
             "audit_manifest_path": self.audit_manifest_path,
+            "run_quality_status": self.run_quality_status,
+            "run_quality_reasons": self.run_quality_reasons,
+            "final_quality_gate": self.final_quality_gate,
+            "success_cache_eligible": self.success_cache_eligible,
+            "quality_record_path": self.quality_record_path,
         }
         return json.dumps(data, ensure_ascii=False, indent=2)
 

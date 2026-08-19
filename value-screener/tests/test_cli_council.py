@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import json
+from datetime import date
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -116,7 +117,9 @@ class TestCouncilCommand:
             ticker="600519.SH",
             round1=[AgentOutput(name="buffett", signal="bullish", conviction=80, core_thesis="好公司", what_would_change_my_mind="业绩下滑", out_of_circle=False)],
             final_verdict="bullish",
-            key_variables=[]
+            key_variables=[],
+            run_id="cli-run",
+            debate_path="debate/600519.SH/actual-run/2026-08-17.md",
         )
 
         result = runner.invoke(app, ["council", "--ticker", "600519"])
@@ -127,6 +130,7 @@ class TestCouncilCommand:
             "路径提示 SHALL 显示 canonical debate/600519.SH/，MUST NOT 显示纯数字 debate/600519/"
         assert "debate/600519/" not in result.stdout.replace("debate/600519.SH/", ""), \
             "MUST NOT 出现纯数字 debate/600519/ 路径提示"
+        assert "debate/600519.SH/actual-run/2026-08-17.md" in result.stdout
 
     @patch("council.debate.run_debate", new_callable=AsyncMock)
     def test_council_force_flag(self, mock_run_debate, tmp_path, monkeypatch):

@@ -38,6 +38,12 @@ from data.lib.audit_chain import (
     validate_audit_identity,
     validate_audit_identity_structure,
 )
+from data.lib.quality_status import (
+    RunQualityRecord,
+    quality_record_path as build_quality_record_path,
+    replace_quality_record,
+    write_quality_record,
+)
 
 DEFAULT_AGENT = "buffett"
 
@@ -185,6 +191,9 @@ def _write_manifest(
     state: str,
     code_version: str,
     result_path: Path | None = None,
+    run_quality_status: str | None = None,
+    run_quality_reasons: list[str] | tuple[str, ...] | None = None,
+    quality_record_path: Path | None = None,
 ) -> None:
     payload = {
         "schema_version": "g2-strong-single-agent-fallback-v1",
@@ -195,6 +204,12 @@ def _write_manifest(
     }
     if result_path is not None:
         payload["result_path"] = str(result_path)
+    if run_quality_status is not None:
+        payload["run_quality_status"] = run_quality_status
+    if run_quality_reasons is not None:
+        payload["run_quality_reasons"] = list(run_quality_reasons)
+    if quality_record_path is not None:
+        payload["quality_record_path"] = str(quality_record_path)
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
@@ -300,6 +315,44 @@ async def run_fallback(
     manifest_path = run_dir / "manifest.json"
     result_path = run_dir / "result.json"
     code_version = _code_version()
+    quality_root = output_root or "fallback_runs"
+
+    def persist_terminal_quality(
+        status: str,
+        reason: str,
+        *,
+        final_quality_gate: str,
+        manifest_state: str,
+    ) -> None:
+        quality_record = RunQualityRecord(
+            canonical_ticker=canonical_ticker,
+            run_id=run_id,
+            status=status,
+            reasons=(reason,),
+            completed_stages=(),
+            final_quality_gate=final_quality_gate,
+            artifact_path=str(result_path),
+            execution_mode="fallback",
+        )
+        quality_path = write_quality_record(quality_root, quality_record)
+        _write_manifest(
+            manifest_path,
+            run_id=run_id,
+            state=manifest_state,
+            code_version=code_version,
+            run_quality_status=status,
+            run_quality_reasons=[reason],
+            quality_record_path=quality_path,
+        )
+
+    def persist_setup_failure(reason: str) -> None:
+        persist_terminal_quality(
+            "failed",
+            reason,
+            final_quality_gate="failed",
+            manifest_state="failed",
+        )
+
     try:
         _write_manifest(
             manifest_path,
@@ -337,15 +390,20 @@ async def run_fallback(
                 }
             ),
         }
+    except asyncio.CancelledError:
+        if audit_writer is not None:
+            audit_writer.abort()
+        persist_terminal_quality(
+            "incomplete",
+            "fallback_setup_cancelled",
+            final_quality_gate="not_run",
+            manifest_state="incomplete",
+        )
+        raise
     except Exception:
         if audit_writer is not None:
             audit_writer.abort()
-        _write_manifest(
-            manifest_path,
-            run_id=run_id,
-            state="failed",
-            code_version=code_version,
-        )
+        persist_setup_failure("fallback_setup_failed")
         raise
     if audit_writer is not None:
         prompt_binding = {
@@ -401,8 +459,18 @@ async def run_fallback(
                     "user_message_sha256": common["user_message_sha256"],
                 },
             )
+        except asyncio.CancelledError:
+            audit_writer.abort()
+            persist_terminal_quality(
+                "incomplete",
+                "fallback_audit_prompt_cancelled",
+                final_quality_gate="not_run",
+                manifest_state="incomplete",
+            )
+            raise
         except Exception:
             audit_writer.abort()
+            persist_setup_failure("fallback_audit_prompt_failed")
             raise
 
     raw = ""
@@ -421,6 +489,16 @@ async def run_fallback(
         raw = _redact_raw_response(raw_response)
         response_sha256 = _sha256(raw)
         agent_output = AgentOutput.from_json(agent_id, raw_response)
+    except asyncio.CancelledError:
+        if audit_writer is not None:
+            audit_writer.abort()
+        persist_terminal_quality(
+            "incomplete",
+            "fallback_cancelled",
+            final_quality_gate="not_run",
+            manifest_state="incomplete",
+        )
+        raise
     except Exception as exc:
         failure_kind = _classify_exception(exc)
         error = f"{type(exc).__name__}: {_redact_error(str(exc))}"
@@ -466,6 +544,31 @@ async def run_fallback(
         "synthesis": synthesis,
         "generated_at": datetime.now(timezone.utc).isoformat(),
     })
+    run_quality_status = "complete" if quality_status == "passed" else "failed"
+    quality_reasons = tuple(fact_check.get("issues") or ())
+    if failure_kind and not quality_reasons:
+        quality_reasons = (error or failure_kind,)
+    quality_record = RunQualityRecord(
+        canonical_ticker=canonical_ticker,
+        run_id=run_id,
+        status=run_quality_status,
+        reasons=quality_reasons,
+        completed_stages=("agent", "fact_check", "synthesis", "final_validation"),
+        final_quality_gate="passed" if run_quality_status == "complete" else "failed",
+        artifact_path=str(result_path),
+        execution_mode="fallback",
+    )
+    quality_record_path = build_quality_record_path(
+        quality_root,
+        canonical_ticker,
+        run_id,
+    )
+    result["run_quality_status"] = run_quality_status
+    result["run_quality_reasons"] = list(quality_record.reasons)
+    result["final_quality_gate"] = quality_record.final_quality_gate
+    # Fallback is diagnostic-only in this child and never enters Council success cache.
+    result["success_cache_eligible"] = False
+    result["quality_record_path"] = str(quality_record_path)
     audit_manifest_path: Path | None = None
     if audit_writer is not None:
         audit_manifest_path = audit_writer.run_root / "manifest.json"
@@ -527,30 +630,70 @@ async def run_fallback(
             )
             audit_writer.finalize()
             _promote_staged_fallback_result(staged_result_path, result_path)
-        except Exception:
+        except (Exception, asyncio.CancelledError):
             if _is_promoted_staging_result(staged_result_path, result_path):
                 result_path.unlink(missing_ok=True)
             staged_result_path.unlink(missing_ok=True)
             audit_writer.abort()
-            _write_manifest(
-                manifest_path,
-                run_id=run_id,
-                state="failed",
-                code_version=code_version,
+            persist_terminal_quality(
+                "incomplete",
+                "fallback_publish_interrupted",
+                final_quality_gate="not_run",
+                manifest_state="incomplete",
             )
             raise
-    else:
-        result_path.write_text(
-            json.dumps(result, ensure_ascii=False, indent=2),
-            encoding="utf-8",
+    quality_record_written = False
+    try:
+        if audit_writer is None:
+            write_quality_record(quality_root, quality_record)
+            quality_record_written = True
+            result_path.write_text(
+                json.dumps(result, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+        else:
+            write_quality_record(quality_root, quality_record)
+            quality_record_written = True
+        _write_manifest(
+            manifest_path,
+            run_id=run_id,
+            state=quality_status,
+            code_version=code_version,
+            result_path=result_path,
+            run_quality_status=run_quality_status,
+            run_quality_reasons=list(quality_record.reasons),
+            quality_record_path=quality_record_path,
         )
-    _write_manifest(
-        manifest_path,
-        run_id=run_id,
-        state=quality_status,
-        code_version=code_version,
-        result_path=result_path,
-    )
+    except (Exception, asyncio.CancelledError):
+        result_path.unlink(missing_ok=True)
+        failed_record = RunQualityRecord(
+            canonical_ticker=canonical_ticker,
+            run_id=run_id,
+            status="incomplete",
+            reasons=("fallback_quality_persistence_interrupted",),
+            completed_stages=(),
+            final_quality_gate="not_run",
+            artifact_path=str(result_path),
+            execution_mode="fallback",
+        )
+        if quality_record_written:
+            replace_quality_record(quality_root, failed_record)
+        else:
+            write_quality_record(quality_root, failed_record)
+        _write_manifest(
+            manifest_path,
+            run_id=run_id,
+            state="incomplete",
+            code_version=code_version,
+            run_quality_status="incomplete",
+            run_quality_reasons=list(failed_record.reasons),
+            quality_record_path=build_quality_record_path(
+                quality_root,
+                canonical_ticker,
+                run_id,
+            ),
+        )
+        raise
     result.setdefault("result_path", str(result_path))
     result.setdefault("manifest_path", str(manifest_path))
     return result
