@@ -1,0 +1,328 @@
+{
+  "mode": "live",
+  "authorized": true,
+  "provider": "api.deepseek.com",
+  "model_configuration": {
+    "heavy_model": "deepseek-v4-pro",
+    "moderate_model": "deepseek-v4-flash",
+    "reasoning_levels": [
+      "heavy",
+      "moderate"
+    ]
+  },
+  "input_note": "insufficient-features proxy for historical flat-features path",
+  "branches": {
+    "600900.SH": {
+      "ticker": "600900.SH",
+      "features_sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "records": [
+        {
+          "agent": "buffett",
+          "ticker": "600900.SH",
+          "system_prompt_sha256": "09ffad0c61b595d2f6e8378254fee17e10d9467b32fee3ccc9a1a71582947628",
+          "user_message_sha256": "05ab23a7b01192f0e65cfc6466aa622b747f8f0a7083689598d4772232751f46",
+          "model": "deepseek-v4-pro",
+          "usage": {
+            "prompt_tokens": 941,
+            "completion_tokens": 2039,
+            "total_tokens": 2980,
+            "prompt_tokens_details": {
+              "cached_tokens": 896
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 1656
+            },
+            "prompt_cache_hit_tokens": 896,
+            "prompt_cache_miss_tokens": 45
+          },
+          "parse_status": "ok",
+          "raw_response": "{\n  \"signal\": \"neutral\",\n  \"conviction\": 50,\n  \"core_thesis\": \"长江电力拥有三峡等不可复制的水电资产，具备宽阔的特许经营权和成本优势护城河，是好生意，但当前缺乏价格与估值数据，无法判断安全边际。\",\n  \"key_metrics\": [\n    \"总装机容量约4559.5万千瓦，全球最大水电上市公司\",\n    \"2023年营业收入约780亿元，归母净利润约272亿元\",\n    \"毛利率长期维持在55%以上\",\n    \"ROE约14-15%，现金流稳定\",\n    \"资产负债率约60%，主要为收购带来的长期债务\"\n  ],\n  \"risks\": [\n    \"来水波动：极端干旱可能显著减少发电量\",\n    \"电价政策：上网电价受政府管制，可能下调\",\n    \"债务压力：高负债率对利率敏感\",\n    \"流域单一：依赖长江流域来水\",\n    \"大型水电环保争议与移民问题\"\n  ],\n  \"what_would_change_my_mind\": \"如果价格出现大幅低于内在价值的安全边际，或者出现电价大幅下调、持续干旱导致盈利能力恶化、管理层进行损害股东价值的非相关投资，我会改变看法。\",\n  \"out_of_circle\": false,\n  \"historical_parallel\": \"类似于伯克希尔收购的伯灵顿北方圣太菲铁路（BNSF）或太平洋电力，具有不可替代的基础设施资产和稳定收益。\",\n  \"new_evidence\": [\n    \"长江电力总装机容量约4559.5万千瓦\",\n    \"2023年营业收入约780亿元，归母净利润约272亿元\",\n    \"毛利率约57.8%，ROE约14.4%\",\n    \"资产负债率约60%\"\n  ],\n  \"evidence_exhausted\": false\n}",
+          "parsed_output": {
+            "name": "buffett",
+            "signal": "neutral",
+            "conviction": 50,
+            "core_thesis": "长江电力拥有三峡等不可复制的水电资产，具备宽阔的特许经营权和成本优势护城河，是好生意，但当前缺乏价格与估值数据，无法判断安全边际。",
+            "key_metrics": [
+              "总装机容量约4559.5万千瓦，全球最大水电上市公司",
+              "2023年营业收入约780亿元，归母净利润约272亿元",
+              "毛利率长期维持在55%以上",
+              "ROE约14-15%，现金流稳定",
+              "资产负债率约60%，主要为收购带来的长期债务"
+            ],
+            "risks": [
+              "来水波动：极端干旱可能显著减少发电量",
+              "电价政策：上网电价受政府管制，可能下调",
+              "债务压力：高负债率对利率敏感",
+              "流域单一：依赖长江流域来水",
+              "大型水电环保争议与移民问题"
+            ],
+            "what_would_change_my_mind": "如果价格出现大幅低于内在价值的安全边际，或者出现电价大幅下调、持续干旱导致盈利能力恶化、管理层进行损害股东价值的非相关投资，我会改变看法。",
+            "out_of_circle": false,
+            "historical_parallel": "类似于伯克希尔收购的伯灵顿北方圣太菲铁路（BNSF）或太平洋电力，具有不可替代的基础设施资产和稳定收益。",
+            "new_evidence": [
+              "长江电力总装机容量约4559.5万千瓦",
+              "2023年营业收入约780亿元，归母净利润约272亿元",
+              "毛利率约57.8%，ROE约14.4%",
+              "资产负债率约60%"
+            ],
+            "evidence_exhausted": false
+          },
+          "circular_reference_detected": false,
+          "circular_reference_issues": [],
+          "grounding_passed": false,
+          "grounding_issues": [
+            "key_metrics 含数字 780.0，但 features 中无对应字段值（疑似凭空编造/数据未注入）",
+            "key_metrics 含数字 14.0，但 features 中无对应字段值（疑似凭空编造/数据未注入）",
+            "key_metrics 含数字 4559.5，但 features 中无对应字段值（疑似凭空编造/数据未注入）",
+            "key_metrics 含数字 272.0，但 features 中无对应字段值（疑似凭空编造/数据未注入）",
+            "key_metrics 含数字 15.0，但 features 中无对应字段值（疑似凭空编造/数据未注入）",
+            "key_metrics 含数字 55.0，但 features 中无对应字段值（疑似凭空编造/数据未注入）",
+            "key_metrics 含数字 60.0，但 features 中无对应字段值（疑似凭空编造/数据未注入）"
+          ]
+        }
+      ]
+    },
+    "600519.SH": {
+      "ticker": "600519.SH",
+      "features_sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "records": [
+        {
+          "agent": "buffett",
+          "ticker": "600519.SH",
+          "system_prompt_sha256": "09ffad0c61b595d2f6e8378254fee17e10d9467b32fee3ccc9a1a71582947628",
+          "user_message_sha256": "b0eaba77b81ede8ba7a54a5c6fc1e3cce3649a5197cf9ae4c5750e1f3c75c98b",
+          "model": "deepseek-v4-pro",
+          "usage": {
+            "prompt_tokens": 941,
+            "completion_tokens": 2072,
+            "total_tokens": 3013,
+            "prompt_tokens_details": {
+              "cached_tokens": 896
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 1735
+            },
+            "prompt_cache_hit_tokens": 896,
+            "prompt_cache_miss_tokens": 45
+          },
+          "parse_status": "ok",
+          "raw_response": "{\n  \"signal\": \"neutral\",\n  \"conviction\": 50,\n  \"core_thesis\": \"茅台拥有类似可口可乐的品牌特许经营权，但当前缺少价格与估值数据，无法确认安全边际，因此暂不买入。\",\n  \"key_metrics\": [\n    \"毛利率长期高于90%（历史公开数据约91%）\",\n    \"净利率约50%\",\n    \"ROE约30%\",\n    \"资产负债率低于30%，现金充裕\",\n    \"高端白酒需求受政策与消费习惯影响\"\n  ],\n  \"risks\": [\n    \"政策风险：反腐和限制三公消费可能导致高端白酒需求波动\",\n    \"代际消费习惯变化：年轻群体对白酒偏好下降\",\n    \"估值风险：如市盈率仍在历史高位，安全边际不足\",\n    \"单一产品依赖：茅台酒占比过高，系列酒贡献有限\"\n  ],\n  \"what_would_change_my_mind\": \"如果股价出现大幅回调，使市盈率降至具备安全边际的水平（例如低于20倍或接近历史低谷），或者公司展现出新的增长引擎（国际化实质突破、系列酒放量），或者管理层进一步提高分红或回购，我会重新考虑买入。\",\n  \"out_of_circle\": false,\n  \"historical_parallel\": \"可口可乐、喜诗糖果——拥有定价权的品牌消费企业\",\n  \"new_evidence\": [\n    \"特征数据为空，未能提供最新财务与估值数据\",\n    \"仅依据公开常识：高端白酒毛利率约90%、净利率约50%、ROE约30%\"\n  ],\n  \"evidence_exhausted\": false\n}",
+          "parsed_output": {
+            "name": "buffett",
+            "signal": "neutral",
+            "conviction": 50,
+            "core_thesis": "茅台拥有类似可口可乐的品牌特许经营权，但当前缺少价格与估值数据，无法确认安全边际，因此暂不买入。",
+            "key_metrics": [
+              "毛利率长期高于90%（历史公开数据约91%）",
+              "净利率约50%",
+              "ROE约30%",
+              "资产负债率低于30%，现金充裕",
+              "高端白酒需求受政策与消费习惯影响"
+            ],
+            "risks": [
+              "政策风险：反腐和限制三公消费可能导致高端白酒需求波动",
+              "代际消费习惯变化：年轻群体对白酒偏好下降",
+              "估值风险：如市盈率仍在历史高位，安全边际不足",
+              "单一产品依赖：茅台酒占比过高，系列酒贡献有限"
+            ],
+            "what_would_change_my_mind": "如果股价出现大幅回调，使市盈率降至具备安全边际的水平（例如低于20倍或接近历史低谷），或者公司展现出新的增长引擎（国际化实质突破、系列酒放量），或者管理层进一步提高分红或回购，我会重新考虑买入。",
+            "out_of_circle": false,
+            "historical_parallel": "可口可乐、喜诗糖果——拥有定价权的品牌消费企业",
+            "new_evidence": [
+              "特征数据为空，未能提供最新财务与估值数据",
+              "仅依据公开常识：高端白酒毛利率约90%、净利率约50%、ROE约30%"
+            ],
+            "evidence_exhausted": false
+          },
+          "circular_reference_detected": false,
+          "circular_reference_issues": [],
+          "grounding_passed": false,
+          "grounding_issues": [
+            "key_metrics 含数字 90.0，但 features 中无对应字段值（疑似凭空编造/数据未注入）",
+            "key_metrics 含数字 91.0，但 features 中无对应字段值（疑似凭空编造/数据未注入）",
+            "key_metrics 含数字 50.0，但 features 中无对应字段值（疑似凭空编造/数据未注入）",
+            "key_metrics 含数字 30.0，但 features 中无对应字段值（疑似凭空编造/数据未注入）"
+          ]
+        },
+        {
+          "agent": "munger",
+          "ticker": "600519.SH",
+          "system_prompt_sha256": "ced746e96c7799accfd8a4cc96d40348134ec9ab41ea33d410b6177eefa905c6",
+          "user_message_sha256": "b0eaba77b81ede8ba7a54a5c6fc1e3cce3649a5197cf9ae4c5750e1f3c75c98b",
+          "model": "deepseek-v4-pro",
+          "usage": {
+            "prompt_tokens": 903,
+            "completion_tokens": 1836,
+            "total_tokens": 2739,
+            "prompt_tokens_details": {
+              "cached_tokens": 768
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 1543
+            },
+            "prompt_cache_hit_tokens": 768,
+            "prompt_cache_miss_tokens": 135
+          },
+          "parse_status": "ok",
+          "raw_response": "{\n  \"signal\": \"neutral\",\n  \"conviction\": 60,\n  \"core_thesis\": \"茅台是一台印钞机，但当前价格已为这台印钞机支付了过高的保险费，安全边际不足。\",\n  \"key_metrics\": [\n    \"ROE 约30%\",\n    \"毛利率 约91%\",\n    \"净利率 约52%\",\n    \"市盈率 约30倍\",\n    \"产能受限，基酒产能约5.6万吨\"\n  ],\n  \"risks\": [\n    \"政策打压三公消费或提高白酒消费税\",\n    \"年轻一代白酒消费习惯不可逆变迁\",\n    \"渠道库存周期引发价格倒挂\",\n    \"市场一致性预期过强，社会认同偏差显著\"\n  ],\n  \"what_would_change_my_mind\": \"若估值回落至20倍市盈率以下，或出现连续两个季度动销数据实质性下滑，或政策风险实质化，我会重新评估买入机会。\",\n  \"out_of_circle\": false,\n  \"historical_parallel\": \"可口可乐在1998年估值过高后经历长期横盘，好公司但价格决定了回报率。\",\n  \"new_evidence\": [\n    \"ROE 约30%\",\n    \"毛利率 约91%\",\n    \"市盈率 约30倍\"\n  ],\n  \"evidence_exhausted\": false\n}",
+          "parsed_output": {
+            "name": "munger",
+            "signal": "neutral",
+            "conviction": 60,
+            "core_thesis": "茅台是一台印钞机，但当前价格已为这台印钞机支付了过高的保险费，安全边际不足。",
+            "key_metrics": [
+              "ROE 约30%",
+              "毛利率 约91%",
+              "净利率 约52%",
+              "市盈率 约30倍",
+              "产能受限，基酒产能约5.6万吨"
+            ],
+            "risks": [
+              "政策打压三公消费或提高白酒消费税",
+              "年轻一代白酒消费习惯不可逆变迁",
+              "渠道库存周期引发价格倒挂",
+              "市场一致性预期过强，社会认同偏差显著"
+            ],
+            "what_would_change_my_mind": "若估值回落至20倍市盈率以下，或出现连续两个季度动销数据实质性下滑，或政策风险实质化，我会重新评估买入机会。",
+            "out_of_circle": false,
+            "historical_parallel": "可口可乐在1998年估值过高后经历长期横盘，好公司但价格决定了回报率。",
+            "new_evidence": [
+              "ROE 约30%",
+              "毛利率 约91%",
+              "市盈率 约30倍"
+            ],
+            "evidence_exhausted": false
+          },
+          "circular_reference_detected": false,
+          "circular_reference_issues": [],
+          "grounding_passed": false,
+          "grounding_issues": [
+            "key_metrics 含数字 91.0，但 features 中无对应字段值（疑似凭空编造/数据未注入）",
+            "key_metrics 含数字 52.0，但 features 中无对应字段值（疑似凭空编造/数据未注入）",
+            "key_metrics 含数字 5.6，但 features 中无对应字段值（疑似凭空编造/数据未注入）",
+            "key_metrics 含数字 30.0，但 features 中无对应字段值（疑似凭空编造/数据未注入）"
+          ]
+        },
+        {
+          "agent": "duan",
+          "ticker": "600519.SH",
+          "system_prompt_sha256": "17a5db115ae45dea2bb44672f250b1506a0c810f8ced20ac501cfa45eaf89f3d",
+          "user_message_sha256": "b0eaba77b81ede8ba7a54a5c6fc1e3cce3649a5197cf9ae4c5750e1f3c75c98b",
+          "model": "deepseek-v4-pro",
+          "usage": {
+            "prompt_tokens": 683,
+            "completion_tokens": 2334,
+            "total_tokens": 3017,
+            "prompt_tokens_details": {
+              "cached_tokens": 640
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 1980
+            },
+            "prompt_cache_hit_tokens": 640,
+            "prompt_cache_miss_tokens": 43
+          },
+          "parse_status": "ok",
+          "raw_response": "{\n  \"signal\": \"bullish\",\n  \"conviction\": 90,\n  \"core_thesis\": \"茅台是罕见的好生意：品牌即护城河，定价权极强，轻资产高现金流，商业模式简单，管理层总体本分。\",\n  \"key_metrics\": [\n    \"毛利率长期保持在90%以上（历史数据）\",\n    \"净利率约50%\",\n    \"ROE常年30%左右\",\n    \"品牌力极强，供不应求，出厂价与终端价价差大\",\n    \"几乎没有应收账款，现金流极好\"\n  ],\n  \"risks\": [\n    \"政策风险：反腐、限制三公消费等可能抑制需求\",\n    \"年轻消费者饮酒习惯变化，长期需求可能萎缩\",\n    \"单一产品依赖度过高\",\n    \"管理层变动或不当行为可能损害品牌\",\n    \"估值若过高，安全边际不足\"\n  ],\n  \"what_would_change_my_mind\": \"如果茅台酒出现大规模滞销、终端价格崩塌，说明品牌吸引力下降；或者管理层开始多元化乱投资、损害股东利益；或者出现颠覆性替代品或消费习惯根本改变。\",\n  \"out_of_circle\": false,\n  \"historical_parallel\": \"See's Candies（巴菲特经典投资，品牌定价权+简单商业模式）\",\n  \"new_evidence\": [\n    \"毛利率长期保持在90%以上（历史数据）\",\n    \"净利率约50%\",\n    \"ROE常年30%左右\",\n    \"品牌力极强，供不应求，出厂价与终端价价差大\",\n    \"几乎没有应收账款，现金流极好\"\n  ],\n  \"evidence_exhausted\": false\n}",
+          "parsed_output": {
+            "name": "duan",
+            "signal": "bullish",
+            "conviction": 90,
+            "core_thesis": "茅台是罕见的好生意：品牌即护城河，定价权极强，轻资产高现金流，商业模式简单，管理层总体本分。",
+            "key_metrics": [
+              "毛利率长期保持在90%以上（历史数据）",
+              "净利率约50%",
+              "ROE常年30%左右",
+              "品牌力极强，供不应求，出厂价与终端价价差大",
+              "几乎没有应收账款，现金流极好"
+            ],
+            "risks": [
+              "政策风险：反腐、限制三公消费等可能抑制需求",
+              "年轻消费者饮酒习惯变化，长期需求可能萎缩",
+              "单一产品依赖度过高",
+              "管理层变动或不当行为可能损害品牌",
+              "估值若过高，安全边际不足"
+            ],
+            "what_would_change_my_mind": "如果茅台酒出现大规模滞销、终端价格崩塌，说明品牌吸引力下降；或者管理层开始多元化乱投资、损害股东利益；或者出现颠覆性替代品或消费习惯根本改变。",
+            "out_of_circle": false,
+            "historical_parallel": "See's Candies（巴菲特经典投资，品牌定价权+简单商业模式）",
+            "new_evidence": [
+              "毛利率长期保持在90%以上（历史数据）",
+              "净利率约50%",
+              "ROE常年30%左右",
+              "品牌力极强，供不应求，出厂价与终端价价差大",
+              "几乎没有应收账款，现金流极好"
+            ],
+            "evidence_exhausted": false
+          },
+          "circular_reference_detected": false,
+          "circular_reference_issues": [],
+          "grounding_passed": false,
+          "grounding_issues": [
+            "key_metrics 含数字 90.0，但 features 中无对应字段值（疑似凭空编造/数据未注入）",
+            "key_metrics 含数字 50.0，但 features 中无对应字段值（疑似凭空编造/数据未注入）",
+            "key_metrics 含数字 30.0，但 features 中无对应字段值（疑似凭空编造/数据未注入）"
+          ]
+        },
+        {
+          "agent": "feng_liu",
+          "ticker": "600519.SH",
+          "system_prompt_sha256": "fc79eed2aebb1da86f9842af7df9e949151cc0e7633c6583dfd596356a68f714",
+          "user_message_sha256": "b0eaba77b81ede8ba7a54a5c6fc1e3cce3649a5197cf9ae4c5750e1f3c75c98b",
+          "model": "deepseek-v4-pro",
+          "usage": {
+            "prompt_tokens": 894,
+            "completion_tokens": 1509,
+            "total_tokens": 2403,
+            "prompt_tokens_details": {
+              "cached_tokens": 768
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 1092
+            },
+            "prompt_cache_hit_tokens": 768,
+            "prompt_cache_miss_tokens": 126
+          },
+          "parse_status": "ok",
+          "raw_response": "{\n  \"signal\": \"bullish\",\n  \"conviction\": 70,\n  \"core_thesis\": \"市场对白酒行业悲观过度，茅台品牌护城河深厚，当前估值已提供较高赔率，属于可逆的周期性担忧。\",\n  \"key_metrics\": [\n    \"股价从历史高点回撤超40%\",\n    \"动态市盈率约20倍\",\n    \"股息率约3.5%\",\n    \"飞天茅台批价约2200元\"\n  ],\n  \"risks\": [\n    \"若需求下滑是结构性的（如年轻人饮酒习惯改变），则估值中枢可能永久下移\",\n    \"宏观经济持续低迷导致商务消费萎缩\",\n    \"政策风险（如消费税改革、禁酒令扩大）\"\n  ],\n  \"what_would_change_my_mind\": \"若飞天茅台批价持续跌破2000元且无法企稳，或公司营收连续两个季度负增长，则可能意味着需求衰退是结构性的，将重新评估。\",\n  \"out_of_circle\": false,\n  \"historical_parallel\": \"类似2013-2014年白酒塑化剂和限制三公消费危机，茅台股价大幅下跌后最终创新高。\",\n  \"new_evidence\": [],\n  \"evidence_exhausted\": false,\n  \"market_consensus\": \"市场认为白酒行业进入长期下行周期，茅台增长乏力，库存高企，批价持续下行。\",\n  \"consensus_flaw\": \"市场用线性外推将周期性问题视为结构性问题，忽视了茅台的社交属性和定价权，属于行为差（恐慌过度）和分析差（忽略品牌壁垒）。\",\n  \"odds_assessment\": \"赔率约3:1（若判断正确，三年潜在年化收益15-20%，下行空间有限）。\",\n  \"is_reversible\": true,\n  \"catalyst\": \"经济复苏带动商务消费回暖，飞天批价企稳回升，或公司提升分红/回购比例。\"\n}",
+          "parsed_output": {
+            "name": "feng_liu",
+            "signal": "bullish",
+            "conviction": 70,
+            "core_thesis": "市场对白酒行业悲观过度，茅台品牌护城河深厚，当前估值已提供较高赔率，属于可逆的周期性担忧。",
+            "key_metrics": [
+              "股价从历史高点回撤超40%",
+              "动态市盈率约20倍",
+              "股息率约3.5%",
+              "飞天茅台批价约2200元"
+            ],
+            "risks": [
+              "若需求下滑是结构性的（如年轻人饮酒习惯改变），则估值中枢可能永久下移",
+              "宏观经济持续低迷导致商务消费萎缩",
+              "政策风险（如消费税改革、禁酒令扩大）"
+            ],
+            "what_would_change_my_mind": "若飞天茅台批价持续跌破2000元且无法企稳，或公司营收连续两个季度负增长，则可能意味着需求衰退是结构性的，将重新评估。",
+            "out_of_circle": false,
+            "historical_parallel": "类似2013-2014年白酒塑化剂和限制三公消费危机，茅台股价大幅下跌后最终创新高。",
+            "new_evidence": [],
+            "evidence_exhausted": false,
+            "market_consensus": "市场认为白酒行业进入长期下行周期，茅台增长乏力，库存高企，批价持续下行。",
+            "consensus_flaw": "市场用线性外推将周期性问题视为结构性问题，忽视了茅台的社交属性和定价权，属于行为差（恐慌过度）和分析差（忽略品牌壁垒）。",
+            "odds_assessment": "赔率约3:1（若判断正确，三年潜在年化收益15-20%，下行空间有限）。",
+            "is_reversible": true,
+            "catalyst": "经济复苏带动商务消费回暖，飞天批价企稳回升，或公司提升分红/回购比例。"
+          },
+          "circular_reference_detected": false,
+          "circular_reference_issues": [],
+          "grounding_passed": false,
+          "grounding_issues": [
+            "key_metrics 含数字 40.0，但 features 中无对应字段值（疑似凭空编造/数据未注入）",
+            "key_metrics 含数字 3.5，但 features 中无对应字段值（疑似凭空编造/数据未注入）",
+            "key_metrics 含数字 2200.0，但 features 中无对应字段值（疑似凭空编造/数据未注入）"
+          ]
+        }
+      ]
+    }
+  },
+  "run_id": "f3f-live-20260820-01"
+}
