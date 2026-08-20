@@ -88,7 +88,25 @@
   - 复现并定位根因：另开独立修复 child，闭环 G2 1.3；
   - 无法复现或仍无法定位：记录历史现象与残余风险，停止串台根因循环，
     推进 `g2-dossier-data-quality`；
-  - 禁止在没有新证据时继续派生新的串台诊断 child。
+- 禁止在没有新证据时继续派生新的串台诊断 child。
+- 不宣称 G2 capability passed，不启动 G3。
+
+## 0.4. 2026-08-20 f3f bounded diagnosis closure
+
+- `f3f-r1-crosstalk-failure-repro` 已 archive 至
+  `openspec/changes/archive/2026-08-20-f3f-r1-crosstalk-failure-repro/`。
+- child commits：
+  - `e5d21cc feat(f3f): archive historical R1 crosstalk failure repro diagnosis`
+  - `2d2a1b6 feat(f3f): add authorized live R1 reproduction evidence`
+- fixture/dry-run 复现成功：600519 环形显性串台与 600900 单 agent munger 引用
+  均可被现有 `detect_circular_reference` 识别；历史 `insufficient_data` 输入在
+  当前预检路径 fail-closed、不会到达 LLM。
+- 授权 live 尝试为阴性：`f3f-live-20260820-01` 5/5 R1 调用成功，
+  `circular_reference_detected=0/5`；当前 `deepseek-v4-pro` + 当前 prompt +
+  insufficient-features 代理未复现历史显性串台。
+- 残余风险：live 证据为单次代理输入，隐性串台逃逸面与 prompt 案例锚定设计
+  审查仍未闭合。
+- 串台诊断循环停止；下一步推进 `g2-dossier-data-quality`。
 - 不宣称 G2 capability passed，不启动 G3。
 
 ## 1. 本文件的唯一权威地位
@@ -1111,11 +1129,10 @@ Queue 1 repair closure 已完成：`R-G1-001`、`R-G1-002`、`R-G1-003`、
 `main@8513096`，M3 6.1/6.2 = closed，Top 20 evidence 已保留。
 G1 umbrella 7.1/7.2/7.3 已完成，release decision 已记录
 `G1=passed`、`G2=approved_to_start_formal_acceptance`。
-G2 1.1、1.2 已完成并归档。当前仅允许推进一次有界诊断
-`f3f-r1-crosstalk-failure-repro`：冻结并复现 `600519` / `600900` 历史失败
-快照。成功定位根因后另开独立修复 child；无法定位则记录残余风险并停止
-串台根因循环，随后推进 `g2-dossier-data-quality`。不得将 G2
-capability/runtime 描述为已通过，也不得提前启动 G3 runtime 或产品化。
+G2 1.1、1.2、1.3 已完成并归档。f3f 的 fixture/dry-run 复现定位了历史输入
+fail-closed 路径，授权 live 尝试未复现历史显性串台；串台根因循环停止，下一步
+推进 `g2-dossier-data-quality`。不得将 G2 capability/runtime 描述为已通过，
+也不得提前启动 G3 runtime 或产品化。
 
 ## 23. 下一窗口启动方式
 

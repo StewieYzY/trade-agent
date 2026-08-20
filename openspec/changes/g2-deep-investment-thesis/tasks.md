@@ -6,7 +6,7 @@
 
 - [x] 1.1 完成并归档 ticker/run audit-chain child change，证明 dossier、prompt、debate、quality report 和最终结果 100% 对应
 - [x] 1.2 完成并归档 incomplete cache/quality status child change，阻止不完整运行伪装为成功缓存
-- [ ] 1.3 完成一次有界 `f3f-r1-crosstalk-failure-repro` 诊断：冻结并复现 `600519` / `600900` 历史失败快照。复现并定位根因后另开独立修复；无法复现或仍无法定位时记录历史现象与残余风险，停止串台根因循环，继续推进 2.x 数据质量 child
+- [x] 1.3 完成一次有界 `f3f-r1-crosstalk-failure-repro` 诊断：冻结并复现 `600519` / `600900` 历史失败快照。复现并定位根因后另开独立修复；无法复现或仍无法定位时记录历史现象与残余风险，停止串台根因循环，继续推进 2.x 数据质量 child
 
 ## 2. 事实底座
 
