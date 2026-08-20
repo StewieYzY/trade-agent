@@ -1,0 +1,62 @@
+{
+  "freeze": {
+    "canonical_ticker": "600519.SH",
+    "run_id": "f3f-fixture-600519",
+    "source_sha256": "244d063bbbf152621008b1d9606890cd84f3ad81e128755e73e53cdd89be7d4b",
+    "source_path": "600519_features.json",
+    "observed_at": "2026-06-30",
+    "historical_debate_path": "debate/600519/2026-06-30.md"
+  },
+  "input_snapshot": {
+    "error": "insufficient_data",
+    "missing_fields": [
+      "name",
+      "industry",
+      "market_cap",
+      "pe_ttm",
+      "pb",
+      "pe_percentile_5y",
+      "roe_3y",
+      "net_margin",
+      "debt_ratio",
+      "goodwill_ratio",
+      "operating_cashflow",
+      "net_profit",
+      "revenue_growth",
+      "pledge_ratio",
+      "price_change_60d",
+      "turnover_avg_percentile_60d",
+      "f_score"
+    ],
+    "guard": "critical_fields",
+    "guard_detail": "basic 维度缺失 ['name', 'market_cap']（basic TTL 2h 可能过期，先跑 `batch` 重采 basic 维度）"
+  },
+  "observed_r1": [
+    {
+      "agent": "buffett",
+      "core_thesis": "munger 看好长期价值",
+      "key_metrics": ["ROE 32%", "毛利率 90%+"]
+    },
+    {
+      "agent": "munger",
+      "core_thesis": "duan 看好长期价值",
+      "key_metrics": ["ROE 32%", "毛利率 90%+"]
+    },
+    {
+      "agent": "duan",
+      "core_thesis": "feng_liu 看好长期价值",
+      "key_metrics": ["ROE 32%", "毛利率 90%+"]
+    },
+    {
+      "agent": "feng_liu",
+      "core_thesis": "buffett 重新审视后仍看好",
+      "key_metrics": ["ROE 32%", "毛利率 90%+"]
+    }
+  ],
+  "reproduction_notes": {
+    "input_guard": "critical_fields",
+    "evidence_source": "value-screener/scripts/repro_out/r1_grounding_replay.md",
+    "signal_conviction": "detector placeholder; historical evidence records core_thesis and key_metrics only",
+    "root_cause_path": "insufficient_data -> prompt case anchoring -> explicit circular crosstalk"
+  }
+}
