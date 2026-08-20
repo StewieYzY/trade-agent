@@ -1,0 +1,17 @@
+{
+  "canonical_ticker": "600009.SH",
+  "run_id": "f3e-live-20260820-01",
+  "status": "incomplete",
+  "reasons": [
+    "synthesizer_interrupted"
+  ],
+  "completed_stages": [
+    "r1",
+    "r2",
+    "da"
+  ],
+  "final_quality_gate": "not_run",
+  "artifact_path": "debate/600009.SH/f3e-live-20260820-01/2026-08-20.md",
+  "execution_mode": "council",
+  "schema_version": "g2-run-quality-status-v1"
+}

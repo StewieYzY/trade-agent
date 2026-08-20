@@ -9,8 +9,12 @@
     "market_cap": 56111000000.0,
     "pe_percentile_5y": 62.19,
     "pb_percentile_5y": 0.16,
-    "roe_3y": [],
-    "net_margin": null,
+    "roe_3y": [
+      0.022223808504056915,
+      0.04442912933609005,
+      0.0475313769954422
+    ],
+    "net_margin": 0.158624306908437,
     "revenue_growth": null,
     "debt_ratio": null,
     "operating_cashflow": null,
@@ -1277,6 +1281,14 @@
       "risk.json",
       "valuation.json"
     ],
-    "source_sha256": "f588d5bf911aefd90348d9a7d150280847b9af938bf5b06d8548a3afeb2a00c9"
+    "source_sha256": "f588d5bf911aefd90348d9a7d150280847b9af938bf5b06d8548a3afeb2a00c9",
+    "completed_fields": [
+      "roe_3y",
+      "net_margin"
+    ],
+    "derivation": {
+      "roe_3y": "net_profit / (TOTAL_ASSETS - TOTAL_CURRENT_LIAB - TOTAL_NONCURRENT_LIAB) per year 2023/2024/2025",
+      "net_margin": "latest net_profit / revenue (2025), derived from financials.json"
+    }
   }
 }

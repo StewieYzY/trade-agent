@@ -2,7 +2,6 @@
 
 ## Purpose
 L3 天团辩论框架 —— 多投资哲学视角深度研判单只股票，通过 4 轮结构化辩论产出 CouncilResult。
-
 ## Requirements
 ### Requirement: AgentOutput JSON Schema
 每个 agent 的输出 SHALL 是符合以下 schema 的 JSON 对象：
@@ -496,3 +495,18 @@ Round 1 调用 LLM 前，编排器 SHALL 校验 `features` 数据充分性。除
 - **THEN** `run_debate` SHALL 正常继续 R2/R3，R2 的 other_opinions 跳过失败 agent
 
 > 注（spec review #4）：scenario 按当前 4 位投资大师写以符合 TDD「测试覆盖当前实现」；张坤（第 5 agent）加入后补 5-agent scenario，动态比逻辑不变（5 agent 阈值 = ≥2 失败）。
+
+### Requirement: R1 输入装配与身份绑定实验契约（f3e 实验性）
+
+R1 新假设诊断实验 SHALL 通过独立 harness 固定 canonical ticker、run_id、dossier/source hash、system/user prompt hash、model、raw response、parsed output 与 usage；角色分发、全员共享、现有编排路径 SHALL 使用同一 prompt 与 model 版本对照，任何绑定不一致 SHALL fail closed。
+
+#### Scenario: 角色分发与全员共享仅改 user message 装配
+
+- **WHEN** 两个实验分支使用相同 ticker、dossier、model 和 system prompt，仅改变 user message 装配策略
+- **THEN** harness SHALL 记录 per-agent user message sha256，并分别标记 `role_distribution` 与 `all_shared`
+
+#### Scenario: 现有编排路径与直接调用对照
+
+- **WHEN** harness 通过 `run_debate` 运行现有编排路径
+- **THEN** harness SHALL 记录 R1 parsed output 与 audit prompt artifact，并对照直接调用分支的 user message hash；若 raw response 不可得，SHALL 记录 evidence gap 而非标记 clean complete
+

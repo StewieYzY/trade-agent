@@ -1,0 +1,15 @@
+{
+  "branch": "existing_orchestration",
+  "run_id": "f3e-live-20260820-01",
+  "status": "incomplete",
+  "records": [],
+  "outputs": [],
+  "metrics": {
+    "input_consistency": 0.0
+  },
+  "input_assembly_mismatches": [],
+  "evidence_gaps": [
+    "run_debate did not complete: HTTPStatusError: Client error '402 Payment Required' for url 'https://api.deepseek.com/v1/chat/completions'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/402"
+  ],
+  "error": "HTTPStatusError: Client error '402 Payment Required' for url 'https://api.deepseek.com/v1/chat/completions'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/402"
+}

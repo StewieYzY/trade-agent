@@ -1,0 +1,67 @@
+{
+  "schema_version": "g2-identity-audit-chain-v1",
+  "generated_at": "2026-08-20T03:35:04.228488+00:00",
+  "identity": {
+    "canonical_ticker": "600009.SH",
+    "run_id": "f3e-live-20260820-02",
+    "profile_version": "g2-council-v1",
+    "input_hash": "556120be447b8800ab37b676443c7f8501791c3d812d101c41ed2ab8a2e2678f",
+    "dossier_snapshot": "556120be447b8800ab37b676443c7f8501791c3d812d101c41ed2ab8a2e2678f",
+    "prompt_version": "council-prompt-v1",
+    "model_configuration": {
+      "heavy_model": "deepseek-v4-pro",
+      "moderate_model": "deepseek-v4-flash",
+      "reasoning_levels": [
+        "heavy",
+        "moderate"
+      ]
+    }
+  },
+  "identity_digest": "43ff425620317fc1a83718ddbba0a5e0cb55c46129e75f00fda5d021a35aaa44",
+  "artifacts": [
+    {
+      "artifact_type": "dossier",
+      "path": "01-dossier.json",
+      "payload_sha256": "ff3011d9bbc91815b6334960e1029544eb4947cb565ce97c3e297bb0e760b331",
+      "artifact_hash": "0461b8a32888fd6728e7f06554d46f46615e395c835a7c8d4f6d526c42dba448",
+      "parent_hashes": []
+    },
+    {
+      "artifact_type": "prompt",
+      "path": "02-prompt.json",
+      "payload_sha256": "32892193a3cb2a62a14ea316e18b692de7c84c34f66553975de508611d6e85e1",
+      "artifact_hash": "1b659f3c0b24684fe0a4c0b01abae80d1c1a66819f72faf9b55c96f5a89c64cd",
+      "parent_hashes": [
+        "0461b8a32888fd6728e7f06554d46f46615e395c835a7c8d4f6d526c42dba448"
+      ]
+    },
+    {
+      "artifact_type": "debate",
+      "path": "03-debate.json",
+      "payload_sha256": "311bb104f6709f68e3975fb6d1fc95defd6619ee04397ede36c9c1e99624703c",
+      "artifact_hash": "50d90a9429d76c19fba69d53baeec342391f70fb2cb347424809400bd30db462",
+      "parent_hashes": [
+        "1b659f3c0b24684fe0a4c0b01abae80d1c1a66819f72faf9b55c96f5a89c64cd"
+      ]
+    },
+    {
+      "artifact_type": "quality_report",
+      "path": "04-quality_report.json",
+      "payload_sha256": "8f28631874d18e1e1cd11e396b27be4b4ce06333e42bc8b0f37b107fa3b21731",
+      "artifact_hash": "73b6babb63b074f386ff65be6b3bfd4b56059d19ed092331fe2bc033c62f91e4",
+      "parent_hashes": [
+        "50d90a9429d76c19fba69d53baeec342391f70fb2cb347424809400bd30db462"
+      ]
+    },
+    {
+      "artifact_type": "final_result",
+      "path": "05-final_result.json",
+      "payload_sha256": "48499499c993f5e9b589e3713d26083f49073e71b959a6c7651f68acd362daa7",
+      "artifact_hash": "47663e89aaf83e7e43eba39b0e6f5b6d747f9fe36a9c40be85673e56f63370a3",
+      "parent_hashes": [
+        "73b6babb63b074f386ff65be6b3bfd4b56059d19ed092331fe2bc033c62f91e4"
+      ]
+    }
+  ],
+  "manifest_sha256": "fe08621b55d36b19f67034e5fad7dc0f77c42ae2e8e059c3f93a2f2b69a87b43"
+}

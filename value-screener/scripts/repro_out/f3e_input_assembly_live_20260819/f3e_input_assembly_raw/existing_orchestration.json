@@ -1,0 +1,15 @@
+{
+  "branch": "existing_orchestration",
+  "run_id": "f3e-live-20260819-01",
+  "status": "incomplete",
+  "records": [],
+  "outputs": [],
+  "metrics": {
+    "input_consistency": 0.0
+  },
+  "input_assembly_mismatches": [],
+  "evidence_gaps": [
+    "run_debate did not complete: ValueError: insufficient_data: core_snapshot missing required facts ['roe_3y', 'net_margin']. Provide a verified dossier or skip."
+  ],
+  "error": "ValueError: insufficient_data: core_snapshot missing required facts ['roe_3y', 'net_margin']. Provide a verified dossier or skip."
+}

@@ -1,0 +1,22 @@
+{
+  "canonical_ticker": "600009.SH",
+  "run_id": "f3e-live-20260820-02",
+  "status": "warning",
+  "reasons": [
+    "buffett: ['key_metrics 含数字 2.2，但 features 中无对应字段值（疑似凭空编造/数据未注入）', 'key_metrics 含数字 4.4，但 features 中无对应字段值（疑似凭空编造/数据未注入）', 'key_metrics 含数字 133.5，但 features 中无对应字段值（疑似凭空编造/数据未注入）', 'key_metrics 含数字 2023.0，但 features 中无对应字段值（疑似凭空编造/数据未注入）', 'key_metrics 含数字 12.4，但 features 中无对应字段值（疑似凭空编造/数据未注入）', 'key_metrics 含数字 13.1，但 features 中无对应字段值（疑似凭空编造/数据未注入）', 'key_metrics 含数字 15.86，但 features 中无对应字段值（疑似凭空编造/数据未注入）', 'key_metrics 含数字 19.6，但 features 中无对应字段值（疑似凭空编造/数据未注入）', 'key_metrics 含数字 21.17，但 features 中无对应字段值（疑似凭空编造/数据未注入）', 'key_metrics 含数字 25.2，但 features 中无对应字段值（疑似凭空编造/数据未注入）']",
+    "munger: ['key_metrics 含数字 2.22，但 features 中无对应字段值（疑似凭空编造/数据未注入）', 'key_metrics 含数字 4.44，但 features 中无对应字段值（疑似凭空编造/数据未注入）', 'key_metrics 含数字 9.34，但 features 中无对应字段值（疑似凭空编造/数据未注入）', 'key_metrics 含数字 15.86，但 features 中无对应字段值（疑似凭空编造/数据未注入）', 'key_metrics 含数字 19.34，但 features 中无对应字段值（疑似凭空编造/数据未注入）', 'key_metrics 含数字 21.17，但 features 中无对应字段值（疑似凭空编造/数据未注入）', 'key_metrics 含数字 25.22，但 features 中无对应字段值（疑似凭空编造/数据未注入）', 'key_metrics 含数字 63.91，但 features 中无对应字段值（疑似凭空编造/数据未注入）']",
+    "duan: ['key_metrics 含数字 3.8，但 features 中无对应字段值（疑似凭空编造/数据未注入）', 'key_metrics 含数字 45.0，但 features 中无对应字段值（疑似凭空编造/数据未注入）', 'key_metrics 含数字 15.86，但 features 中无对应字段值（疑似凭空编造/数据未注入）', 'key_metrics 含数字 25.2，但 features 中无对应字段值（疑似凭空编造/数据未注入）']",
+    "feng_liu: ['key_metrics 含数字 2.22，但 features 中无对应字段值（疑似凭空编造/数据未注入）', 'key_metrics 含数字 4.44，但 features 中无对应字段值（疑似凭空编造/数据未注入）', 'key_metrics 含数字 9.34，但 features 中无对应字段值（疑似凭空编造/数据未注入）', 'key_metrics 含数字 561.0，但 features 中无对应字段值（疑似凭空编造/数据未注入）', 'key_metrics 含数字 19.34，但 features 中无对应字段值（疑似凭空编造/数据未注入）', 'key_metrics 含数字 21.17，但 features 中无对应字段值（疑似凭空编造/数据未注入）']"
+  ],
+  "completed_stages": [
+    "r1",
+    "r2",
+    "da",
+    "synthesizer",
+    "final_validation"
+  ],
+  "final_quality_gate": "warning",
+  "artifact_path": "debate/600009.SH/f3e-live-20260820-02/2026-08-20.md",
+  "execution_mode": "council",
+  "schema_version": "g2-run-quality-status-v1"
+}

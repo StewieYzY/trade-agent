@@ -1,0 +1,1333 @@
+{
+  "schema_version": "g2-identity-audit-chain-v1",
+  "artifact_type": "dossier",
+  "identity": {
+    "canonical_ticker": "600009.SH",
+    "run_id": "f3e-live-20260820-02",
+    "profile_version": "g2-council-v1",
+    "input_hash": "556120be447b8800ab37b676443c7f8501791c3d812d101c41ed2ab8a2e2678f",
+    "dossier_snapshot": "556120be447b8800ab37b676443c7f8501791c3d812d101c41ed2ab8a2e2678f",
+    "prompt_version": "council-prompt-v1",
+    "model_configuration": {
+      "heavy_model": "deepseek-v4-pro",
+      "moderate_model": "deepseek-v4-flash",
+      "reasoning_levels": [
+        "heavy",
+        "moderate"
+      ]
+    }
+  },
+  "payload_sha256": "ff3011d9bbc91815b6334960e1029544eb4947cb565ce97c3e297bb0e760b331",
+  "parent_hashes": [],
+  "payload": {
+    "ticker": "600009.SH",
+    "run_id": "f3e-live-20260820-02",
+    "profile_version": "g2-council-v1",
+    "input_hash": "556120be447b8800ab37b676443c7f8501791c3d812d101c41ed2ab8a2e2678f",
+    "dossier_snapshot": "556120be447b8800ab37b676443c7f8501791c3d812d101c41ed2ab8a2e2678f",
+    "prompt_version": "council-prompt-v1",
+    "model_configuration": {
+      "heavy_model": "deepseek-v4-pro",
+      "moderate_model": "deepseek-v4-flash",
+      "reasoning_levels": [
+        "heavy",
+        "moderate"
+      ]
+    },
+    "dossier": {
+      "core_snapshot": {
+        "ticker": "600009.SH",
+        "name": "上海机场",
+        "industry": null,
+        "price": 22.55,
+        "pe_ttm": 26.12,
+        "pb": 1.32,
+        "market_cap": 56111000000.0,
+        "pe_percentile_5y": 62.19,
+        "pb_percentile_5y": 0.16,
+        "roe_3y": [
+          0.022223808504056915,
+          0.04442912933609005,
+          0.0475313769954422
+        ],
+        "net_margin": 0.158624306908437,
+        "revenue_growth": null,
+        "debt_ratio": null,
+        "operating_cashflow": null,
+        "net_profit": [
+          934000000.0,
+          1934000000.0,
+          2117000000.0000002
+        ]
+      },
+      "research_dossier": {
+        "main_business": {
+          "code": "600009",
+          "report_date": "2025-12-31",
+          "by_industry": [
+            {
+              "name": "航空及相关服务收入",
+              "revenue": 12553779623.49,
+              "revenue_ratio": 0.940626,
+              "gross_margin": 0.252171
+            },
+            {
+              "name": "其他收入",
+              "revenue": 792412540.63,
+              "revenue_ratio": 0.059374,
+              "gross_margin": 0.639079
+            },
+            {
+              "name": "航空及相关服务",
+              "revenue": 9133149100.0,
+              "revenue_ratio": 0.940212,
+              "gross_margin": 0.241877
+            },
+            {
+              "name": "其他收入",
+              "revenue": 580776200.0,
+              "revenue_ratio": 0.059788,
+              "gross_margin": 0.649848
+            },
+            {
+              "name": "非航空性收入",
+              "revenue": 3437096321.05,
+              "revenue_ratio": 0.540988,
+              "gross_margin": null
+            },
+            {
+              "name": "航空性收入",
+              "revenue": 2916270569.11,
+              "revenue_ratio": 0.459012,
+              "gross_margin": null
+            },
+            {
+              "name": "其中:旅客及货邮航空服务收入",
+              "revenue": 1755292975.61,
+              "revenue_ratio": 0.276278,
+              "gross_margin": null
+            },
+            {
+              "name": "其中:其他非航收入",
+              "revenue": 1512488298.12,
+              "revenue_ratio": 0.238061,
+              "gross_margin": null
+            },
+            {
+              "name": "其中:架次相关收入",
+              "revenue": 1160977593.5,
+              "revenue_ratio": 0.182734,
+              "gross_margin": null
+            },
+            {
+              "name": "其中:商业餐饮收入",
+              "revenue": 1091055484.26,
+              "revenue_ratio": 0.171729,
+              "gross_margin": null
+            },
+            {
+              "name": "其中:物流服务收入",
+              "revenue": 833552538.67,
+              "revenue_ratio": 0.131199,
+              "gross_margin": null
+            },
+            {
+              "name": "航空及相关服务收入",
+              "revenue": 11571853181.84,
+              "revenue_ratio": 0.935568,
+              "gross_margin": 0.192695
+            },
+            {
+              "name": "其他收入",
+              "revenue": 796950921.62,
+              "revenue_ratio": 0.064432,
+              "gross_margin": 0.606277
+            },
+            {
+              "name": "非航空性收入",
+              "revenue": 3372081045.68,
+              "revenue_ratio": 0.556113,
+              "gross_margin": null
+            },
+            {
+              "name": "航空性收入",
+              "revenue": 2691579076.7,
+              "revenue_ratio": 0.443887,
+              "gross_margin": null
+            },
+            {
+              "name": "其中:旅客及货邮航空服务收入",
+              "revenue": 1573390420.55,
+              "revenue_ratio": 0.259479,
+              "gross_margin": null
+            },
+            {
+              "name": "其中:其他非航收入",
+              "revenue": 1478632574.56,
+              "revenue_ratio": 0.243851,
+              "gross_margin": null
+            },
+            {
+              "name": "其中:架次相关收入",
+              "revenue": 1118188656.15,
+              "revenue_ratio": 0.184408,
+              "gross_margin": null
+            },
+            {
+              "name": "其中:商业餐饮收入",
+              "revenue": 1066206246.33,
+              "revenue_ratio": 0.175835,
+              "gross_margin": null
+            },
+            {
+              "name": "其中:物流服务收入",
+              "revenue": 827242224.79,
+              "revenue_ratio": 0.136426,
+              "gross_margin": null
+            },
+            {
+              "name": "航空及相关服务收入",
+              "revenue": 10357315714.72,
+              "revenue_ratio": 0.937567,
+              "gross_margin": 0.140741
+            },
+            {
+              "name": "其他收入",
+              "revenue": 689700336.26,
+              "revenue_ratio": 0.062433,
+              "gross_margin": 0.53115
+            },
+            {
+              "name": "非航空性收入",
+              "revenue": 2962292207.29,
+              "revenue_ratio": 0.60845,
+              "gross_margin": null
+            },
+            {
+              "name": "航空性收入",
+              "revenue": 1906296181.33,
+              "revenue_ratio": 0.39155,
+              "gross_margin": null
+            },
+            {
+              "name": "其中:其他非航收入",
+              "revenue": 1215754350.93,
+              "revenue_ratio": 0.249714,
+              "gross_margin": null
+            },
+            {
+              "name": "其中:商业餐饮收入",
+              "revenue": 1099103638.86,
+              "revenue_ratio": 0.225754,
+              "gross_margin": null
+            },
+            {
+              "name": "其中:旅客及货邮航空服务收入",
+              "revenue": 1015076004.91,
+              "revenue_ratio": 0.208495,
+              "gross_margin": null
+            },
+            {
+              "name": "其中:架次相关收入",
+              "revenue": 891220176.42,
+              "revenue_ratio": 0.183055,
+              "gross_margin": null
+            },
+            {
+              "name": "其中:物流服务收入",
+              "revenue": 647434217.5,
+              "revenue_ratio": 0.132982,
+              "gross_margin": null
+            },
+            {
+              "name": "航空及相关服务收入",
+              "revenue": 5109575968.48,
+              "revenue_ratio": 0.932328,
+              "gross_margin": -0.641545
+            },
+            {
+              "name": "其他收入",
+              "revenue": 370871652.88,
+              "revenue_ratio": 0.067672,
+              "gross_margin": -0.384201
+            },
+            {
+              "name": "非航空性收入",
+              "revenue": 591746162.21,
+              "revenue_ratio": 0.507591,
+              "gross_margin": null
+            },
+            {
+              "name": "航空性收入",
+              "revenue": 574048174.17,
+              "revenue_ratio": 0.492409,
+              "gross_margin": null
+            },
+            {
+              "name": "其中:其他非航收入",
+              "revenue": 425965894.48,
+              "revenue_ratio": 0.365387,
+              "gross_margin": null
+            },
+            {
+              "name": "其中:架次相关收入",
+              "revenue": 422929617.04,
+              "revenue_ratio": 0.362782,
+              "gross_margin": null
+            },
+            {
+              "name": "其中:商业餐饮收入",
+              "revenue": 165780267.73,
+              "revenue_ratio": 0.142204,
+              "gross_margin": null
+            },
+            {
+              "name": "其中:旅客及货邮相关收入",
+              "revenue": 151118557.13,
+              "revenue_ratio": 0.129627,
+              "gross_margin": null
+            },
+            {
+              "name": "航空及相关服务收入",
+              "revenue": 3482964069.84,
+              "revenue_ratio": 0.934322,
+              "gross_margin": -0.625192
+            },
+            {
+              "name": "其他收入",
+              "revenue": 244833192.38,
+              "revenue_ratio": 0.065678,
+              "gross_margin": -0.70149
+            },
+            {
+              "name": "航空及相关服务收入",
+              "revenue": 4070295337.78,
+              "revenue_ratio": 0.945818,
+              "gross_margin": -0.525712
+            },
+            {
+              "name": "其他收入",
+              "revenue": 233169750.16,
+              "revenue_ratio": 0.054182,
+              "gross_margin": -0.675223
+            },
+            {
+              "name": "航空及相关服务收入",
+              "revenue": 10597550609.65,
+              "revenue_ratio": 0.968284,
+              "gross_margin": 0.519792
+            },
+            {
+              "name": "其他收入",
+              "revenue": 347117868.11,
+              "revenue_ratio": 0.031716,
+              "gross_margin": 0.276363
+            },
+            {
+              "name": "航空及相关服务收入",
+              "revenue": 8943732247.81,
+              "revenue_ratio": 0.960337,
+              "gross_margin": 0.521396
+            },
+            {
+              "name": "其他收入",
+              "revenue": 369382438.93,
+              "revenue_ratio": 0.039663,
+              "gross_margin": 0.407557
+            },
+            {
+              "name": "航空及相关服务收入",
+              "revenue": 7737226070.08,
+              "revenue_ratio": 0.95967,
+              "gross_margin": 0.495732
+            },
+            {
+              "name": "其他收入",
+              "revenue": 325152959.85,
+              "revenue_ratio": 0.04033,
+              "gross_margin": 0.556244
+            },
+            {
+              "name": "航空及相关服务收入",
+              "revenue": 6666127814.49,
+              "revenue_ratio": 0.958952,
+              "gross_margin": 0.454142
+            },
+            {
+              "name": "其他收入",
+              "revenue": 285346666.69,
+              "revenue_ratio": 0.041048,
+              "gross_margin": 0.385391
+            },
+            {
+              "name": "航空及相关服务收入",
+              "revenue": 3285798585.89,
+              "revenue_ratio": 0.967039,
+              "gross_margin": 0.454082
+            },
+            {
+              "name": "其他收入",
+              "revenue": 111996200.12,
+              "revenue_ratio": 0.032961,
+              "gross_margin": 0.210178
+            },
+            {
+              "name": "航空及相关服务收入",
+              "revenue": 6021551935.29,
+              "revenue_ratio": 0.958022,
+              "gross_margin": 0.467025
+            },
+            {
+              "name": "其他收入",
+              "revenue": 263848355.03,
+              "revenue_ratio": 0.041978,
+              "gross_margin": 0.286042
+            },
+            {
+              "name": "航空及相关服务收入",
+              "revenue": 2988187700.38,
+              "revenue_ratio": 0.965768,
+              "gross_margin": 0.478265
+            },
+            {
+              "name": "其他收入",
+              "revenue": 105916882.23,
+              "revenue_ratio": 0.034232,
+              "gross_margin": 0.215893
+            },
+            {
+              "name": "航空及相关服务收入",
+              "revenue": 5522354425.78,
+              "revenue_ratio": 0.960262,
+              "gross_margin": 0.440555
+            },
+            {
+              "name": "其他收入",
+              "revenue": 228528518.58,
+              "revenue_ratio": 0.039738,
+              "gross_margin": 0.367187
+            },
+            {
+              "name": "交通运输业",
+              "revenue": 2748642902.52,
+              "revenue_ratio": 1.0,
+              "gross_margin": 0.438603
+            },
+            {
+              "name": "交通运输业",
+              "revenue": 5215129817.2,
+              "revenue_ratio": 1.0,
+              "gross_margin": 0.439451
+            },
+            {
+              "name": "交通运输业",
+              "revenue": 2471044874.92,
+              "revenue_ratio": 1.0,
+              "gross_margin": 0.444806
+            },
+            {
+              "name": "交通运输业",
+              "revenue": 4716034920.81,
+              "revenue_ratio": null,
+              "gross_margin": 0.379584
+            },
+            {
+              "name": "交通运输业",
+              "revenue": 2273684571.61,
+              "revenue_ratio": null,
+              "gross_margin": 0.381192
+            },
+            {
+              "name": "其中:关联交易",
+              "revenue": 18123900.0,
+              "revenue_ratio": null,
+              "gross_margin": null
+            },
+            {
+              "name": "交通运输业",
+              "revenue": 4611211636.06,
+              "revenue_ratio": null,
+              "gross_margin": 0.392849
+            },
+            {
+              "name": "交通运输业",
+              "revenue": 2174012700.88,
+              "revenue_ratio": null,
+              "gross_margin": 0.37923
+            },
+            {
+              "name": "交通运输业",
+              "revenue": 4186408260.79,
+              "revenue_ratio": null,
+              "gross_margin": 0.388599
+            },
+            {
+              "name": "交通运输业",
+              "revenue": 1921009182.7,
+              "revenue_ratio": null,
+              "gross_margin": 0.368886
+            },
+            {
+              "name": "交通运输业",
+              "revenue": 3338337110.31,
+              "revenue_ratio": null,
+              "gross_margin": 0.31357
+            },
+            {
+              "name": "航空及相关服务",
+              "revenue": 1528503397.65,
+              "revenue_ratio": null,
+              "gross_margin": 0.310416
+            },
+            {
+              "name": "其他",
+              "revenue": 39339072.76,
+              "revenue_ratio": null,
+              "gross_margin": 0.094178
+            },
+            {
+              "name": "航空及相关服务",
+              "revenue": 3261669210.81,
+              "revenue_ratio": null,
+              "gross_margin": 0.392463
+            },
+            {
+              "name": "其他",
+              "revenue": 89097066.22,
+              "revenue_ratio": null,
+              "gross_margin": 0.219824
+            }
+          ],
+          "by_product": [
+            {
+              "name": "航空及相关服务收入",
+              "revenue": 12577890048.67,
+              "revenue_ratio": 0.942433,
+              "gross_margin": null
+            },
+            {
+              "name": "其他收入",
+              "revenue": 768302115.45,
+              "revenue_ratio": 0.057567,
+              "gross_margin": null
+            },
+            {
+              "name": "航空及相关服务",
+              "revenue": 9133149100.0,
+              "revenue_ratio": 0.940212,
+              "gross_margin": 0.241877
+            },
+            {
+              "name": "其他收入",
+              "revenue": 580776200.0,
+              "revenue_ratio": 0.059788,
+              "gross_margin": 0.649848
+            },
+            {
+              "name": "非航空性收入",
+              "revenue": 3437096321.05,
+              "revenue_ratio": 0.540988,
+              "gross_margin": null
+            },
+            {
+              "name": "航空性收入",
+              "revenue": 2916270569.11,
+              "revenue_ratio": 0.459012,
+              "gross_margin": null
+            },
+            {
+              "name": "其中:旅客及货邮航空服务收入",
+              "revenue": 1755292975.61,
+              "revenue_ratio": 0.276278,
+              "gross_margin": null
+            },
+            {
+              "name": "其中:其他非航收入",
+              "revenue": 1512488298.12,
+              "revenue_ratio": 0.238061,
+              "gross_margin": null
+            },
+            {
+              "name": "其中:架次相关收入",
+              "revenue": 1160977593.5,
+              "revenue_ratio": 0.182734,
+              "gross_margin": null
+            },
+            {
+              "name": "其中:商业餐饮收入",
+              "revenue": 1091055484.26,
+              "revenue_ratio": 0.171729,
+              "gross_margin": null
+            },
+            {
+              "name": "其中:物流服务收入",
+              "revenue": 833552538.67,
+              "revenue_ratio": 0.131199,
+              "gross_margin": null
+            },
+            {
+              "name": "航空及相关服务收入",
+              "revenue": 11571853181.84,
+              "revenue_ratio": 0.935568,
+              "gross_margin": null
+            },
+            {
+              "name": "其他收入",
+              "revenue": 796950921.62,
+              "revenue_ratio": 0.064432,
+              "gross_margin": null
+            },
+            {
+              "name": "非航空性收入",
+              "revenue": 3372081045.68,
+              "revenue_ratio": 0.556113,
+              "gross_margin": null
+            },
+            {
+              "name": "航空性收入",
+              "revenue": 2691579076.7,
+              "revenue_ratio": 0.443887,
+              "gross_margin": null
+            },
+            {
+              "name": "其中:旅客及货邮航空服务收入",
+              "revenue": 1573390420.55,
+              "revenue_ratio": 0.259479,
+              "gross_margin": null
+            },
+            {
+              "name": "其中:其他非航收入",
+              "revenue": 1478632574.56,
+              "revenue_ratio": 0.243851,
+              "gross_margin": null
+            },
+            {
+              "name": "其中:架次相关收入",
+              "revenue": 1118188656.15,
+              "revenue_ratio": 0.184408,
+              "gross_margin": null
+            },
+            {
+              "name": "其中:商业餐饮收入",
+              "revenue": 1066206246.33,
+              "revenue_ratio": 0.175835,
+              "gross_margin": null
+            },
+            {
+              "name": "其中:物流服务收入",
+              "revenue": 827242224.79,
+              "revenue_ratio": 0.136426,
+              "gross_margin": null
+            },
+            {
+              "name": "非航空性收入",
+              "revenue": 6671045015.42,
+              "revenue_ratio": 0.603878,
+              "gross_margin": null
+            },
+            {
+              "name": "航空性收入",
+              "revenue": 4375971035.56,
+              "revenue_ratio": 0.396122,
+              "gross_margin": null
+            },
+            {
+              "name": "其中:其他非航收入",
+              "revenue": 2754941598.11,
+              "revenue_ratio": 0.249383,
+              "gross_margin": null
+            },
+            {
+              "name": "其中:商业餐饮收入",
+              "revenue": 2431227267.78,
+              "revenue_ratio": 0.22008,
+              "gross_margin": null
+            },
+            {
+              "name": "其中:旅客及货邮航空服务收入",
+              "revenue": 2410750065.21,
+              "revenue_ratio": 0.218226,
+              "gross_margin": null
+            },
+            {
+              "name": "其中:架次相关收入",
+              "revenue": 1965220970.35,
+              "revenue_ratio": 0.177896,
+              "gross_margin": null
+            },
+            {
+              "name": "其中:物流服务收入",
+              "revenue": 1484876149.53,
+              "revenue_ratio": 0.134414,
+              "gross_margin": null
+            },
+            {
+              "name": "非航空性收入",
+              "revenue": 2962292207.29,
+              "revenue_ratio": 0.60845,
+              "gross_margin": null
+            },
+            {
+              "name": "航空性收入",
+              "revenue": 1906296181.33,
+              "revenue_ratio": 0.39155,
+              "gross_margin": null
+            },
+            {
+              "name": "其中:其他非航收入",
+              "revenue": 1215754350.93,
+              "revenue_ratio": 0.249714,
+              "gross_margin": null
+            },
+            {
+              "name": "其中:商业餐饮收入",
+              "revenue": 1099103638.86,
+              "revenue_ratio": 0.225754,
+              "gross_margin": null
+            },
+            {
+              "name": "其中:旅客及货邮航空服务收入",
+              "revenue": 1015076004.91,
+              "revenue_ratio": 0.208495,
+              "gross_margin": null
+            },
+            {
+              "name": "其中:架次相关收入",
+              "revenue": 891220176.42,
+              "revenue_ratio": 0.183055,
+              "gross_margin": null
+            },
+            {
+              "name": "其中:物流服务收入",
+              "revenue": 647434217.5,
+              "revenue_ratio": 0.132982,
+              "gross_margin": null
+            },
+            {
+              "name": "非航空性收入",
+              "revenue": 3658618530.13,
+              "revenue_ratio": 0.667577,
+              "gross_margin": null
+            },
+            {
+              "name": "航空性收入",
+              "revenue": 1821829091.23,
+              "revenue_ratio": 0.332423,
+              "gross_margin": null
+            },
+            {
+              "name": "其中:其他非航收入",
+              "revenue": 1729508691.23,
+              "revenue_ratio": 0.315578,
+              "gross_margin": null
+            },
+            {
+              "name": "其中:物流服务收入",
+              "revenue": 1368875926.63,
+              "revenue_ratio": 0.249774,
+              "gross_margin": null
+            },
+            {
+              "name": "其中:架次相关收入",
+              "revenue": 1124446784.04,
+              "revenue_ratio": 0.205174,
+              "gross_margin": null
+            },
+            {
+              "name": "其中:旅客及货邮航空服务收入",
+              "revenue": 697382307.19,
+              "revenue_ratio": 0.127249,
+              "gross_margin": null
+            },
+            {
+              "name": "其中:商业餐饮收入",
+              "revenue": 560233912.27,
+              "revenue_ratio": 0.102224,
+              "gross_margin": null
+            },
+            {
+              "name": "非航空性收入",
+              "revenue": 591746162.21,
+              "revenue_ratio": 0.507591,
+              "gross_margin": null
+            },
+            {
+              "name": "航空性收入",
+              "revenue": 574048174.17,
+              "revenue_ratio": 0.492409,
+              "gross_margin": null
+            },
+            {
+              "name": "其中:其他非航收入",
+              "revenue": 425965894.48,
+              "revenue_ratio": 0.365387,
+              "gross_margin": null
+            },
+            {
+              "name": "其中:架次相关收入",
+              "revenue": 422929617.04,
+              "revenue_ratio": 0.362782,
+              "gross_margin": null
+            },
+            {
+              "name": "其中:商业餐饮收入",
+              "revenue": 165780267.73,
+              "revenue_ratio": 0.142204,
+              "gross_margin": null
+            },
+            {
+              "name": "其中:旅客及货邮相关收入",
+              "revenue": 151118557.13,
+              "revenue_ratio": 0.129627,
+              "gross_margin": null
+            },
+            {
+              "name": "非航空性收入",
+              "revenue": 1876069815.77,
+              "revenue_ratio": 0.503265,
+              "gross_margin": null
+            },
+            {
+              "name": "航空性收入",
+              "revenue": 1851727446.45,
+              "revenue_ratio": 0.496735,
+              "gross_margin": null
+            },
+            {
+              "name": "其中:其他非航收入",
+              "revenue": 1219846297.06,
+              "revenue_ratio": 0.32723,
+              "gross_margin": null
+            },
+            {
+              "name": "其中:架次相关收入",
+              "revenue": 1127884014.9,
+              "revenue_ratio": 0.30256,
+              "gross_margin": null
+            },
+            {
+              "name": "其中:旅客及货邮相关收入",
+              "revenue": 723843431.55,
+              "revenue_ratio": 0.194175,
+              "gross_margin": null
+            },
+            {
+              "name": "其中:商业餐饮收入",
+              "revenue": 656223518.71,
+              "revenue_ratio": 0.176035,
+              "gross_margin": null
+            },
+            {
+              "name": "航空性收入",
+              "revenue": 975152218.83,
+              "revenue_ratio": 0.540591,
+              "gross_margin": null
+            },
+            {
+              "name": "非航空性收入",
+              "revenue": 828710819.49,
+              "revenue_ratio": 0.459409,
+              "gross_margin": null
+            },
+            {
+              "name": "其中:架次相关收入",
+              "revenue": 568846146.03,
+              "revenue_ratio": 0.315349,
+              "gross_margin": null
+            },
+            {
+              "name": "其中:其他非航收入",
+              "revenue": 513632414.65,
+              "revenue_ratio": 0.28474,
+              "gross_margin": null
+            },
+            {
+              "name": "其中:旅客及货邮相关收入",
+              "revenue": 406306072.8,
+              "revenue_ratio": 0.225242,
+              "gross_margin": null
+            },
+            {
+              "name": "其中:商业餐饮收入",
+              "revenue": 315078404.84,
+              "revenue_ratio": 0.174669,
+              "gross_margin": null
+            },
+            {
+              "name": "非航空性收入",
+              "revenue": 2576190353.1,
+              "revenue_ratio": 0.598632,
+              "gross_margin": null
+            },
+            {
+              "name": "航空性收入",
+              "revenue": 1727274734.84,
+              "revenue_ratio": 0.401368,
+              "gross_margin": null
+            },
+            {
+              "name": "其中:其他非航收入",
+              "revenue": 1308607765.01,
+              "revenue_ratio": 0.304082,
+              "gross_margin": null
+            },
+            {
+              "name": "其中:商业餐饮收入",
+              "revenue": 1267582588.09,
+              "revenue_ratio": 0.294549,
+              "gross_margin": null
+            },
+            {
+              "name": "其中:架次相关收入",
+              "revenue": 989386212.96,
+              "revenue_ratio": 0.229905,
+              "gross_margin": null
+            },
+            {
+              "name": "其中:旅客及货邮相关收入",
+              "revenue": 737888521.88,
+              "revenue_ratio": 0.171464,
+              "gross_margin": null
+            },
+            {
+              "name": "非航空性收入",
+              "revenue": 1630074793.73,
+              "revenue_ratio": 0.659912,
+              "gross_margin": null
+            },
+            {
+              "name": "航空性收入",
+              "revenue": 840065053.0,
+              "revenue_ratio": 0.340088,
+              "gross_margin": null
+            },
+            {
+              "name": "其中:商业餐饮收入",
+              "revenue": 1012967323.76,
+              "revenue_ratio": 0.410085,
+              "gross_margin": null
+            },
+            {
+              "name": "其中:其他非航收入",
+              "revenue": 617107469.97,
+              "revenue_ratio": 0.249827,
+              "gross_margin": null
+            },
+            {
+              "name": "其中:架次相关收入",
+              "revenue": 500862475.1,
+              "revenue_ratio": 0.202767,
+              "gross_margin": null
+            },
+            {
+              "name": "其中:旅客及货邮相关收入",
+              "revenue": 339202577.9,
+              "revenue_ratio": 0.137321,
+              "gross_margin": null
+            },
+            {
+              "name": "非航空性收入",
+              "revenue": 6860835288.11,
+              "revenue_ratio": 0.626866,
+              "gross_margin": null
+            },
+            {
+              "name": "航空性收入",
+              "revenue": 4083833189.65,
+              "revenue_ratio": 0.373134,
+              "gross_margin": null
+            },
+            {
+              "name": "其中:商业餐饮收入",
+              "revenue": 5462940302.19,
+              "revenue_ratio": 0.499142,
+              "gross_margin": null
+            },
+            {
+              "name": "其中:旅客及货邮相关收入",
+              "revenue": 2279450381.96,
+              "revenue_ratio": 0.20827,
+              "gross_margin": null
+            },
+            {
+              "name": "其中:架次相关收入",
+              "revenue": 1804382807.69,
+              "revenue_ratio": 0.164864,
+              "gross_margin": null
+            },
+            {
+              "name": "其中:其他非航收入",
+              "revenue": 1397894985.92,
+              "revenue_ratio": 0.127724,
+              "gross_margin": null
+            },
+            {
+              "name": "非航空性收入",
+              "revenue": 3431427902.11,
+              "revenue_ratio": 0.62903,
+              "gross_margin": null
+            },
+            {
+              "name": "航空性收入",
+              "revenue": 2023683053.34,
+              "revenue_ratio": 0.37097,
+              "gross_margin": null
+            },
+            {
+              "name": "其中:商业餐饮收入",
+              "revenue": 2773811233.03,
+              "revenue_ratio": 0.508479,
+              "gross_margin": null
+            },
+            {
+              "name": "其中:旅客及货邮相关收入",
+              "revenue": 1145027093.04,
+              "revenue_ratio": 0.2099,
+              "gross_margin": null
+            },
+            {
+              "name": "其中:架次相关收入",
+              "revenue": 878655960.3,
+              "revenue_ratio": 0.16107,
+              "gross_margin": null
+            },
+            {
+              "name": "其中:其他非航收入",
+              "revenue": 657616669.08,
+              "revenue_ratio": 0.120551,
+              "gross_margin": null
+            },
+            {
+              "name": "非航空性收入",
+              "revenue": 5343586697.55,
+              "revenue_ratio": 0.57377,
+              "gross_margin": null
+            },
+            {
+              "name": "航空性收入",
+              "revenue": 3969527989.19,
+              "revenue_ratio": 0.42623,
+              "gross_margin": null
+            },
+            {
+              "name": "其中:商业餐饮收入",
+              "revenue": 3985741691.8,
+              "revenue_ratio": 0.427971,
+              "gross_margin": null
+            },
+            {
+              "name": "其中:旅客及货邮相关收入",
+              "revenue": 2221807723.8,
+              "revenue_ratio": 0.238568,
+              "gross_margin": null
+            },
+            {
+              "name": "其中:架次相关收入",
+              "revenue": 1747720265.39,
+              "revenue_ratio": 0.187662,
+              "gross_margin": null
+            },
+            {
+              "name": "其中:其他非航收入",
+              "revenue": 1357845005.75,
+              "revenue_ratio": 0.145799,
+              "gross_margin": null
+            },
+            {
+              "name": "非航空性收入",
+              "revenue": 2540187593.78,
+              "revenue_ratio": 0.56393,
+              "gross_margin": null
+            },
+            {
+              "name": "航空性收入",
+              "revenue": 1964247940.36,
+              "revenue_ratio": 0.43607,
+              "gross_margin": null
+            },
+            {
+              "name": "非航空性收入",
+              "revenue": 4338047869.17,
+              "revenue_ratio": 0.538061,
+              "gross_margin": null
+            },
+            {
+              "name": "航空性收入",
+              "revenue": 3724331160.76,
+              "revenue_ratio": 0.461939,
+              "gross_margin": null
+            },
+            {
+              "name": "其中:商业租赁收入",
+              "revenue": 2991782212.26,
+              "revenue_ratio": 0.371079,
+              "gross_margin": null
+            },
+            {
+              "name": "其中:旅客及货邮相关收入",
+              "revenue": 2074012188.81,
+              "revenue_ratio": 0.257246,
+              "gross_margin": null
+            },
+            {
+              "name": "其中:架次相关收入",
+              "revenue": 1650318971.95,
+              "revenue_ratio": 0.204694,
+              "gross_margin": null
+            },
+            {
+              "name": "其中:其他非航收入",
+              "revenue": 1346265656.91,
+              "revenue_ratio": 0.166981,
+              "gross_margin": null
+            },
+            {
+              "name": "非航空性收入",
+              "revenue": 2094307470.48,
+              "revenue_ratio": 0.537317,
+              "gross_margin": null
+            },
+            {
+              "name": "航空性收入",
+              "revenue": 1803405803.38,
+              "revenue_ratio": 0.462683,
+              "gross_margin": null
+            },
+            {
+              "name": "其中:商业租赁收入",
+              "revenue": 1436245368.98,
+              "revenue_ratio": 0.368484,
+              "gross_margin": null
+            },
+            {
+              "name": "其中:旅客及货邮相关收入",
+              "revenue": 1000074334.76,
+              "revenue_ratio": 0.25658,
+              "gross_margin": null
+            },
+            {
+              "name": "其中:架次相关收入",
+              "revenue": 803331468.62,
+              "revenue_ratio": 0.206103,
+              "gross_margin": null
+            },
+            {
+              "name": "其中:其他非航收入",
+              "revenue": 658062101.5,
+              "revenue_ratio": 0.168833,
+              "gross_margin": null
+            },
+            {
+              "name": "航空性收入",
+              "revenue": 3511924319.26,
+              "revenue_ratio": 0.505206,
+              "gross_margin": null
+            },
+            {
+              "name": "非航空性收入",
+              "revenue": 3439550161.92,
+              "revenue_ratio": 0.494794,
+              "gross_margin": null
+            },
+            {
+              "name": "航空及相关服务收入",
+              "revenue": 5522354425.78,
+              "revenue_ratio": 0.960262,
+              "gross_margin": 0.440555
+            },
+            {
+              "name": "其他收入",
+              "revenue": 228528518.58,
+              "revenue_ratio": 0.039738,
+              "gross_margin": 0.367187
+            },
+            {
+              "name": "航空及相关服务收入",
+              "revenue": 2663491172.39,
+              "revenue_ratio": 0.96902,
+              "gross_margin": 0.445754
+            },
+            {
+              "name": "其他收入",
+              "revenue": 85151730.13,
+              "revenue_ratio": 0.03098,
+              "gross_margin": 0.214917
+            },
+            {
+              "name": "航空及相关服务收入",
+              "revenue": 5046185213.42,
+              "revenue_ratio": 0.967605,
+              "gross_margin": 0.445768
+            },
+            {
+              "name": "其他收入",
+              "revenue": 168944603.78,
+              "revenue_ratio": 0.032395,
+              "gross_margin": 0.250765
+            },
+            {
+              "name": "航空及相关服务收入",
+              "revenue": 2386520938.27,
+              "revenue_ratio": 0.965794,
+              "gross_margin": 0.452459
+            },
+            {
+              "name": "其他收入",
+              "revenue": 84523936.65,
+              "revenue_ratio": 0.034206,
+              "gross_margin": 0.22871
+            },
+            {
+              "name": "航空及相关服务收入",
+              "revenue": 4593121761.23,
+              "revenue_ratio": null,
+              "gross_margin": 0.386857
+            },
+            {
+              "name": "其他收入",
+              "revenue": 122913159.58,
+              "revenue_ratio": null,
+              "gross_margin": 0.107774
+            },
+            {
+              "name": "航空及相关服务",
+              "revenue": 2221088166.69,
+              "revenue_ratio": null,
+              "gross_margin": 0.389689
+            },
+            {
+              "name": "其他",
+              "revenue": 52596404.92,
+              "revenue_ratio": null,
+              "gross_margin": 0.022351
+            },
+            {
+              "name": "其中:关联交易",
+              "revenue": 18123900.0,
+              "revenue_ratio": null,
+              "gross_margin": null
+            },
+            {
+              "name": "航空及相关服务收入",
+              "revenue": 4502529973.7,
+              "revenue_ratio": null,
+              "gross_margin": 0.398069
+            },
+            {
+              "name": "其他收入",
+              "revenue": 108681662.36,
+              "revenue_ratio": null,
+              "gross_margin": 0.176619
+            },
+            {
+              "name": "航空及相关服务收入",
+              "revenue": 2129006169.99,
+              "revenue_ratio": null,
+              "gross_margin": 0.385053
+            },
+            {
+              "name": "其他收入",
+              "revenue": 45006530.89,
+              "revenue_ratio": null,
+              "gross_margin": 0.103746
+            },
+            {
+              "name": "航空及相关服务收入",
+              "revenue": 4097013717.59,
+              "revenue_ratio": null,
+              "gross_margin": 0.394292
+            },
+            {
+              "name": "其他收入",
+              "revenue": 89394543.2,
+              "revenue_ratio": null,
+              "gross_margin": 0.127702
+            },
+            {
+              "name": "航空及相关服务",
+              "revenue": 1873956212.48,
+              "revenue_ratio": null,
+              "gross_margin": 0.373976
+            },
+            {
+              "name": "其他",
+              "revenue": 47052970.22,
+              "revenue_ratio": null,
+              "gross_margin": 0.166166
+            },
+            {
+              "name": "航空及相关服务收入",
+              "revenue": 3243576851.75,
+              "revenue_ratio": null,
+              "gross_margin": 0.317951
+            },
+            {
+              "name": "其他收入",
+              "revenue": 94760258.56,
+              "revenue_ratio": null,
+              "gross_margin": 0.16361
+            }
+          ]
+        },
+        "research": {
+          "code": "600009",
+          "consensus_eps": 1.173,
+          "target_price": 27.389550000000003,
+          "buy_rating_pct": 0.7698412698412699,
+          "coverage_count": 126,
+          "rating_distribution": {
+            "买入": 50,
+            "增持": 47,
+            "中性": 5,
+            "持有": 1,
+            "": 23
+          }
+        },
+        "peers": {
+          "__error__": true,
+          "reason": "not present in frozen source"
+        },
+        "capex_proxy": {
+          "series": [
+            1244000000.0,
+            1957999999.9999998,
+            1307000000.0
+          ],
+          "years": [
+            "2023",
+            "2024",
+            "2025"
+          ]
+        },
+        "degraded_fields": [
+          "peers"
+        ]
+      },
+      "pledge": null,
+      "freeze": {
+        "canonical_ticker": "600009.SH",
+        "source_ticker": "600009",
+        "source_dir": "/Users/admin/Documents/trade-agent/value-screener/data/cache/600009",
+        "source_files": [
+          "basic.json",
+          "financials.json",
+          "kline.json",
+          "main_business.json",
+          "research.json",
+          "risk.json",
+          "valuation.json"
+        ],
+        "source_sha256": "f588d5bf911aefd90348d9a7d150280847b9af938bf5b06d8548a3afeb2a00c9",
+        "completed_fields": [
+          "roe_3y",
+          "net_margin"
+        ],
+        "derivation": {
+          "roe_3y": "net_profit / (TOTAL_ASSETS - TOTAL_CURRENT_LIAB - TOTAL_NONCURRENT_LIAB) per year 2023/2024/2025",
+          "net_margin": "latest net_profit / revenue (2025), derived from financials.json"
+        }
+      }
+    },
+    "dossier_sha256": "556120be447b8800ab37b676443c7f8501791c3d812d101c41ed2ab8a2e2678f"
+  }
+}

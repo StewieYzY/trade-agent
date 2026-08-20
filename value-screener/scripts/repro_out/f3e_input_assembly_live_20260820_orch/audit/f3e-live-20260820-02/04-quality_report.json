@@ -1,0 +1,48 @@
+{
+  "schema_version": "g2-identity-audit-chain-v1",
+  "artifact_type": "quality_report",
+  "identity": {
+    "canonical_ticker": "600009.SH",
+    "run_id": "f3e-live-20260820-02",
+    "profile_version": "g2-council-v1",
+    "input_hash": "556120be447b8800ab37b676443c7f8501791c3d812d101c41ed2ab8a2e2678f",
+    "dossier_snapshot": "556120be447b8800ab37b676443c7f8501791c3d812d101c41ed2ab8a2e2678f",
+    "prompt_version": "council-prompt-v1",
+    "model_configuration": {
+      "heavy_model": "deepseek-v4-pro",
+      "moderate_model": "deepseek-v4-flash",
+      "reasoning_levels": [
+        "heavy",
+        "moderate"
+      ]
+    }
+  },
+  "payload_sha256": "8f28631874d18e1e1cd11e396b27be4b4ce06333e42bc8b0f37b107fa3b21731",
+  "parent_hashes": [
+    "50d90a9429d76c19fba69d53baeec342391f70fb2cb347424809400bd30db462"
+  ],
+  "payload": {
+    "ticker": "600009.SH",
+    "run_id": "f3e-live-20260820-02",
+    "profile_version": "g2-council-v1",
+    "input_hash": "556120be447b8800ab37b676443c7f8501791c3d812d101c41ed2ab8a2e2678f",
+    "dossier_snapshot": "556120be447b8800ab37b676443c7f8501791c3d812d101c41ed2ab8a2e2678f",
+    "prompt_version": "council-prompt-v1",
+    "model_configuration": {
+      "heavy_model": "deepseek-v4-pro",
+      "moderate_model": "deepseek-v4-flash",
+      "reasoning_levels": [
+        "heavy",
+        "moderate"
+      ]
+    },
+    "r1_quality_warnings": [
+      "buffett: ['key_metrics 含数字 2.2，但 features 中无对应字段值（疑似凭空编造/数据未注入）', 'key_metrics 含数字 4.4，但 features 中无对应字段值（疑似凭空编造/数据未注入）', 'key_metrics 含数字 133.5，但 features 中无对应字段值（疑似凭空编造/数据未注入）', 'key_metrics 含数字 2023.0，但 features 中无对应字段值（疑似凭空编造/数据未注入）', 'key_metrics 含数字 12.4，但 features 中无对应字段值（疑似凭空编造/数据未注入）', 'key_metrics 含数字 13.1，但 features 中无对应字段值（疑似凭空编造/数据未注入）', 'key_metrics 含数字 15.86，但 features 中无对应字段值（疑似凭空编造/数据未注入）', 'key_metrics 含数字 19.6，但 features 中无对应字段值（疑似凭空编造/数据未注入）', 'key_metrics 含数字 21.17，但 features 中无对应字段值（疑似凭空编造/数据未注入）', 'key_metrics 含数字 25.2，但 features 中无对应字段值（疑似凭空编造/数据未注入）']",
+      "munger: ['key_metrics 含数字 2.22，但 features 中无对应字段值（疑似凭空编造/数据未注入）', 'key_metrics 含数字 4.44，但 features 中无对应字段值（疑似凭空编造/数据未注入）', 'key_metrics 含数字 9.34，但 features 中无对应字段值（疑似凭空编造/数据未注入）', 'key_metrics 含数字 15.86，但 features 中无对应字段值（疑似凭空编造/数据未注入）', 'key_metrics 含数字 19.34，但 features 中无对应字段值（疑似凭空编造/数据未注入）', 'key_metrics 含数字 21.17，但 features 中无对应字段值（疑似凭空编造/数据未注入）', 'key_metrics 含数字 25.22，但 features 中无对应字段值（疑似凭空编造/数据未注入）', 'key_metrics 含数字 63.91，但 features 中无对应字段值（疑似凭空编造/数据未注入）']",
+      "duan: ['key_metrics 含数字 3.8，但 features 中无对应字段值（疑似凭空编造/数据未注入）', 'key_metrics 含数字 45.0，但 features 中无对应字段值（疑似凭空编造/数据未注入）', 'key_metrics 含数字 15.86，但 features 中无对应字段值（疑似凭空编造/数据未注入）', 'key_metrics 含数字 25.2，但 features 中无对应字段值（疑似凭空编造/数据未注入）']",
+      "feng_liu: ['key_metrics 含数字 2.22，但 features 中无对应字段值（疑似凭空编造/数据未注入）', 'key_metrics 含数字 4.44，但 features 中无对应字段值（疑似凭空编造/数据未注入）', 'key_metrics 含数字 9.34，但 features 中无对应字段值（疑似凭空编造/数据未注入）', 'key_metrics 含数字 561.0，但 features 中无对应字段值（疑似凭空编造/数据未注入）', 'key_metrics 含数字 19.34，但 features 中无对应字段值（疑似凭空编造/数据未注入）', 'key_metrics 含数字 21.17，但 features 中无对应字段值（疑似凭空编造/数据未注入）']"
+    ],
+    "council_degraded": false,
+    "degraded_reason": null
+  }
+}

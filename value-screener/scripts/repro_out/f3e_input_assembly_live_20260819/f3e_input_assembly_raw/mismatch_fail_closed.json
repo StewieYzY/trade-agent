@@ -1,0 +1,42 @@
+{
+  "branch": "mismatch_fail_closed",
+  "run_id": "f3e-live-20260819-01",
+  "status": "fail_closed_ok",
+  "mismatch_cases": [
+    {
+      "case": "ticker_mismatch",
+      "status": "fail_closed",
+      "reason": "f3e envelope dossier content mismatch: payload hash does not match the frozen f3c dossier"
+    },
+    {
+      "case": "dossier_hash_mismatch",
+      "status": "fail_closed",
+      "reason": "input_hash must equal dossier payload hash"
+    },
+    {
+      "case": "run_id_mismatch",
+      "status": "fail_closed",
+      "reason": "f3e envelope rejected: run_id must be a relative path leaf"
+    },
+    {
+      "case": "freeze_missing",
+      "status": "fail_closed",
+      "reason": "f3e envelope requires freeze.source_sha256"
+    },
+    {
+      "case": "source_hash_mismatch",
+      "status": "fail_closed",
+      "reason": "f3e envelope source hash mismatch: expected f588d5bf911aefd90348d9a7d150280847b9af938bf5b06d8548a3afeb2a00c9, got 0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    {
+      "case": "dossier_content_tamper",
+      "status": "fail_closed",
+      "reason": "f3e envelope dossier content mismatch: payload hash does not match the frozen f3c dossier"
+    }
+  ],
+  "records": [],
+  "outputs": [],
+  "metrics": {
+    "input_consistency": 0.0
+  }
+}

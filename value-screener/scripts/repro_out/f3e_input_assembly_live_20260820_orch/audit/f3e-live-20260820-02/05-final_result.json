@@ -1,0 +1,147 @@
+{
+  "schema_version": "g2-identity-audit-chain-v1",
+  "artifact_type": "final_result",
+  "identity": {
+    "canonical_ticker": "600009.SH",
+    "run_id": "f3e-live-20260820-02",
+    "profile_version": "g2-council-v1",
+    "input_hash": "556120be447b8800ab37b676443c7f8501791c3d812d101c41ed2ab8a2e2678f",
+    "dossier_snapshot": "556120be447b8800ab37b676443c7f8501791c3d812d101c41ed2ab8a2e2678f",
+    "prompt_version": "council-prompt-v1",
+    "model_configuration": {
+      "heavy_model": "deepseek-v4-pro",
+      "moderate_model": "deepseek-v4-flash",
+      "reasoning_levels": [
+        "heavy",
+        "moderate"
+      ]
+    }
+  },
+  "payload_sha256": "48499499c993f5e9b589e3713d26083f49073e71b959a6c7651f68acd362daa7",
+  "parent_hashes": [
+    "73b6babb63b074f386ff65be6b3bfd4b56059d19ed092331fe2bc033c62f91e4"
+  ],
+  "payload": {
+    "ticker": "600009.SH",
+    "run_id": "f3e-live-20260820-02",
+    "profile_version": "g2-council-v1",
+    "input_hash": "556120be447b8800ab37b676443c7f8501791c3d812d101c41ed2ab8a2e2678f",
+    "dossier_snapshot": "556120be447b8800ab37b676443c7f8501791c3d812d101c41ed2ab8a2e2678f",
+    "prompt_version": "council-prompt-v1",
+    "model_configuration": {
+      "heavy_model": "deepseek-v4-pro",
+      "moderate_model": "deepseek-v4-flash",
+      "reasoning_levels": [
+        "heavy",
+        "moderate"
+      ]
+    },
+    "published_output_path": "watchlist/600009.SH/f3e-live-20260820-02/2026-08-20.json",
+    "published_output": {
+      "ticker": "600009.SH",
+      "date": "2026-08-20",
+      "final_verdict": "skip",
+      "conviction": 48,
+      "consensus_summary": "多数分析师在交叉质疑后一致认为上海机场ROE极低、免税及商业收入结构受损且盈利恢复拐点未确认，当前低PB更可能是价值陷阱而非安全边际，最终选择skip/中性；该结论受国际客流、免税政策和扩建等结构性不确定性影响，标记为不可解决。",
+      "key_variables": [
+        "如果连续两年国际旅客吞吐量和免税销售额未出现实质性恢复，ROE无法突破8%，或者机场扩建资本开支失控导致债务激增，我会重新评估其内在价值。",
+        "如果国际旅客量和免税销售额恢复至2019年水平，ROE提升至15%以上，且估值仍不贵，我会重新评估；或者出现大幅低于内在价值的价格（如PB远低于1且盈利拐点确认）。",
+        "如果免税业务重新获得长期保底租金协议，且ROE持续提升至15%以上，我会重新考虑其投资价值；或者出现极端低估值（如PB远低于1且盈利稳定）。",
+        "若国际客流连续两年停滞或免税销售额无改善，或者公司资产价值出现减值迹象，则重新评估。",
+        "如果国际旅客量和免税销售额恢复至2019年水平，ROE稳定提升至15%以上，且估值仍不贵（如PB接近1或更低），或者出现明确的盈利拐点，我会重新评估。",
+        "如果国际旅客吞吐量连续两年显著增长，免税销售额恢复到疫情前水平，ROE提升至10%以上，我会转向看多；或者如果PB进一步降至0.8以下且盈利稳定，安全边际足够。如果资本开支失控导致债务激增、ROE持续低于5%，我会转向看空。",
+        "如果国际旅客吞吐量和免税销售额恢复至2019年水平，ROE连续两年超过15%，且商业模式变得清晰可预测，我会重新评估其投资价值。",
+        "如果国际旅客量和免税销售额恢复至2019年水平，且免税合同重新获得保底或高扣点条款，ROE提升至15%以上，同时估值仍处于低位（如PB低于1.5倍），我会重新评估并考虑买入；或者出现极端低估值（如PB远低于1且盈利拐点确认）。"
+      ],
+      "dissent_points": [
+        {
+          "topic": "是否应完全skip还是中性观察",
+          "who_disagrees": [
+            "munger",
+            "da"
+          ],
+          "their_reason": "munger和DA认为垄断资产仍有价值，可保持中性观察等待盈利恢复证据，而非完全排除；buffett、duan、feng_liu则认为无法可靠估算内在价值，选择skip。"
+        },
+        {
+          "topic": "低PB是安全边际还是价值陷阱",
+          "who_disagrees": [
+            "feng_liu",
+            "buffett"
+          ],
+          "their_reason": "R1时认为PB处5年0.16%分位且区位垄断提供安全边际，赔率约3:1；但R2后因盈利恢复斜率、免税合同重谈和商业餐饮收入萎缩的不确定性，两人均放弃看多并转为skip。"
+        },
+        {
+          "topic": "非航/免税收入能否恢复至疫情前",
+          "who_disagrees": [
+            "munger",
+            "da"
+          ],
+          "their_reason": "商业餐饮/租赁收入较峰值下降63.5%且免税失去保底租金，结构损伤可能不可逆，低PB无法提供保护；feng_liu曾更乐观但最终也因赔率不足而skip。"
+        }
+      ],
+      "pending_verification": [
+        "最新报告期商业餐饮/租赁收入是否已连续两个季度同比增长超过30%？",
+        "免税合同是否重新获得保底租金或高扣点条款？",
+        "国际旅客吞吐量和免税销售额是否恢复至2019年水平？",
+        "净利润增速能否重新加速至20%以上且ROE提升至10%-15%？",
+        "浦东四期扩建资本开支是否可控、自由现金流能否转正？"
+      ],
+      "debate_path": "debate/600009.SH/f3e-live-20260820-02/2026-08-20.md",
+      "divergence_level": "medium",
+      "divergence_score": 0.4,
+      "key_disagreements": [
+        {
+          "topic": "低PB是安全边际还是价值陷阱",
+          "bull_case": "PB 1.32处5年0.16%分位，区位垄断不可复制，下行空间有限。",
+          "bear_case": "ROE仅4.75%，商业餐饮收入较峰值降63.5%，PE处62%分位，低PB反映的是盈利基础受损。",
+          "strength": 0.8
+        },
+        {
+          "topic": "免税/非航收入恢复弹性",
+          "bull_case": "国际客流恢复后非航收入弹性大，净利率已回升至15.86%。",
+          "bear_case": "免税合同重谈失去保底、市内免税分流、商业餐饮收入恢复严重滞后，可能永久性削弱盈利上限。",
+          "strength": 0.7
+        },
+        {
+          "topic": "ROE与资本开支约束",
+          "bull_case": "净利润从9.34亿升至21.17亿，当前资本开支13亿可控。",
+          "bear_case": "净利润增速从107%降至9.5%，四期扩建折旧将压制ROE，重资产回报率低于资本成本。",
+          "strength": 0.6
+        }
+      ],
+      "confidence_adjustment": -0.2,
+      "divergence_source": {
+        "structural": "high"
+      },
+      "calibration_status": "uncalibrated",
+      "da_skipped_reason": null,
+      "council_degraded": false,
+      "degraded_reason": null,
+      "run_id": "f3e-live-20260820-02",
+      "profile_version": "g2-council-v1",
+      "input_hash": "556120be447b8800ab37b676443c7f8501791c3d812d101c41ed2ab8a2e2678f",
+      "dossier_snapshot": "556120be447b8800ab37b676443c7f8501791c3d812d101c41ed2ab8a2e2678f",
+      "prompt_version": "council-prompt-v1",
+      "model_configuration": {
+        "heavy_model": "deepseek-v4-pro",
+        "moderate_model": "deepseek-v4-flash",
+        "reasoning_levels": [
+          "heavy",
+          "moderate"
+        ]
+      },
+      "audit_manifest_path": "/Users/admin/Documents/trade-agent/.worktrees/f3e-r1-crosstalk-new-hypothesis/value-screener/scripts/repro_out/f3e_input_assembly_live_20260820_orch/audit/f3e-live-20260820-02/manifest.json",
+      "run_quality_status": "warning",
+      "run_quality_reasons": [
+        "buffett: ['key_metrics 含数字 2.2，但 features 中无对应字段值（疑似凭空编造/数据未注入）', 'key_metrics 含数字 4.4，但 features 中无对应字段值（疑似凭空编造/数据未注入）', 'key_metrics 含数字 133.5，但 features 中无对应字段值（疑似凭空编造/数据未注入）', 'key_metrics 含数字 2023.0，但 features 中无对应字段值（疑似凭空编造/数据未注入）', 'key_metrics 含数字 12.4，但 features 中无对应字段值（疑似凭空编造/数据未注入）', 'key_metrics 含数字 13.1，但 features 中无对应字段值（疑似凭空编造/数据未注入）', 'key_metrics 含数字 15.86，但 features 中无对应字段值（疑似凭空编造/数据未注入）', 'key_metrics 含数字 19.6，但 features 中无对应字段值（疑似凭空编造/数据未注入）', 'key_metrics 含数字 21.17，但 features 中无对应字段值（疑似凭空编造/数据未注入）', 'key_metrics 含数字 25.2，但 features 中无对应字段值（疑似凭空编造/数据未注入）']",
+        "munger: ['key_metrics 含数字 2.22，但 features 中无对应字段值（疑似凭空编造/数据未注入）', 'key_metrics 含数字 4.44，但 features 中无对应字段值（疑似凭空编造/数据未注入）', 'key_metrics 含数字 9.34，但 features 中无对应字段值（疑似凭空编造/数据未注入）', 'key_metrics 含数字 15.86，但 features 中无对应字段值（疑似凭空编造/数据未注入）', 'key_metrics 含数字 19.34，但 features 中无对应字段值（疑似凭空编造/数据未注入）', 'key_metrics 含数字 21.17，但 features 中无对应字段值（疑似凭空编造/数据未注入）', 'key_metrics 含数字 25.22，但 features 中无对应字段值（疑似凭空编造/数据未注入）', 'key_metrics 含数字 63.91，但 features 中无对应字段值（疑似凭空编造/数据未注入）']",
+        "duan: ['key_metrics 含数字 3.8，但 features 中无对应字段值（疑似凭空编造/数据未注入）', 'key_metrics 含数字 45.0，但 features 中无对应字段值（疑似凭空编造/数据未注入）', 'key_metrics 含数字 15.86，但 features 中无对应字段值（疑似凭空编造/数据未注入）', 'key_metrics 含数字 25.2，但 features 中无对应字段值（疑似凭空编造/数据未注入）']",
+        "feng_liu: ['key_metrics 含数字 2.22，但 features 中无对应字段值（疑似凭空编造/数据未注入）', 'key_metrics 含数字 4.44，但 features 中无对应字段值（疑似凭空编造/数据未注入）', 'key_metrics 含数字 9.34，但 features 中无对应字段值（疑似凭空编造/数据未注入）', 'key_metrics 含数字 561.0，但 features 中无对应字段值（疑似凭空编造/数据未注入）', 'key_metrics 含数字 19.34，但 features 中无对应字段值（疑似凭空编造/数据未注入）', 'key_metrics 含数字 21.17，但 features 中无对应字段值（疑似凭空编造/数据未注入）']"
+      ],
+      "final_quality_gate": "warning",
+      "success_cache_eligible": false,
+      "quality_record_path": "quality_status/600009.SH/f3e-live-20260820-02/record.json"
+    },
+    "published_output_sha256": "685747f828696b1ddc4f6059e8f2bedb901e89a517a115fbb94c747383f8b6e2"
+  }
+}
