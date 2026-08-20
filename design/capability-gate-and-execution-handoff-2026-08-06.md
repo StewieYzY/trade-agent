@@ -1,6 +1,6 @@
 # trade-agent Capability Gate 与完整执行 Handoff
 
-> 日期：2026-08-19
+> 日期：2026-08-20
 >
 > Master ID：`MASTER-2026-08-06`
 >
@@ -17,7 +17,7 @@
 > 架构决策：`design/architecture-decisions.md`
 >
 > runtime/integration baseline：
-> `d2d29c8 feat(g2): persist incomplete cache quality status`
+> `547aeef feat(f3e): archive R1 crosstalk new-hypothesis diagnosis`
 >
 > 当前 main/docs baseline：
 > `main == origin/main`；当前精确 commit 以 `git rev-parse HEAD` 为准，已 push。
@@ -27,8 +27,8 @@
 > 历史 GitHub 审查入口：
 > `PR #1 codex/mainline-sync-2026-08-05 → main`
 >
-> 当前集成以 `main == origin/main` 为准；最近 runtime commit 为 `d2d29c8`，
-> docs-only handoff sync commits 为 `2b061bd`、`5633d3e`；PR #1 以下信息仅作
+> 当前集成以 `main == origin/main` 为准；最近 runtime commit 为 `547aeef`；
+> PR #1 以下信息仅作
 > 历史审查快照，不再作为当前 branch 或 merge 状态判断依据。
 >
 > 当前直接执行阶段：
@@ -70,6 +70,21 @@
 - OpenSpec strict：`31 passed, 0 failed`。
 - 当前仍保持：G2 1.3、M4、M4.5、M5/A-B、InvestmentThesis interface 和
   G2 9.3 未完成；G2 capability `not passed`。
+
+## 0.3. 2026-08-20 f3e negative diagnosis closure
+
+- `f3e-r1-crosstalk-new-hypothesis` 已 archive 至
+  `openspec/changes/archive/2026-08-20-f3e-r1-crosstalk-new-hypothesis/`。
+- child commit：`547aeef feat(f3e): archive R1 crosstalk new-hypothesis diagnosis`，
+  已 fast-forward 合入 `main` 并 push；`main == origin/main`。
+- f3e 为阴性诊断：冻结 `600009.SH` 输入上未复现输入装配、角色分发、
+  ticker/dossier/run identity 或编排状态导致的 R1 串台。
+- `grounding_unverified_rate=1.0` 已记录为单位/派生值未归一的误报，不作为串台证据。
+- 全量测试：`1063 passed`；compileall、`git diff --check` 通过。
+- OpenSpec strict：`31 passed, 0 failed`。
+- 串台根因仍未找到；下一步冻结并复现历史失败快照（`600519` / `600900`），
+  不使用 `600009` 继续验证。
+- 不宣称 G2 capability passed，不启动 G3。
 
 ## 1. 本文件的唯一权威地位
 
