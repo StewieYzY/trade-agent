@@ -82,8 +82,13 @@
 - `grounding_unverified_rate=1.0` 已记录为单位/派生值未归一的误报，不作为串台证据。
 - 全量测试：`1063 passed`；compileall、`git diff --check` 通过。
 - OpenSpec strict：`31 passed, 0 failed`。
-- 串台根因仍未找到；下一步冻结并复现历史失败快照（`600519` / `600900`），
-  不使用 `600009` 继续验证。
+- 串台根因仍未找到；下一步进行一次有界诊断 `f3f-r1-crosstalk-failure-repro`：
+  冻结并复现 `600519` / `600900` 历史失败快照，不使用 `600009` 继续验证。
+- 有界诊断退出条件：
+  - 复现并定位根因：另开独立修复 child，闭环 G2 1.3；
+  - 无法复现或仍无法定位：记录历史现象与残余风险，停止串台根因循环，
+    推进 `g2-dossier-data-quality`；
+  - 禁止在没有新证据时继续派生新的串台诊断 child。
 - 不宣称 G2 capability passed，不启动 G3。
 
 ## 1. 本文件的唯一权威地位
@@ -1106,9 +1111,11 @@ Queue 1 repair closure 已完成：`R-G1-001`、`R-G1-002`、`R-G1-003`、
 `main@8513096`，M3 6.1/6.2 = closed，Top 20 evidence 已保留。
 G1 umbrella 7.1/7.2/7.3 已完成，release decision 已记录
 `G1=passed`、`G2=approved_to_start_formal_acceptance`。
-G2 1.1、1.2 已完成并归档；下一步仅允许推进 G2 1.3
-`f3c-r1-crosstalk-root-cause` 或按其结论创建的独立修复 child。不得将
-G2 capability/runtime 描述为已通过，也不得提前启动 G3 runtime 或产品化。
+G2 1.1、1.2 已完成并归档。当前仅允许推进一次有界诊断
+`f3f-r1-crosstalk-failure-repro`：冻结并复现 `600519` / `600900` 历史失败
+快照。成功定位根因后另开独立修复 child；无法定位则记录残余风险并停止
+串台根因循环，随后推进 `g2-dossier-data-quality`。不得将 G2
+capability/runtime 描述为已通过，也不得提前启动 G3 runtime 或产品化。
 
 ## 23. 下一窗口启动方式
 
