@@ -83,7 +83,14 @@ def _fetch_research(ticker: str) -> dict:
     return ResearchFetcher().fetch_with_fallback(ticker)
 
 
-def build_research_dossier(symbol: str, core_snapshot: dict | None = None) -> dict:
+def build_research_dossier(
+    symbol: str,
+    core_snapshot: dict | None = None,
+    *,
+    retrieved_at: str | None = None,
+    now=None,
+    stale_after_days: int = 730,
+) -> dict:
     """组装分层研究档案（L3 专用结构化研究档案层）.
 
     Args:
@@ -91,7 +98,8 @@ def build_research_dossier(symbol: str, core_snapshot: dict | None = None) -> di
         core_snapshot: 21 量化字段 dict。缺省时调 assemble_council_features(symbol) 采集。
 
     Returns:
-        分层 dossier dict（含 core_snapshot + research_dossier + pledge）。
+        分层 dossier dict（含 core_snapshot + research_dossier + pledge，以及
+        fact_contract + quality_status + quality_reasons）。
 
     Raises:
         ValueError: core_snapshot 不足（insufficient_data）或 main_business 缺失（核心 fail-fast）。
@@ -128,6 +136,12 @@ def build_research_dossier(symbol: str, core_snapshot: dict | None = None) -> di
 
     # 4. peers/research/capex_proxy：非核心，缺失降级标注
     degraded_fields: list[str] = []
+    if not _is_error(main_business) and not any(
+        key in main_business for key in ("by_industry", "by_product", "by_region")
+    ):
+        # 主营只剩文本兜底，没有可追溯的数值主营构成，必须让 prompt/事实契约
+        # 都看到降级，不能当作正常 clean 主营事实展示。
+        degraded_fields.append("main_business")
 
     peers = _fetch_peers(symbol)
     if _is_error(peers):
@@ -148,7 +162,7 @@ def build_research_dossier(symbol: str, core_snapshot: dict | None = None) -> di
         degraded_fields.append("capex_proxy")
         capex_proxy = {"__error__": True, "reason": "CONSTRUCT_LONG_ASSET 未采或为空"}
 
-    return {
+    dossier = {
         "core_snapshot": core_snapshot,
         "research_dossier": {
             "main_business": main_business,
@@ -159,3 +173,36 @@ def build_research_dossier(symbol: str, core_snapshot: dict | None = None) -> di
         },
         "pledge": pledge,
     }
+
+    from council.fact_grounding import build_fact_contract, derive_quality_status
+
+    fact_contract = build_fact_contract(
+        dossier,
+        ticker=symbol,
+        retrieved_at=retrieved_at,
+        now=now,
+        stale_after_days=stale_after_days,
+        fail_closed=False,
+    )
+    high_severity_failures = [
+        fact
+        for fact in fact_contract.get("facts", [])
+        if fact.get("severity") == "high"
+        and not fact.get("traceable")
+    ]
+    if high_severity_failures or fact_contract.get("high_severity_invalid_count"):
+        from council.fact_grounding import FactContractError
+
+        details = "; ".join(
+            f"{fact.get('fact_key')}: {fact.get('reason') or 'untraceable'}"
+            for fact in high_severity_failures
+        )
+        details = details or "; ".join(
+            fact_contract.get("high_severity_invalid_reasons", [])
+        )
+        raise FactContractError(f"high severity facts fail closed: {details}")
+    quality_status, quality_reasons = derive_quality_status(fact_contract)
+    dossier["fact_contract"] = fact_contract
+    dossier["quality_status"] = quality_status
+    dossier["quality_reasons"] = quality_reasons
+    return dossier

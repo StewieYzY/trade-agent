@@ -21,6 +21,10 @@ import httpx
 
 from council.agents import AGENT_REGISTRY, get_prompt_builder
 from council.debate import _build_user_message, _prepare_council_input
+from council.fact_grounding import (
+    dossier_without_quality_sidecar,
+    evaluate_dossier_quality,
+)
 from council.llm import call_llm
 from council.schema import AgentOutput, ValidationError
 from data.lib.production_paths import validate_g1_output_root
@@ -274,6 +278,10 @@ async def run_fallback(
         raise AuditIdentityError("audit_root must differ from fallback output_root")
 
     dossier = _prepare_council_input(canonical_ticker, features)
+    dossier_quality_status, dossier_quality_reasons, dossier_quality_contract = (
+        evaluate_dossier_quality(dossier, ticker=canonical_ticker)
+    )
+    audit_dossier = dossier_without_quality_sidecar(dossier)
     selected_model = model or os.environ.get("LLM_MODEL_HEAVY")
     if not selected_model or not selected_model.strip():
         raise ValueError("missing strong model: provide model or LLM_MODEL_HEAVY")
@@ -297,12 +305,12 @@ async def run_fallback(
         validate_audit_identity(
             audit_identity,
             ticker=canonical_ticker,
-            dossier=dossier,
+            dossier=audit_dossier,
         )
     elif audit_root is not None:
         audit_identity = create_audit_identity(
             canonical_ticker,
-            dossier=dossier,
+            dossier=audit_dossier,
             profile_version=profile_version or "g2-fallback-v1",
             prompt_version=prompt_version or "council-prompt-v1",
             model_configuration={
@@ -435,8 +443,11 @@ async def run_fallback(
                     "dossier_snapshot": audit_identity.dossier_snapshot,
                     "prompt_version": audit_identity.prompt_version,
                     "model_configuration": audit_identity.model_configuration,
-                    "dossier": dossier,
-                    "dossier_sha256": payload_sha256(dossier),
+                    "dossier": audit_dossier,
+                    "dossier_sha256": payload_sha256(audit_dossier),
+                    "dossier_quality_status": dossier_quality_status,
+                    "dossier_quality_reasons": dossier_quality_reasons,
+                    "fact_contract": dossier_quality_contract,
                 },
             )
             audit_writer.write(
@@ -533,6 +544,9 @@ async def run_fallback(
         "run_id": run_id,
         "execution_status": "completed" if failure_kind is None else "blocked",
         "quality_status": quality_status,
+        "dossier_quality_status": dossier_quality_status,
+        "dossier_quality_reasons": dossier_quality_reasons,
+        "dossier_quality_contract": dossier_quality_contract,
         **common,
         "usage": usage,
         "response_sha256": response_sha256,

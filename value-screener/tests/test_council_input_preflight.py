@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from council.debate import run_debate
+from council.debate import _validate_council_input, run_debate
 
 
 def _valid_dossier(ticker: str = "002156.SZ") -> dict:
@@ -131,6 +131,60 @@ def _invalid_cases() -> list[tuple[str, dict, str]]:
             "no_evidence",
         ),
     ]
+
+
+def test_explicit_dossier_high_severity_missing_time_basis_fails_closed():
+    """显式 dossier 的高严重度事实缺时间基准 → 进入 preflight 即 fail closed."""
+    from council.fact_grounding import FactContractError
+    dossier = _valid_dossier()
+    dossier["research_dossier"]["main_business"] = {
+        "code": "002156",
+        "by_industry": [{"name": "封装测试", "revenue": 1.0, "revenue_ratio": 1.0}],
+    }
+    with pytest.raises(FactContractError, match="time basis|report_period"):
+        _validate_council_input("002156.SZ", dossier)
+
+
+def test_explicit_dossier_fake_fact_contract_still_fails_closed():
+    """caller 注入伪造 fact_contract 不能绕过 raw payload 的事实契约校验."""
+    from council.fact_grounding import FactContractError
+    dossier = _valid_dossier()
+    dossier["research_dossier"]["main_business"] = {
+        "code": "002156",
+        "by_industry": [{"name": "封装测试", "revenue": 1.0, "revenue_ratio": 1.0}],
+    }
+    dossier["fact_contract"] = {
+        "clean": True,
+        "failed": False,
+        "facts": [],
+        "role_status": [],
+    }
+    with pytest.raises(FactContractError, match="time basis|report_period"):
+        _validate_council_input("002156.SZ", dossier)
+
+
+def test_explicit_dossier_quality_is_evaluable_without_mutating_input():
+    """显式 dossier 可派生 quality status，且 preflight 不修改原始输入 payload."""
+    from council.fact_grounding import evaluate_dossier_quality
+    dossier = _valid_dossier()
+    _validate_council_input("002156.SZ", dossier)
+    assert "fact_contract" not in dossier
+    status, reasons, _ = evaluate_dossier_quality(dossier, ticker="002156.SZ")
+    assert status == "failed"
+    assert any("core_snapshot" in reason for reason in reasons)
+
+
+def test_explicit_dossier_preflight_returns_recomputed_quality_sidecar():
+    """显式 dossier 经过 preflight 后，prompt 可消费重算的质量 sidecar."""
+    from council.fact_grounding import FactContractError
+
+    dossier = _valid_dossier()
+    dossier["research_dossier"]["main_business"] = {
+        "code": "002156",
+        "by_industry": [{"name": "封装测试", "revenue": 1.0, "revenue_ratio": 1.0}],
+    }
+    with pytest.raises(FactContractError, match="time basis|report_period"):
+        _validate_council_input("002156.SZ", dossier)
 
 
 @pytest.mark.anyio

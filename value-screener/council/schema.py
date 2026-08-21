@@ -20,6 +20,7 @@ from typing import Any
 
 
 VALID_SIGNALS = {"bullish", "bearish", "neutral", "skip"}
+DOSSIER_QUALITY_STATUSES = {"clean", "degraded", "failed"}
 
 
 class ValidationError(Exception):
@@ -380,11 +381,20 @@ class CouncilResult:
     final_quality_gate: str = "not_run"
     success_cache_eligible: bool = False
     quality_record_path: str | None = None
+    dossier_quality_status: str = "degraded"
+    dossier_quality_reasons: list[str] = field(
+        default_factory=lambda: ["dossier quality proof not provided"]
+    )
+    dossier_quality_contract: dict | None = None
 
     def __post_init__(self):
         """单 agent fallback: final_verdict 取 round1[0].signal."""
         if not self.final_verdict and self.round1:
             self.final_verdict = self.round1[0].signal
+        if self.dossier_quality_status not in DOSSIER_QUALITY_STATUSES:
+            raise ValidationError(
+                f"invalid dossier_quality_status: {self.dossier_quality_status!r}"
+            )
 
     def to_json(self) -> str:
         """显式序列化四个轮次."""
@@ -416,6 +426,9 @@ class CouncilResult:
             "final_quality_gate": self.final_quality_gate,
             "success_cache_eligible": self.success_cache_eligible,
             "quality_record_path": self.quality_record_path,
+            "dossier_quality_status": self.dossier_quality_status,
+            "dossier_quality_reasons": self.dossier_quality_reasons,
+            "dossier_quality_contract": self.dossier_quality_contract,
         }
         return json.dumps(data, ensure_ascii=False, indent=2)
 

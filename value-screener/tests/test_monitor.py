@@ -561,6 +561,58 @@ class TestReadL3OutputCanonicalFallback:
         assert candidate["success_cache_eligible"] is False
         assert candidate["l3_incomplete"] is True
 
+    def test_run_scoped_l3_preserves_dossier_quality_for_l4(
+        self, sample_l1_output, temp_watchlist_dir
+    ):
+        """L4 SHALL retain dossier quality status and reasons."""
+        from monitor.aggregation import aggregate_watchlist
+
+        run_id = "g2-dossier-quality"
+        l3_path = temp_watchlist_dir / "600519.SH" / run_id / "2026-06-30.json"
+        l3_path.parent.mkdir(parents=True)
+        l3_path.write_text(
+            json.dumps(
+                {
+                    "ticker": "600519.SH",
+                    "date": "2026-06-30",
+                    "final_verdict": "neutral",
+                    "conviction": 42,
+                    "consensus_summary": "dossier degraded",
+                    "run_id": run_id,
+                    "run_quality_status": "complete",
+                    "final_quality_gate": "passed",
+                    "success_cache_eligible": True,
+                    "quality_record_path": (
+                        f"quality_status/600519.SH/{run_id}/record.json"
+                    ),
+                    "dossier_quality_status": "degraded",
+                    "dossier_quality_reasons": ["research unavailable"],
+                }
+            ),
+            encoding="utf-8",
+        )
+        l1_file = temp_watchlist_dir / "l1.json"
+        l1_file.write_text(json.dumps(sample_l1_output), encoding="utf-8")
+
+        with patch("monitor.aggregation.ScoutCache") as mock_cache_class, \
+             patch("monitor.aggregation.ValuationFetcher") as mock_val_class:
+            mock_cache = MagicMock()
+            mock_cache.get.return_value = None
+            mock_cache_class.return_value = mock_cache
+            mock_val = MagicMock()
+            mock_val.fetch_with_fallback.return_value = {"pe_percentile_5y": 18.5}
+            mock_val_class.return_value = mock_val
+            result = aggregate_watchlist(
+                "2026-06-30",
+                l1_output_file=str(l1_file),
+                watchlist_dir=temp_watchlist_dir,
+            )
+
+        candidate = next(item for item in result["candidates"] if item["ticker"] == "600519.SH")
+        assert candidate["dossier_quality_status"] == "degraded"
+        assert candidate["dossier_quality_reasons"] == ["research unavailable"]
+        assert candidate["l3_incomplete"] is True
+
     def test_legacy_l3_without_quality_proof_is_incomplete(self):
         from monitor.aggregation import _check_l3_incomplete
 
@@ -573,6 +625,140 @@ class TestReadL3OutputCanonicalFallback:
                 "pending_verification": [],
             }
         )
+
+    def test_clean_dossier_sidecar_without_contract_proof_is_incomplete(self):
+        """L4 不得仅凭 forged clean status 通过质量门."""
+        from monitor.aggregation import _check_l3_incomplete
+
+        assert _check_l3_incomplete(
+            {
+                "l3_verdict": "bullish",
+                "l3_conviction": 80,
+                "consensus_summary": "伪造 clean",
+                "dossier_quality_status": "clean",
+                "dossier_quality_reasons": [],
+                "run_quality_status": "complete",
+                "final_quality_gate": "passed",
+                "success_cache_eligible": True,
+                "_quality_proof_valid": True,
+            }
+        )
+
+    def test_minimal_forged_clean_contract_is_incomplete(self):
+        """L4 不得接受只拼出统计字段的最小 forged contract."""
+        from monitor.aggregation import _check_l3_incomplete
+
+        assert _check_l3_incomplete(
+            {
+                "ticker": "600519.SH",
+                "l3_verdict": "bullish",
+                "l3_conviction": 80,
+                "consensus_summary": "伪造 clean",
+                "dossier_quality_status": "clean",
+                "dossier_quality_reasons": [],
+                "dossier_quality_contract": {
+                    "clean": True,
+                    "failed": False,
+                    "high_severity_untraceable_count": 0,
+                    "traceable_ratio": 1.0,
+                    "total_fact_count": 1,
+                },
+                "run_quality_status": "complete",
+                "final_quality_gate": "passed",
+                "success_cache_eligible": True,
+                "_quality_proof_valid": True,
+            }
+        )
+
+    def test_malformed_clean_contract_is_incomplete_without_raising(self):
+        """非法 ratio/role_status sidecar 必须 fail closed，不得中断 L4."""
+        from monitor.aggregation import _check_l3_incomplete
+
+        assert _check_l3_incomplete(
+            {
+                "ticker": "600519.SH",
+                "l3_verdict": "bullish",
+                "l3_conviction": 80,
+                "consensus_summary": "损坏 sidecar",
+                "dossier_quality_status": "clean",
+                "dossier_quality_contract": {
+                    "schema_version": "g2-dossier-fact-contract-v1",
+                    "ticker": "600519.SH",
+                    "dossier_sha256": "a" * 64,
+                    "retrieved_at": "2026-08-20T00:00:00+00:00",
+                    "facts": [],
+                    "role_status": [],
+                    "total_fact_count": 1,
+                    "traceable_fact_count": 1,
+                    "traceable_ratio": "not-a-number",
+                    "high_severity_fact_count": 1,
+                    "high_severity_untraceable_count": 0,
+                    "high_severity_invalid_count": 0,
+                    "high_severity_invalid_reasons": [],
+                    "stale_fact_count": 0,
+                    "degraded_fact_count": 0,
+                    "failed": False,
+                    "clean": True,
+                },
+                "input_hash": "a" * 64,
+                "run_quality_status": "complete",
+                "final_quality_gate": "passed",
+                "success_cache_eligible": True,
+                "_quality_proof_valid": True,
+            }
+        )
+
+    def test_non_list_dossier_quality_reasons_degrade_without_raising(
+        self, temp_watchlist_dir
+    ):
+        """坏 reasons sidecar 不得在 L4 读取时抛 TypeError."""
+        from monitor.aggregation import _read_l3_output
+
+        path = temp_watchlist_dir / "2026-06-30_600519.SH.json"
+        path.write_text(
+            json.dumps(
+                {
+                    "ticker": "600519.SH",
+                    "date": "2026-06-30",
+                    "final_verdict": "bullish",
+                    "conviction": 80,
+                    "dossier_quality_status": "clean",
+                    "dossier_quality_reasons": 123,
+                }
+            ),
+            encoding="utf-8",
+        )
+        data = _read_l3_output("600519.SH", "2026-06-30", temp_watchlist_dir)
+        assert data is not None
+        assert data["dossier_quality_status"] == "degraded"
+        assert isinstance(data["dossier_quality_reasons"], list)
+
+    def test_invalid_dossier_quality_status_is_normalized_for_downstream(
+        self, temp_watchlist_dir
+    ):
+        """L4 下游只能看到 closed vocabulary quality status."""
+        from monitor.aggregation import _read_l3_output
+
+        path = temp_watchlist_dir / "2026-06-30_600519.SH.json"
+        path.write_text(
+            json.dumps(
+                {
+                    "ticker": "600519.SH",
+                    "date": "2026-06-30",
+                    "final_verdict": "bullish",
+                    "conviction": 80,
+                    "dossier_quality_status": "garbage",
+                    "dossier_quality_reasons": "bad reason",
+                    "dossier_quality_contract": "bad contract",
+                }
+            ),
+            encoding="utf-8",
+        )
+        data = _read_l3_output("600519.SH", "2026-06-30", temp_watchlist_dir)
+        assert data is not None
+        assert data["dossier_quality_status"] == "degraded"
+        assert isinstance(data["dossier_quality_reasons"], list)
+        assert data["dossier_quality_contract"] is None
 
     def test_run_scoped_l3_with_misbound_quality_proof_is_incomplete(
         self, temp_watchlist_dir

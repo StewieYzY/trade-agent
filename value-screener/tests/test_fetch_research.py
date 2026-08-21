@@ -79,6 +79,34 @@ class TestResearchFetch:
         assert data["target_price"] is not None
         assert data["target_price"] == pytest.approx(1.152 * 26.395, abs=0.5)
 
+    def test_fetch_returns_latest_published_at(self):
+        """研报 DataFrame 的日期列 → published_at 取最新发布日期."""
+        fetcher = ResearchFetcher()
+        with patch("data.fetchers.fetch_research.ak.stock_research_report_em",
+                   return_value=_research_df()):
+            data = fetcher.fetch("600009")
+        assert data["published_at"] == "2026-05-05"
+
+    def test_publish_date_parses_slash_format_and_ignores_invalid(self):
+        """发布日期支持斜杠格式，非法日期回退忽略并取合法最大值."""
+        df = _research_df()
+        df["日期"] = ["2026/05/05", "not-a-date"]
+        fetcher = ResearchFetcher()
+        with patch("data.fetchers.fetch_research.ak.stock_research_report_em",
+                   return_value=df):
+            data = fetcher.fetch("600009")
+        assert data["published_at"] == "2026-05-05"
+
+    def test_publish_date_ignores_pandas_nat(self):
+        """日期列含 pd.NaT → 忽略缺失值，不抛异常且取合法最新日期."""
+        df = _research_df()
+        df["日期"] = [pd.NaT, "2026/05/05"]
+        fetcher = ResearchFetcher()
+        with patch("data.fetchers.fetch_research.ak.stock_research_report_em",
+                   return_value=df):
+            data = fetcher.fetch("600009")
+        assert data["published_at"] == "2026-05-05"
+
     def test_empty_research_returns_zero_coverage(self):
         """小票研报为空（df 空）→ coverage_count=0，consensus_eps=None（降级不抛）."""
         fetcher = ResearchFetcher()
@@ -89,6 +117,14 @@ class TestResearchFetch:
         assert data["consensus_eps"] is None
         assert data["target_price"] is None
         assert data["buy_rating_pct"] == 0.0
+
+    def test_empty_research_published_at_none(self):
+        """研报为空 → published_at=None."""
+        fetcher = ResearchFetcher()
+        with patch("data.fetchers.fetch_research.ak.stock_research_report_em",
+                   return_value=pd.DataFrame()):
+            data = fetcher.fetch("600009")
+        assert data["published_at"] is None
 
     def test_fetch_with_fallback_all_fail_returns_error(self):
         """接口异常 → fetch 抛 → fetch_with_fallback 返 __error__."""

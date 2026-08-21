@@ -22,6 +22,8 @@ prompt 物理分区时单独成段，引用须写明「市场预期认为……�
 from __future__ import annotations
 
 import akshare as ak  # type: ignore
+import pandas as pd
+from datetime import date, datetime
 
 from .base import BaseFetcher
 from ..lib.market_router import parse_ticker
@@ -45,6 +47,37 @@ def _latest_year_eps_pe_cols(df) -> tuple[str | None, str | None]:
     return (eps_cols[0] if eps_cols else None, pe_cols[0] if pe_cols else None)
 
 
+def _parse_publish_date(value) -> datetime | None:
+    """把研报日期列值解析为 naive datetime；无法解析返回 None."""
+    if value is pd.NaT:
+        return None
+    if isinstance(value, datetime):
+        parsed = value
+    elif isinstance(value, date):
+        parsed = datetime(value.year, value.month, value.day)
+    elif isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return None
+        try:
+            parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        except ValueError:
+            parsed = None
+            for fmt in ("%Y-%m-%d", "%Y/%m/%d", "%Y-%m-%d %H:%M:%S"):
+                try:
+                    parsed = datetime.strptime(text, fmt)
+                    break
+                except ValueError:
+                    continue
+            if parsed is None:
+                return None
+    else:
+        return None
+    if parsed.tzinfo is not None:
+        parsed = parsed.replace(tzinfo=None)
+    return parsed
+
+
 def _parse_research(df) -> dict:
     """研报 DataFrame → consensus_eps/target_price/buy_rating_pct/coverage_count."""
     if df is None or len(df) == 0:
@@ -54,6 +87,7 @@ def _parse_research(df) -> dict:
             "buy_rating_pct": 0.0,
             "coverage_count": 0,
             "rating_distribution": {},
+            "published_at": None,
         }
 
     coverage_count = len(df)
@@ -89,12 +123,25 @@ def _parse_research(df) -> dict:
     if consensus_eps is not None and consensus_pe is not None:
         target_price = consensus_eps * consensus_pe
 
+    published_at = None
+    date_col = next(
+        (c for c in df.columns if str(c) in {"日期", "发布日期", "报告日期"}),
+        None,
+    )
+    if date_col is not None:
+        parsed_dates = [
+            _parse_publish_date(v) for v in df[date_col].tolist()
+        ]
+        valid_dates = [d for d in parsed_dates if d is not None]
+        published_at = max(valid_dates).strftime("%Y-%m-%d") if valid_dates else None
+
     return {
         "consensus_eps": consensus_eps,
         "target_price": target_price,
         "buy_rating_pct": buy_rating_pct,
         "coverage_count": coverage_count,
         "rating_distribution": rating_dist,
+        "published_at": published_at,
     }
 
 

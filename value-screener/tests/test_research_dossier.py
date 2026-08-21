@@ -30,6 +30,32 @@ def _core_snapshot() -> dict:
         "net_margin": 30.0,
         "revenue_growth": 0.12,
         "f_score": 7,
+        "fact_provenance": {
+            "pe_ttm": {
+                "source": "fixture.valuation",
+                "as_of": "2026-08-20T00:00:00+00:00",
+            },
+            "pb": {
+                "source": "fixture.valuation",
+                "as_of": "2026-08-20T00:00:00+00:00",
+            },
+            "roe_3y": {
+                "source": "fixture.financials",
+                "report_period": "2025",
+            },
+            "net_margin": {
+                "source": "fixture.financials",
+                "report_period": "2025",
+            },
+            "revenue_growth": {
+                "source": "fixture.financials",
+                "report_period": "2025",
+            },
+            "f_score": {
+                "source": "fixture.financials",
+                "report_period": "2025",
+            },
+        },
     }
 
 
@@ -215,3 +241,66 @@ class TestLayeredFailFast:
         df = dossier["research_dossier"]["degraded_fields"]
         assert "peers" in df
         assert "capex_proxy" in df
+
+
+# ── g2-dossier-data-quality 事实契约集成 ────────────────────────
+
+
+class TestDossierFactContract:
+    def test_full_dossier_carries_fact_contract_and_clean_status(self):
+        """完整采集 → dossier 携带 fact_contract/quality_status/quality_reasons 且 clean."""
+        with _patch_all_fetchers():
+            dossier = build_research_dossier("600009", core_snapshot=_core_snapshot())
+        assert "fact_contract" in dossier
+        assert dossier["quality_status"] == "clean"
+        assert dossier["quality_reasons"] == []
+        assert dossier["fact_contract"]["clean"] is True
+
+    def test_high_severity_missing_report_period_fails_closed(self):
+        """main_business 有高严重度营收数字但无报告期 → fail closed."""
+        from council.fact_grounding import FactContractError
+        mb = _main_business()
+        mb["report_date"] = None
+        with _patch_all_fetchers(mb=mb):
+            with pytest.raises(FactContractError, match="time basis|report_period"):
+                build_research_dossier("600009", core_snapshot=_core_snapshot())
+
+    def test_high_severity_source_ticker_mismatch_fails_closed(self):
+        """main_business 的 code 与请求 ticker 不一致 → 来源与数字不匹配 fail closed."""
+        from council.fact_grounding import FactContractError
+        mb = _main_business()
+        mb["code"] = "000001"
+        with _patch_all_fetchers(mb=mb):
+            with pytest.raises(FactContractError, match="ticker mismatch"):
+                build_research_dossier("600009", core_snapshot=_core_snapshot())
+
+    def test_core_high_severity_without_provenance_fails_closed_at_entry(self):
+        """core 高严重度数字缺 provenance 时，组装入口必须阻断."""
+        from council.fact_grounding import FactContractError
+
+        core = _core_snapshot()
+        del core["fact_provenance"]["pe_ttm"]
+        with _patch_all_fetchers():
+            with pytest.raises(FactContractError, match="missing source|time basis"):
+                build_research_dossier("600009", core_snapshot=core)
+
+    def test_degraded_peers_marks_dossier_degraded(self):
+        """peers 降级 → quality_status=degraded 且 reason 可见，不阻断组装."""
+        peers_err = {"__error__": True, "dim": "peers", "error": "industry unknown"}
+        with _patch_all_fetchers(peers=peers_err):
+            dossier = build_research_dossier("600009", core_snapshot=_core_snapshot())
+        assert dossier["quality_status"] == "degraded"
+        assert any("peers" in reason for reason in dossier["quality_reasons"])
+
+    def test_main_business_fallback_text_only_degrades(self):
+        """主营只剩文本兜底 → degraded_fields 含 main_business，质量 degraded."""
+        fallback = {
+            "code": "600009",
+            "main_business_text": "航空运输地面服务",
+            "business_scope": "民用机场运营",
+        }
+        with _patch_all_fetchers(mb=fallback):
+            dossier = build_research_dossier("600009", core_snapshot=_core_snapshot())
+        assert "main_business" in dossier["research_dossier"]["degraded_fields"]
+        assert dossier["quality_status"] == "degraded"
+        assert any("main_business" in reason for reason in dossier["quality_reasons"])

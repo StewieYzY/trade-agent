@@ -14,7 +14,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from council.debate import _write_council_output, run_debate
+from council.debate import _build_council_output, _write_council_output, run_debate
 from council.schema import AgentOutput, CouncilResult, SynthesizerOutput
 
 
@@ -119,6 +119,46 @@ class TestWriteCouncilOutput:
         assert data["da_skipped_reason"] is None  # DA ran
         assert data["council_degraded"] is False
         assert data["degraded_reason"] is None
+
+    def test_council_output_carries_dossier_quality(self):
+        """L3→L4 接口文件透传 dossier 级 quality status 与 reasons."""
+        agent = AgentOutput.from_dict("buffett", VALID_AGENT_DATA)
+        result = CouncilResult(
+            ticker="600519.SH",
+            round1=[agent],
+            final_verdict="bullish",
+            dossier_quality_status="degraded",
+            dossier_quality_reasons=["main_business fallback text only"],
+        )
+        output = _build_council_output(
+            result,
+            Path("debate/600519.SH/2026-06-30.md"),
+        )
+        assert output["dossier_quality_status"] == "degraded"
+        assert output["dossier_quality_reasons"] == ["main_business fallback text only"]
+
+    def test_council_result_rejects_unknown_dossier_quality(self):
+        """CouncilResult 拒绝关闭集合外的 dossier_quality_status."""
+        from council.schema import ValidationError
+        agent = AgentOutput.from_dict("buffett", VALID_AGENT_DATA)
+        with pytest.raises(ValidationError, match="dossier_quality_status"):
+            CouncilResult(
+                ticker="600519.SH",
+                round1=[agent],
+                final_verdict="bullish",
+                dossier_quality_status="unknown",
+            )
+
+    def test_council_result_defaults_to_degraded_quality(self):
+        """未提供 dossier 质量证明时必须 fail closed."""
+        agent = AgentOutput.from_dict("buffett", VALID_AGENT_DATA)
+        result = CouncilResult(
+            ticker="600519.SH",
+            round1=[agent],
+            final_verdict="bullish",
+        )
+        assert result.dossier_quality_status == "degraded"
+        assert result.dossier_quality_reasons
 
     def test_single_agent_fallback_none_fields(self, watchlist_dir):
         """单 agent fallback: consensus_summary/dissent_points/pending_verification 为 None."""

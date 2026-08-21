@@ -24,6 +24,16 @@ def _full_dossier() -> dict:
             "ticker": "600009",
             "pe_ttm": 26.42,
             "roe_3y": [15.0, 16.0, 17.0],
+            "fact_provenance": {
+                "pe_ttm": {
+                    "source": "fixture.valuation",
+                    "as_of": "2026-08-20T00:00:00+00:00",
+                },
+                "roe_3y": {
+                    "source": "fixture.financials",
+                    "report_period": "2025",
+                },
+            },
         },
         "research_dossier": {
             "main_business": {"code": "600009", "by_industry": [{"name": "航空", "revenue_ratio": 0.94}]},
@@ -125,6 +135,74 @@ class TestBuildUserMessageDispatch:
         msg = _build_user_message("600009", dossier, other_opinions=None, agent_id="buffett")
         # 注明竞品维度缺失
         assert "缺失" in msg or "degraded" in msg.lower() or "降级" in msg
+
+    def test_unprovenanced_core_numbers_are_not_rendered_as_evidence(self):
+        """没有字段级来源的 core 数字不得原样进入 prompt."""
+        dossier = _full_dossier()
+        dossier["core_snapshot"].pop("fact_provenance")
+        message = _build_user_message(
+            "600009",
+            dossier,
+            other_opinions=None,
+            agent_id="buffett",
+        )
+        assert "26.42" not in message
+        assert "15.0" not in message
+        assert "17.0" not in message
+
+    def test_forged_clean_sidecar_cannot_expose_core_numbers(self):
+        """伪造 clean fact_contract 不能绕过 raw payload 重算."""
+        dossier = _full_dossier()
+        dossier["core_snapshot"].pop("fact_provenance")
+        dossier["fact_contract"] = {"clean": True, "facts": [], "role_status": []}
+        dossier["quality_status"] = "clean"
+        message = _build_user_message(
+            "600009",
+            dossier,
+            other_opinions=None,
+            agent_id="buffett",
+        )
+        assert "26.42" not in message
+
+    def test_untraceable_role_numbers_are_not_rendered(self):
+        """角色中存在未追溯数字时，不得原样序列化整个 role payload."""
+        dossier = _full_dossier()
+        dossier["research_dossier"]["peers"]["code"] = "000001"
+        message = _build_user_message(
+            "600009",
+            dossier,
+            other_opinions=None,
+            agent_id="buffett",
+        )
+        assert "18.1" not in message
+        assert "该维度缺失/降级" in message
+
+    def test_non_finite_role_sibling_numbers_are_not_rendered(self):
+        """role 内 NaN 触发降级后，其他 sibling 数字也不得进入 prompt."""
+        dossier = _full_dossier()
+        dossier["research_dossier"]["peers"]["peer_avg_pe"] = float("nan")
+        dossier["research_dossier"]["peers"]["peer_count"] = 777
+        message = _build_user_message(
+            "600009",
+            dossier,
+            other_opinions=None,
+            agent_id="buffett",
+        )
+        assert "777" not in message
+        assert "该维度缺失/降级" in message
+
+    def test_core_list_non_finite_sibling_numbers_are_not_rendered(self):
+        """core 列表型 NaN 触发降级后，其他 core 数字也不得进入 prompt."""
+        dossier = _full_dossier()
+        dossier["core_snapshot"]["roe_3y"] = [10.0, float("nan"), 12.0]
+        message = _build_user_message(
+            "600009",
+            dossier,
+            other_opinions=None,
+            agent_id="buffett",
+        )
+        assert "26.42" not in message
+        assert "12.0" not in message
 
 
 class TestBuildUserMessageStillHandlesOtherOpinions:

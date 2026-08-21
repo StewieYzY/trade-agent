@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import math
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -125,6 +126,240 @@ def _read_l2_cache(ticker: str, scout_cache: ScoutCache) -> dict[str, Any] | Non
     return None
 
 
+def _valid_clean_dossier_quality_contract_impl(
+    contract: Any,
+    *,
+    expected_dossier_hash: str | None = None,
+    expected_audit_input_hash: str | None = None,
+    expected_audit_contract: dict | None = None,
+    expected_audit_dossier: dict | None = None,
+) -> bool:
+    """L4 只接受带完整统计 proof 的 clean dossier 状态."""
+    if not isinstance(contract, dict):
+        return False
+    from council.fact_grounding import (
+        FACT_CONTRACT_SCHEMA_VERSION,
+        DEGRADATION_STATUSES,
+        FRESHNESS,
+        ROLES,
+        SEVERITIES,
+        _parse_period_end,
+        _parse_time,
+        _time_basis_valid,
+    )
+
+    required = {
+        "schema_version",
+        "ticker",
+        "dossier_sha256",
+        "retrieved_at",
+        "facts",
+        "role_status",
+        "total_fact_count",
+        "traceable_fact_count",
+        "traceable_ratio",
+        "high_severity_fact_count",
+        "high_severity_untraceable_count",
+        "high_severity_invalid_count",
+        "high_severity_invalid_reasons",
+        "stale_fact_count",
+        "degraded_fact_count",
+        "failed",
+        "clean",
+    }
+    if not required.issubset(contract):
+        return False
+    if contract.get("schema_version") != FACT_CONTRACT_SCHEMA_VERSION:
+        return False
+    if (
+        not isinstance(contract.get("dossier_sha256"), str)
+        or expected_dossier_hash is None
+        or contract.get("dossier_sha256") != expected_dossier_hash
+        or expected_audit_input_hash is None
+        or expected_audit_input_hash != expected_dossier_hash
+        or not isinstance(expected_audit_contract, dict)
+        or contract != expected_audit_contract
+        or not isinstance(expected_audit_dossier, dict)
+    ):
+        return False
+    from council.fact_grounding import build_fact_contract
+
+    recomputed = build_fact_contract(
+        expected_audit_dossier,
+        ticker=contract.get("ticker"),
+        retrieved_at=contract.get("retrieved_at"),
+        now=_parse_time(contract.get("retrieved_at")),
+        fail_closed=False,
+    )
+    if recomputed != contract:
+        return False
+    if not isinstance(contract.get("retrieved_at"), str) or _parse_time(
+        contract.get("retrieved_at")
+    ) is None:
+        return False
+    facts = contract.get("facts")
+    role_status = contract.get("role_status")
+    if not isinstance(facts, list) or not isinstance(role_status, list):
+        return False
+    if (
+        len(role_status) != len(ROLES)
+        or any(
+            not isinstance(item, dict)
+            or item.get("role") not in ROLES
+            or item.get("degradation_status") not in DEGRADATION_STATUSES
+            for item in role_status
+        )
+        or {item.get("role") for item in role_status} != set(ROLES)
+    ):
+        return False
+    fact_required = {
+        "role",
+        "fact_key",
+        "label",
+        "value",
+        "severity",
+        "source",
+        "report_period",
+        "as_of",
+        "published_at",
+        "retrieved_at",
+        "freshness",
+        "degradation_status",
+        "traceable",
+        "reason",
+    }
+    if any(
+        not isinstance(fact, dict) or not fact_required.issubset(fact)
+        for fact in facts
+    ):
+        return False
+    for fact in facts:
+        if (
+            fact.get("role") not in ROLES
+            or fact.get("severity") not in SEVERITIES
+            or fact.get("freshness") not in FRESHNESS
+            or fact.get("degradation_status") not in DEGRADATION_STATUSES
+            or not isinstance(fact.get("retrieved_at"), str)
+            or _parse_time(fact.get("retrieved_at")) is None
+        ):
+            return False
+        for field, parser in (
+            ("report_period", _parse_period_end),
+            ("as_of", _parse_time),
+            ("published_at", _parse_time),
+        ):
+            raw = fact.get(field)
+            if raw is not None and parser(raw) is None:
+                return False
+    if contract.get("total_fact_count") != len(facts):
+        return False
+    traceable_count = sum(1 for fact in facts if fact.get("traceable") is True)
+    if contract.get("traceable_fact_count") != traceable_count:
+        return False
+    expected_ratio = traceable_count / len(facts) if facts else 0.0
+    if not math.isclose(
+        float(contract.get("traceable_ratio", -1)),
+        expected_ratio,
+        rel_tol=1e-9,
+        abs_tol=1e-9,
+    ):
+        return False
+    for fact in facts:
+        expected_traceable = bool(fact.get("source")) and _time_basis_valid(
+            fact.get("report_period"),
+            fact.get("as_of"),
+        )
+        if fact.get("traceable") is not expected_traceable:
+            return False
+    high_facts = [fact for fact in facts if fact.get("severity") == "high"]
+    if contract.get("high_severity_fact_count") != len(high_facts):
+        return False
+    if contract.get("high_severity_untraceable_count") != sum(
+        1 for fact in high_facts if fact.get("traceable") is not True
+    ):
+        return False
+    if contract.get("stale_fact_count") != sum(
+        1 for fact in facts if fact.get("freshness") == "stale"
+    ):
+        return False
+    if contract.get("degraded_fact_count") != sum(
+        1 for fact in facts if fact.get("degradation_status") != "clean"
+    ):
+        return False
+    if contract.get("clean") is not True or contract.get("failed") is not False:
+        return False
+    return (
+        contract.get("high_severity_untraceable_count") == 0
+        and contract.get("traceable_ratio", 0.0) >= 0.95
+        and contract.get("total_fact_count", 0) > 0
+        and all(
+            item.get("degradation_status") == "clean"
+            for item in role_status
+        )
+    )
+
+
+def _valid_clean_dossier_quality_contract(
+    contract: Any,
+    *,
+    expected_dossier_hash: str | None = None,
+    expected_audit_input_hash: str | None = None,
+    expected_audit_contract: dict | None = None,
+    expected_audit_dossier: dict | None = None,
+) -> bool:
+    try:
+        return _valid_clean_dossier_quality_contract_impl(
+            contract,
+            expected_dossier_hash=expected_dossier_hash,
+            expected_audit_input_hash=expected_audit_input_hash,
+            expected_audit_contract=expected_audit_contract,
+            expected_audit_dossier=expected_audit_dossier,
+        )
+    except (AttributeError, KeyError, OverflowError, TypeError, ValueError):
+        return False
+
+
+def _read_audit_proof(
+    manifest_path: Any,
+    *,
+    expected_ticker: str | None = None,
+    expected_run_id: str | None = None,
+) -> tuple[str | None, dict | None, dict | None]:
+    if not isinstance(manifest_path, str) or not manifest_path:
+        return None, None, None
+    try:
+        from data.lib.audit_chain import verify_audit_chain
+
+        path = Path(manifest_path)
+        if path.name != "manifest.json":
+            return None, None, None
+        manifest = verify_audit_chain(path.parent)
+        identity = manifest.get("identity")
+        if not isinstance(identity, dict):
+            return None, None, None
+        if (
+            expected_ticker is not None
+            and identity.get("canonical_ticker") != expected_ticker
+        ):
+            return None, None, None
+        if expected_run_id is not None and identity.get("run_id") != expected_run_id:
+            return None, None, None
+        input_hash = identity.get("input_hash")
+        dossier_artifact = json.loads(
+            (path.parent / "01-dossier.json").read_text(encoding="utf-8")
+        )
+        payload = dossier_artifact.get("payload")
+        contract = payload.get("fact_contract") if isinstance(payload, dict) else None
+        dossier = payload.get("dossier") if isinstance(payload, dict) else None
+        return (
+            input_hash,
+            contract if isinstance(contract, dict) else None,
+            dossier if isinstance(dossier, dict) else None,
+        )
+    except (OSError, TypeError, ValueError):
+        return None, None, None
+
+
 def _read_l3_output(ticker: str, run_date: str, watchlist_dir: Path) -> dict[str, Any] | None:
     """读取 L3 per-ticker JSON 文件（g1-canonical-run-identity D5 A+: canonical 双向回退）.
 
@@ -213,6 +448,47 @@ def _read_l3_output(ticker: str, run_date: str, watchlist_dir: Path) -> dict[str
             run_quality_reasons = list(quality_record.reasons)
             final_quality_gate = quality_record.final_quality_gate
             success_cache_eligible = is_success_cache_eligible(quality_record)
+        dossier_quality_status = l3_data.get("dossier_quality_status", "degraded")
+        dossier_quality_reasons = l3_data.get(
+            "dossier_quality_reasons",
+            ["legacy dossier quality unknown"],
+        )
+        dossier_quality_contract = l3_data.get("dossier_quality_contract")
+        if dossier_quality_status not in {"clean", "degraded", "failed"}:
+            dossier_quality_status = "degraded"
+            dossier_quality_reasons = ["invalid dossier quality status"]
+            dossier_quality_contract = None
+        elif not isinstance(dossier_quality_reasons, list) or not all(
+            isinstance(reason, str) for reason in dossier_quality_reasons
+        ):
+            dossier_quality_status = "degraded"
+            dossier_quality_reasons = ["invalid dossier quality reasons"]
+            dossier_quality_contract = None
+        if dossier_quality_contract is not None and not isinstance(
+            dossier_quality_contract, dict
+        ):
+            dossier_quality_contract = None
+        input_hash = l3_data.get("input_hash")
+        audit_manifest_path = l3_data.get("audit_manifest_path")
+        audit_input_hash, audit_contract, audit_dossier = _read_audit_proof(
+            audit_manifest_path,
+            expected_ticker=canonical,
+            expected_run_id=payload_run_id,
+        )
+        if dossier_quality_status == "clean" and not _valid_clean_dossier_quality_contract(
+            dossier_quality_contract,
+            expected_dossier_hash=input_hash,
+            expected_audit_input_hash=audit_input_hash,
+            expected_audit_contract=audit_contract,
+            expected_audit_dossier=audit_dossier,
+        ):
+            dossier_quality_status = "degraded"
+            dossier_quality_reasons = (
+                list(dossier_quality_reasons)
+                if isinstance(dossier_quality_reasons, list)
+                else ["invalid dossier quality reasons"]
+            )
+            dossier_quality_reasons.append("clean dossier quality proof missing or invalid")
         return {
             "l3_verdict": l3_data.get("final_verdict", "unknown") or "unknown",
             "l3_conviction": l3_data.get("conviction"),
@@ -225,7 +501,15 @@ def _read_l3_output(ticker: str, run_date: str, watchlist_dir: Path) -> dict[str
             "final_quality_gate": final_quality_gate,
             "success_cache_eligible": success_cache_eligible,
             "quality_record_path": quality_record_path,
+            "audit_manifest_path": audit_manifest_path,
+            "audit_input_hash": audit_input_hash,
+            "audit_quality_contract": audit_contract,
+            "audit_dossier": audit_dossier,
             "l3_run_id": l3_data.get("run_id"),
+            "input_hash": input_hash,
+            "dossier_quality_status": dossier_quality_status,
+            "dossier_quality_reasons": dossier_quality_reasons,
+            "dossier_quality_contract": dossier_quality_contract,
             "_quality_proof_valid": quality_proof_valid,
         }
 
@@ -285,6 +569,20 @@ def _check_l3_incomplete(l3_data: dict[str, Any] | None) -> bool:
         or l3_data.get("final_quality_gate") != "passed"
         or l3_data.get("success_cache_eligible") is not True
         or l3_data.get("_quality_proof_valid") is not True
+        or (
+            "dossier_quality_status" in l3_data
+            and l3_data.get("dossier_quality_status") != "clean"
+        )
+        or (
+            l3_data.get("dossier_quality_status") == "clean"
+            and not _valid_clean_dossier_quality_contract(
+                l3_data.get("dossier_quality_contract"),
+                expected_dossier_hash=l3_data.get("input_hash"),
+                expected_audit_input_hash=l3_data.get("audit_input_hash"),
+                expected_audit_contract=l3_data.get("audit_quality_contract"),
+                expected_audit_dossier=l3_data.get("audit_dossier"),
+            )
+        )
     ):
         return True
 
@@ -378,6 +676,22 @@ def aggregate_watchlist(
                 l3_data.get("quality_record_path") if l3_data else None
             ),
             "l3_run_id": l3_data.get("l3_run_id") if l3_data else None,
+            "dossier_quality_status": (
+                l3_data.get("dossier_quality_status")
+                if l3_data
+                else None
+            ),
+            "dossier_quality_reasons": (
+                l3_data.get("dossier_quality_reasons")
+                if l3_data
+                else None
+            ),
+            "dossier_quality_contract": (
+                l3_data.get("dossier_quality_contract")
+                if l3_data
+                else None
+            ),
+            "input_hash": l3_data.get("input_hash") if l3_data else None,
             "last_updated": run_date,
         }
 

@@ -683,6 +683,9 @@ async def test_fallback_blocked_result_has_shared_quality_status(tmp_path, monke
     )
 
     assert result["quality_status"] == "blocked"
+    assert result["dossier_quality_status"] == "failed"
+    assert result["dossier_quality_reasons"]
+    assert result["dossier_quality_contract"]["failed"] is True
     assert result["run_quality_status"] == "failed"
     record = read_quality_record(
         tmp_path / "fallback",

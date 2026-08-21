@@ -368,6 +368,27 @@ class TestParseDebateMarkdown:
         assert result is not None
         assert result.da_skipped_reason is None
         assert result.council_degraded is False
+
+    def test_legacy_markdown_dossier_quality_defaults_degraded(self):
+        """老格式 md 无 dossier quality 字段 → 不得隐式默认为 clean。"""
+        agent_json = json.dumps({
+            "name": "buffett", "signal": "bullish", "conviction": 80,
+            "core_thesis": "好公司", "key_metrics": [], "risks": [],
+            "what_would_change_my_mind": "业绩下滑", "out_of_circle": False,
+            "historical_parallel": None,
+        }, ensure_ascii=False, indent=2)
+        md = f"""
+## Round 1 · 各自表态
+
+### 巴菲特
+```json
+{agent_json}
+```
+"""
+        result = _parse_debate_markdown(md, "600519")
+        assert result is not None
+        assert result.dossier_quality_status == "degraded"
+        assert "legacy" in result.dossier_quality_reasons[0]
         assert result.degraded_reason is None
 
 

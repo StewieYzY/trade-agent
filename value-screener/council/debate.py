@@ -164,6 +164,29 @@ def _validate_council_input(ticker: str, dossier: Any) -> dict:
         )
     _validate_dossier_ticker_identity(ticker, dossier)
 
+    # g2-dossier-data-quality：无论 builder 还是显式 caller-provided dossier，都必须
+    # 从 raw payload 重新校验事实契约，避免 caller 注入伪造 fact_contract 绕过
+    # 高严重度 fail-closed。这里只 fail-closed，不修改输入 payload（保护 audit identity hash）。
+    from council.fact_grounding import build_fact_contract
+
+    contract = build_fact_contract(dossier, ticker=ticker, fail_closed=False)
+    non_core_failures = [
+        fact
+        for fact in contract.get("facts", [])
+        if fact.get("role") != "core_snapshot"
+        and fact.get("severity") == "high"
+        and not fact.get("traceable")
+    ]
+    if non_core_failures or contract.get("high_severity_invalid_count"):
+        details = "; ".join(
+            f"{fact.get('fact_key')}: {fact.get('reason') or 'untraceable'}"
+            for fact in non_core_failures
+        )
+        details = details or "; ".join(contract.get("high_severity_invalid_reasons", []))
+        from council.fact_grounding import FactContractError
+
+        raise FactContractError(f"high severity facts fail closed: {details}")
+
     return dossier
 
 
@@ -346,6 +369,24 @@ def _build_dossier_sections(dossier: dict, agent_id: str | None) -> list[str]:
     core = dossier.get("core_snapshot", {})
     rd = dossier.get("research_dossier", {}) or {}
     degraded_fields = rd.get("degraded_fields", []) or []
+    from council.fact_grounding import (
+        build_fact_contract,
+        derive_quality_status,
+    )
+
+    # caller-supplied fact_contract/quality_status are sidecars only; always
+    # recompute from raw dossier so a forged clean sidecar cannot expose numbers.
+    fact_contract = build_fact_contract(
+        dossier,
+        ticker=core.get("ticker"),
+        fail_closed=False,
+    )
+    dossier_quality_status, dossier_quality_reasons = derive_quality_status(fact_contract)
+    role_degraded = {
+        item.get("role")
+        for item in fact_contract.get("role_status", [])
+        if item.get("degradation_status") != "clean"
+    }
     pledge = dossier.get("pledge")
 
     # 决定可见维度
@@ -362,13 +403,23 @@ def _build_dossier_sections(dossier: dict, agent_id: str | None) -> list[str]:
 
     # ── 公司事实特征段（core + 可见的定性事实维度）──────────────
     parts.append("## 公司事实特征")
-    parts.append(json.dumps(core, ensure_ascii=False, indent=2))
+    grounded_core = _grounded_core_snapshot(core, fact_contract)
+    parts.append(json.dumps(grounded_core, ensure_ascii=False, indent=2))
+    if dossier_quality_status != "clean":
+        parts.append(
+            "该 dossier 质量状态为 "
+            f"{dossier_quality_status}，以下未展示的数字不得自行补全。"
+        )
 
     fact_dims = [d for d in ("main_business", "peers", "capex_proxy")
                  if d in visible_dims]
     for dim in fact_dims:
         dim_data = rd.get(dim)
-        is_degraded = dim in degraded_fields or _is_error_data(dim_data)
+        is_degraded = (
+            dim in degraded_fields
+            or dim in role_degraded
+            or _is_error_data(dim_data)
+        )
         if is_degraded:
             parts.append(f"\n### {dim}（该维度缺失/降级）")
             parts.append(_degraded_note(dim))
@@ -390,13 +441,50 @@ def _build_dossier_sections(dossier: dict, agent_id: str | None) -> list[str]:
             "以下为卖方研报共识，是「市场预期」而非公司事实。引用时须写明"
             "「市场预期认为……」，不得作为客观事实陈述。"
         )
-        is_research_degraded = "research" in degraded_fields or _is_error_data(research_data)
+        is_research_degraded = (
+            "research" in degraded_fields
+            or "research" in role_degraded
+            or _is_error_data(research_data)
+        )
         if is_research_degraded:
             parts.append(_degraded_note("research"))
         else:
             parts.append(json.dumps(research_data, ensure_ascii=False, indent=2))
 
     return parts
+
+
+def _grounded_core_snapshot(
+    core: dict[str, Any],
+    fact_contract: dict[str, Any],
+) -> dict[str, Any]:
+    """只把有字段级 clean provenance 的 core 数字送入 prompt."""
+    facts = {
+        fact.get("fact_key"): fact
+        for fact in fact_contract.get("facts", [])
+        if fact.get("role") == "core_snapshot"
+    }
+    core_status = next(
+        (
+            item
+            for item in fact_contract.get("role_status", [])
+            if item.get("role") == "core_snapshot"
+        ),
+        {},
+    )
+    core_clean = core_status.get("degradation_status") == "clean"
+    grounded: dict[str, Any] = {}
+    for key, value in core.items():
+        if key in {"fact_provenance", "provenance"}:
+            continue
+        if isinstance(value, (int, float, list, tuple)):
+            if not core_clean:
+                continue
+            fact = facts.get(f"core_snapshot.{key}")
+            if not fact or not fact.get("traceable") or fact.get("degradation_status") != "clean":
+                continue
+        grounded[key] = value
+    return grounded
 
 
 def _is_error_data(data) -> bool:
@@ -529,6 +617,9 @@ def _append_orchestration_state(
     da_skipped_reason: str | None,
     council_degraded: bool,
     degraded_reason: str | None,
+    dossier_quality_status: str | None,
+    dossier_quality_reasons: list[str] | None,
+    dossier_quality_contract: dict | None,
 ) -> None:
     """f2 CR P2：追加编排状态段到 debate md，供 _parse_debate_markdown 缓存恢复.
 
@@ -541,6 +632,9 @@ def _append_orchestration_state(
         "da_skipped_reason": da_skipped_reason,
         "council_degraded": council_degraded,
         "degraded_reason": degraded_reason,
+        "dossier_quality_status": dossier_quality_status,
+        "dossier_quality_reasons": dossier_quality_reasons or [],
+        "dossier_quality_contract": dossier_quality_contract,
     }
     with path.open("a", encoding="utf-8") as f:
         f.write("\n## 编排状态\n")
@@ -773,6 +867,9 @@ def _parse_debate_markdown(content: str, ticker: str) -> CouncilResult | None:
     da_skipped_reason: str | None = None
     council_degraded = False
     degraded_reason: str | None = None
+    dossier_quality_status: str = "degraded"
+    dossier_quality_reasons: list[str] = ["legacy dossier quality unknown"]
+    dossier_quality_contract: dict | None = None
     state_marker = "## 编排状态"
     state_idx = content.find(state_marker)
     if state_idx >= 0:
@@ -787,6 +884,12 @@ def _parse_debate_markdown(content: str, ticker: str) -> CouncilResult | None:
                     da_skipped_reason = state.get("da_skipped_reason")
                     council_degraded = state.get("council_degraded", False)
                     degraded_reason = state.get("degraded_reason")
+                    dossier_quality_status = state.get("dossier_quality_status", "degraded")
+                    dossier_quality_reasons = state.get(
+                        "dossier_quality_reasons",
+                        ["legacy dossier quality unknown"],
+                    ) or []
+                    dossier_quality_contract = state.get("dossier_quality_contract")
                 except json.JSONDecodeError:
                     pass  # 编排状态段损坏 → 走默认，不崩
 
@@ -805,6 +908,9 @@ def _parse_debate_markdown(content: str, ticker: str) -> CouncilResult | None:
         da_skipped_reason=da_skipped_reason,
         council_degraded=council_degraded,
         degraded_reason=degraded_reason,
+        dossier_quality_status=dossier_quality_status,
+        dossier_quality_reasons=dossier_quality_reasons,
+        dossier_quality_contract=dossier_quality_contract,
         dissent_points=round4_synthesizer.dissent_points if round4_synthesizer else None,
         pending_verification=round4_synthesizer.pending_verification if round4_synthesizer else None,
     )
@@ -942,6 +1048,7 @@ async def run_debate(
         validate_audit_identity,
         validate_audit_identity_structure,
     )
+    from council.fact_grounding import dossier_without_quality_sidecar
     if audit_identity is not None:
         validate_audit_identity_structure(audit_identity)
     ticker = canonical_ticker(ticker)
@@ -949,6 +1056,13 @@ async def run_debate(
     # 1. 解析并验证输入。所有显式/隐式路径都必须在 cache、文件写入和任意 LLM
     # 调用前收敛为可审计 dossier；失败表示本次 Council 根本未执行。
     features = _prepare_council_input(ticker, features)
+    from council.fact_grounding import evaluate_dossier_quality
+
+    dossier_quality_status, dossier_quality_reasons, dossier_quality_contract = evaluate_dossier_quality(
+        features,
+        ticker=ticker,
+    )
+    audit_dossier = dossier_without_quality_sidecar(features)
     provided_model_configuration = model_configuration or {}
     unsupported_model_fields = set(provided_model_configuration) - {
         "heavy_model",
@@ -980,11 +1094,11 @@ async def run_debate(
             raise ValueError("council prompt_version does not match audit identity")
         if runtime_model_configuration != audit_identity.model_configuration:
             raise ValueError("council model_configuration does not match audit identity")
-        validate_audit_identity(audit_identity, ticker=ticker, dossier=features)
+        validate_audit_identity(audit_identity, ticker=ticker, dossier=audit_dossier)
     elif audit_root is not None:
         audit_identity = create_audit_identity(
             ticker,
-            dossier=features,
+            dossier=audit_dossier,
             profile_version=profile_version or "g2-council-v1",
             prompt_version=prompt_version or "council-prompt-v1",
             model_configuration=runtime_model_configuration,
@@ -1023,8 +1137,11 @@ async def run_debate(
                     "dossier_snapshot": audit_identity.dossier_snapshot,
                     "prompt_version": audit_identity.prompt_version,
                     "model_configuration": audit_identity.model_configuration,
-                    "dossier": features,
-                    "dossier_sha256": payload_sha256(features),
+                    "dossier": audit_dossier,
+                    "dossier_sha256": payload_sha256(audit_dossier),
+                    "dossier_quality_status": dossier_quality_status,
+                    "dossier_quality_reasons": dossier_quality_reasons,
+                    "fact_contract": dossier_quality_contract,
                 },
             )
         except (Exception, asyncio.CancelledError):
@@ -1390,6 +1507,9 @@ async def run_debate(
         da_skipped_reason,
         council_degraded,
         degraded_reason,
+        dossier_quality_status,
+        dossier_quality_reasons,
+        dossier_quality_contract,
     )
 
     # 9. 组装 CouncilResult
@@ -1413,6 +1533,9 @@ async def run_debate(
         da_skipped_reason=da_skipped_reason,
         council_degraded=council_degraded,
         degraded_reason=degraded_reason,
+        dossier_quality_status=dossier_quality_status,
+        dossier_quality_reasons=dossier_quality_reasons,
+        dossier_quality_contract=dossier_quality_contract,
     )
 
     completed_stages.append("final_validation")
@@ -1686,6 +1809,9 @@ def _build_council_output(result: CouncilResult, debate_path: Path) -> dict:
         "final_quality_gate": result.final_quality_gate,
         "success_cache_eligible": result.success_cache_eligible,
         "quality_record_path": result.quality_record_path,
+        "dossier_quality_status": result.dossier_quality_status,
+        "dossier_quality_reasons": result.dossier_quality_reasons,
+        "dossier_quality_contract": result.dossier_quality_contract,
     }
 
     # L4 消费方：文件名用 canonical ticker（含交易所后缀 600519.SH），与字段一致

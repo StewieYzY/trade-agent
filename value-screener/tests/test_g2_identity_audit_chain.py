@@ -388,6 +388,38 @@ def test_fallback_reuses_supplied_identity_run_id_when_run_id_is_omitted(tmp_pat
     assert (tmp_path / "fallback" / "shared-run").exists()
 
 
+def test_fallback_audit_identity_ignores_derived_quality_sidecar(tmp_path, monkeypatch):
+    """派生质量 sidecar 不得改变 raw dossier 的 audit identity hash."""
+    from council.fact_grounding import dossier_without_quality_sidecar
+
+    dossier = _fallback_dossier()
+    dossier["fact_contract"] = {"clean": True, "facts": []}
+    dossier["quality_status"] = "clean"
+    dossier["quality_reasons"] = []
+    raw_dossier = dossier_without_quality_sidecar(dossier)
+    identity = create_audit_identity(
+        "600009.SH",
+        dossier=raw_dossier,
+        profile_version="g2-fallback-v1",
+        prompt_version="council-prompt-v1",
+        model_configuration={"model": "fixture-model", "reasoning_level": "heavy"},
+        run_id="sidecar-stable",
+    )
+    monkeypatch.setattr(fallback, "call_llm", lambda *_args, **_kwargs: None)
+
+    result = asyncio.run(
+        fallback.run_fallback(
+            ticker="600009.SH",
+            features=dossier,
+            output_root=tmp_path / "fallback",
+            audit_root=tmp_path / "audit",
+            audit_identity=identity,
+            model="fixture-model",
+        )
+    )
+    assert result["run_id"] == "sidecar-stable"
+
+
 def test_fallback_removes_audit_manifest_and_staged_result_when_promotion_fails(
     tmp_path, monkeypatch
 ):

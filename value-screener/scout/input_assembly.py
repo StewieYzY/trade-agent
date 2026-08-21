@@ -16,6 +16,8 @@ Insufficient data guard（spec Requirement: Insufficient data guard / R1 feature
 """
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from data.cache.manager import CacheManager
 from data.lib.stock_features import compute_f_score
 
@@ -73,6 +75,20 @@ def _compute_roe_3y(financials: dict) -> tuple[list[float] | None, str]:
             trend = "趋势平稳"
 
     return roe_3y, trend
+
+
+def _cache_as_of(cache_manager: CacheManager, ticker: str, dim: str) -> str | None:
+    """使用缓存文件 mtime 作为观察时点，不用当前时间伪装 freshness."""
+    try:
+        path = cache_manager._path(ticker, dim)
+        if not path.exists():
+            return None
+        return datetime.fromtimestamp(
+            path.stat().st_mtime,
+            tz=timezone.utc,
+        ).isoformat()
+    except (AttributeError, OSError, ValueError):
+        return None
 
 
 def _compute_net_margin(financials: dict) -> float | None:
@@ -281,6 +297,10 @@ def assemble_snapshot(
     financials = cache_manager.get(ticker, "financials", allow_stale=allow_stale) or {}
     kline = cache_manager.get(ticker, "kline", allow_stale=allow_stale) or {}
     risk = cache_manager.get(ticker, "risk", allow_stale=allow_stale) or {}
+    cache_as_of = {
+        dim: _cache_as_of(cache_manager, ticker, dim)
+        for dim in ("basic", "valuation", "financials", "kline", "risk")
+    }
 
     # 提取字段
     name = basic.get("name")
@@ -349,6 +369,97 @@ def assemble_snapshot(
         "price_change_60d": price_change_60d,
         "turnover_avg_percentile_60d": turnover_avg_percentile_60d,
         "f_score": f_score,
+    }
+    retrieved_at = datetime.now(timezone.utc).isoformat()
+    financial_report_period = (
+        str(financials.get("years", [])[-1])
+        if isinstance(financials.get("years"), list) and financials.get("years")
+        else None
+    )
+    features["fact_provenance"] = {
+        "market_cap": {
+            "source": "cache.basic",
+            "as_of": cache_as_of["basic"],
+            "retrieved_at": retrieved_at,
+        },
+        "pe_ttm": {
+            "source": "cache.valuation",
+            "as_of": cache_as_of["valuation"],
+            "retrieved_at": retrieved_at,
+        },
+        "pb": {
+            "source": "cache.valuation",
+            "as_of": cache_as_of["valuation"],
+            "retrieved_at": retrieved_at,
+        },
+        "pe_percentile_5y": {
+            "source": "cache.valuation",
+            "as_of": cache_as_of["valuation"],
+            "retrieved_at": retrieved_at,
+        },
+        "roe_3y": {
+            "source": "cache.financials",
+            "report_period": financial_report_period,
+            "as_of": cache_as_of["financials"],
+            "retrieved_at": retrieved_at,
+        },
+        "net_margin": {
+            "source": "cache.financials",
+            "report_period": financial_report_period,
+            "as_of": cache_as_of["financials"],
+            "retrieved_at": retrieved_at,
+        },
+        "debt_ratio": {
+            "source": "cache.financials",
+            "report_period": financial_report_period,
+            "as_of": cache_as_of["financials"],
+            "retrieved_at": retrieved_at,
+        },
+        "goodwill_ratio": {
+            "source": "cache.financials",
+            "report_period": financial_report_period,
+            "as_of": cache_as_of["financials"],
+            "retrieved_at": retrieved_at,
+        },
+        "operating_cashflow": {
+            "source": "cache.financials",
+            "report_period": financial_report_period,
+            "as_of": cache_as_of["financials"],
+            "retrieved_at": retrieved_at,
+        },
+        "net_profit": {
+            "source": "cache.financials",
+            "report_period": financial_report_period,
+            "as_of": cache_as_of["financials"],
+            "retrieved_at": retrieved_at,
+        },
+        "revenue_growth": {
+            "source": "cache.financials",
+            "report_period": financial_report_period,
+            "as_of": cache_as_of["financials"],
+            "retrieved_at": retrieved_at,
+        },
+        "pledge_ratio": {
+            "source": "cache.risk",
+            "as_of": cache_as_of["risk"],
+            "retrieved_at": retrieved_at,
+        },
+        "price_change_60d": {
+            "source": "cache.kline",
+            "as_of": cache_as_of["kline"],
+            "retrieved_at": retrieved_at,
+        },
+        "turnover_avg_percentile_60d": {
+            "source": "cache.kline",
+            "as_of": cache_as_of["kline"],
+            "retrieved_at": retrieved_at,
+        },
+        "f_score": {
+            "source": "cache.financials",
+            "report_period": financial_report_period,
+            "as_of": cache_as_of["financials"],
+            "retrieved_at": retrieved_at,
+        },
     }
 
     # Insufficient data guard（f1-deviation-fix §2 / D2）
