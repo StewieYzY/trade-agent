@@ -1,6 +1,6 @@
 # trade-agent Capability Gate 与完整执行 Handoff
 
-> 日期：2026-08-20
+> 日期：2026-08-21
 >
 > Master ID：`MASTER-2026-08-06`
 >
@@ -17,17 +17,17 @@
 > 架构决策：`design/architecture-decisions.md`
 >
 > runtime/integration baseline：
-> `547aeef feat(f3e): archive R1 crosstalk new-hypothesis diagnosis`
+> `6c1eff4 feat(g2): add dossier data quality provenance`
 >
 > 当前 main/docs baseline：
-> `main == origin/main`；当前精确 commit 以 `git rev-parse HEAD` 为准，已 push。
+> `main@6c1eff4`；`main` 相对 `origin/main@f0c4992` ahead 4，尚未 push。
 > 根目录既有 untracked user WIP（`.cache/`、`data/`、`debate/`、`watchlist/`
 > 等）保持 untouched，未被本次 stage/commit。
 >
 > 历史 GitHub 审查入口：
 > `PR #1 codex/mainline-sync-2026-08-05 → main`
 >
-> 当前集成以 `main == origin/main` 为准；最近 runtime commit 为 `547aeef`；
+> 当前本地集成以 `main@6c1eff4` 为准，远端基线为 `origin/main@f0c4992`；
 > PR #1 以下信息仅作
 > 历史审查快照，不再作为当前 branch 或 merge 状态判断依据。
 >
@@ -108,6 +108,20 @@
   审查仍未闭合。
 - 串台诊断循环停止；下一步推进 `g2-dossier-data-quality`。
 - 不宣称 G2 capability passed，不启动 G3。
+
+## 0.5. 2026-08-21 G2 2.x dossier data-quality closure
+
+- `g2-dossier-data-quality` 已 archive 至
+  `openspec/changes/archive/2026-08-21-g2-dossier-data-quality/`。
+- child commit：`6c1eff4 feat(g2): add dossier data quality provenance`，已
+  fast-forward 合入 `main`。
+- G2 umbrella 2.1、2.2、2.3 已勾选完成：
+  - 主营、同行、研报等角色事实补齐；
+  - 关键事实携带 source、report_period、published_at、freshness、degradation_status；
+  - 高严重度无来源/时间基准/来源不匹配 fail closed，可复核追溯率口径已建立。
+- 当前 `main` 相对 `origin/main` ahead 4，尚未 push。
+- 不宣称 G2 capability passed，不启动 G3；下一步推进 G2 3.1
+  `g2-growth-expectation-contract`。
 
 ## 1. 本文件的唯一权威地位
 
@@ -1129,9 +1143,9 @@ Queue 1 repair closure 已完成：`R-G1-001`、`R-G1-002`、`R-G1-003`、
 `main@8513096`，M3 6.1/6.2 = closed，Top 20 evidence 已保留。
 G1 umbrella 7.1/7.2/7.3 已完成，release decision 已记录
 `G1=passed`、`G2=approved_to_start_formal_acceptance`。
-G2 1.1、1.2、1.3 已完成并归档。f3f 的 fixture/dry-run 复现定位了历史输入
-fail-closed 路径，授权 live 尝试未复现历史显性串台；串台根因循环停止，下一步
-推进 `g2-dossier-data-quality`。不得将 G2 capability/runtime 描述为已通过，
+G2 1.1、1.2、1.3 和 2.1、2.2、2.3 已完成并归档。f3f 的有界诊断已停止串台
+根因循环；dossier data-quality 已补齐事实来源与追溯。下一步推进 G2 3.1
+`g2-growth-expectation-contract`。不得将 G2 capability/runtime 描述为已通过，
 也不得提前启动 G3 runtime 或产品化。
 
 ## 23. 下一窗口启动方式
