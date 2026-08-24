@@ -44,7 +44,7 @@ umbrella spec 中的 `partial` 归并为 `degraded`，`not_evaluable/partial/fai
 
 `DiagnosticInput` 冻结 `ticker`、`valuation_date`、`report_period`、`as_of`、`currency`、`value_scale`、`current_market_value`、`normalized_operating_cashflow`、`total_capex`、`normalized_net_profit` 和 `sources`。所有货币字段必须声明同一 `currency` 与 `value_scale`；来源必须携带 `source_id`、`report_period`、`as_of`、`freshness`，且 `report_period`/`as_of` 与主输入一致。缺失、未知单位、非有限数值、来源不匹配一律抛出 `ContractError`。
 
-`current_market_value` 允许 `0`，但禁止负数、`NaN`、`inf`。这避免引擎在非法单位或负市值上继续运行。
+`current_market_value` 必须为正数，禁止 `0`、负数、`NaN`、`inf`。这避免引擎在非法单位、零市值或负市值上继续运行。
 
 ### D4. 用户 assumption snapshot 显式化与版本化
 

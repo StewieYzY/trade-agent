@@ -22,6 +22,7 @@ RAW_PAYLOAD_HASH = "c" * 64
 
 def _source(field, freshness="fresh", degradation_status="clean"):
     return {
+        "ticker": "600519.SH",
         "source_id": f"src-{field}",
         "provider": "fixture-provider",
         "field": field,
@@ -48,6 +49,7 @@ def _valid_input():
         "value_scale": "hundred_million",
         "current_market_value": 1200.0,
         "normalized_operating_cashflow": 150.0,
+        "normalized_earnings": 140.0,
         "total_capex": 60.0,
         "normalized_net_profit": 90.0,
         "sources": [
@@ -160,6 +162,7 @@ def _base_diagnostic():
         "reasons": [],
         "warnings": [],
         "current_market_value": 1200.0,
+        "input_snapshot": _valid_input(),
         "assumption_snapshot": _valid_assumptions(),
         "current_business_value": {
             "epv_proxy_range": [800.0, 1000.0],
@@ -214,6 +217,7 @@ def _strip_numbers(payload, *, status, failure_kind, reason_codes, reasons):
             "reasons": reasons,
             "warnings": [],
             "current_market_value": None,
+            "input_snapshot": None,
             "as_of": None,
             "assumption_snapshot": _valid_assumptions(),
             "current_business_value": None,
@@ -289,7 +293,7 @@ def test_input_contract_rejects_negative_total_capex():
 
 def test_input_contract_rejects_source_mismatch():
     payload = _valid_input()
-    payload["sources"][0]["as_of"] = "2025-01-01"
+    payload["sources"][0]["as_of"] = "2027-01-01"
     with pytest.raises(ContractError, match="as_of mismatch"):
         validate_diagnostic_input(payload)
 
@@ -644,28 +648,28 @@ def test_applicability_rejects_financial_industry():
     verdict = evaluate_applicability(
         validate_diagnostic_input(_valid_input()),
         industry="banks",
-        normalized_earnings=100.0,
     )
     assert not verdict.applicable
     assert verdict.failure_kind == "model_not_applicable"
 
 
 def test_applicability_rejects_missing_earnings():
+    input_payload = _valid_input()
+    input_payload["normalized_earnings"] = 0.0
     verdict = evaluate_applicability(
-        validate_diagnostic_input(_valid_input()),
+        validate_diagnostic_input(input_payload),
         industry="industrial",
-        normalized_earnings=None,
     )
     assert not verdict.applicable
     assert verdict.failure_kind == "data_insufficient"
 
 
-@pytest.mark.parametrize("bad", [math.nan, math.inf, True, "100"])
-def test_applicability_rejects_non_finite_or_non_numeric_earnings(bad):
+def test_applicability_rejects_negative_earnings():
+    input_payload = _valid_input()
+    input_payload["normalized_earnings"] = -5.0
     verdict = evaluate_applicability(
-        validate_diagnostic_input(_valid_input()),
+        validate_diagnostic_input(input_payload),
         industry="industrial",
-        normalized_earnings=bad,
     )
     assert not verdict.applicable
     assert verdict.failure_kind == "data_insufficient"
@@ -675,7 +679,6 @@ def test_applicability_accepts_industrial_positive_earnings():
     verdict = evaluate_applicability(
         validate_diagnostic_input(_valid_input()),
         industry="industrial",
-        normalized_earnings=100.0,
     )
     assert verdict.applicable
     assert verdict.failure_kind is None
@@ -685,7 +688,6 @@ def test_applicability_missing_industry_produces_warning():
     verdict = evaluate_applicability(
         validate_diagnostic_input(_valid_input()),
         industry=None,
-        normalized_earnings=100.0,
     )
     assert verdict.applicable
     assert "industry_unknown" in verdict.warnings
@@ -697,7 +699,6 @@ def test_applicability_failed_source_is_not_evaluable():
     verdict = evaluate_applicability(
         validate_diagnostic_input(input_payload),
         industry="industrial",
-        normalized_earnings=100.0,
     )
     assert not verdict.applicable
     assert verdict.failure_kind == "data_insufficient"
@@ -773,6 +774,7 @@ def test_clean_result_requires_fresh_sources():
     input_payload["sources"][0]["freshness"] = "stale"
     assumptions = _valid_assumptions()
     payload = _base_diagnostic()
+    payload["input_snapshot"] = input_payload
     payload["input_digest"] = compute_input_digest(
         ticker="600519.SH",
         input_payload=input_payload,
@@ -798,6 +800,7 @@ def test_clean_rejects_failed_source_degradation():
     input_payload["sources"][0]["degradation_status"] = "failed"
     assumptions = _valid_assumptions()
     payload = _base_diagnostic()
+    payload["input_snapshot"] = input_payload
     payload["input_digest"] = compute_input_digest(
         ticker="600519.SH",
         input_payload=input_payload,
@@ -825,6 +828,7 @@ def test_degraded_rejects_failed_source_degradation():
     payload = _base_diagnostic()
     payload["calculation_status"] = "degraded"
     payload["warnings"] = ["degraded"]
+    payload["input_snapshot"] = input_payload
     payload["input_digest"] = compute_input_digest(
         ticker="600519.SH",
         input_payload=input_payload,

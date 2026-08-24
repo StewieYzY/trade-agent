@@ -194,7 +194,10 @@ def _require_choice(name: str, value: Any, choices: tuple[str, ...]) -> str:
 def _require_number(name: str, value: Any) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise ContractError(f"{name} must be a number")
-    number = float(value)
+    try:
+        number = float(value)
+    except OverflowError as exc:
+        raise ContractError(f"{name} must be finite") from exc
     if not math.isfinite(number):
         raise ContractError(f"{name} must be finite")
     return number
@@ -328,6 +331,7 @@ def _is_financial_industry(industry: str | None) -> bool:
 
 @dataclass(frozen=True)
 class DiagnosticSource:
+    ticker: str
     source_id: str
     provider: str
     field: str
@@ -342,20 +346,31 @@ class DiagnosticSource:
     degradation_status: str
 
     def __post_init__(self) -> None:
+        try:
+            canonical = canonical_ticker(self.ticker)
+        except (TypeError, ValueError) as exc:
+            raise ContractError("source ticker is not canonical") from exc
+        if canonical != self.ticker:
+            raise ContractError("source ticker must be canonical")
+        published_at = _require_date("published_at", self.published_at)
+        as_of = _require_date("as_of", self.as_of)
+        if published_at > as_of:
+            raise ContractError("source published_at must not be after as_of")
         _write_normalized(
             self,
+            ticker=canonical,
             source_id=_require_text("source_id", self.source_id),
             provider=_require_text("provider", self.provider),
             field=_require_choice("field", self.field, MONETARY_INPUT_FIELDS),
             raw_field=_require_text("raw_field", self.raw_field),
             report_period=_require_report_period("report_period", self.report_period),
-            as_of=_require_date("as_of", self.as_of),
+            as_of=as_of,
             freshness=_require_choice("freshness", self.freshness, FRESHNESS_VALUES),
             currency=_require_choice("currency", self.currency, SUPPORTED_CURRENCIES),
             value_scale=_require_choice(
                 "value_scale", self.value_scale, SUPPORTED_VALUE_SCALES
             ),
-            published_at=_require_date("published_at", self.published_at),
+            published_at=published_at,
             degradation_status=_require_choice(
                 "degradation_status",
                 self.degradation_status,
@@ -374,6 +389,7 @@ class DiagnosticSource:
             "source",
             value,
             (
+                "ticker",
                 "source_id",
                 "provider",
                 "field",
@@ -390,6 +406,7 @@ class DiagnosticSource:
         )
         try:
             return cls(
+                ticker=value["ticker"],
                 source_id=value["source_id"],
                 provider=value["provider"],
                 field=value["field"],
@@ -408,6 +425,7 @@ class DiagnosticSource:
 
     def to_dict(self) -> dict[str, Any]:
         return {
+            "ticker": self.ticker,
             "source_id": self.source_id,
             "provider": self.provider,
             "field": self.field,
@@ -434,6 +452,7 @@ class DiagnosticInput:
     value_scale: str
     current_market_value: float
     normalized_operating_cashflow: float
+    normalized_earnings: float
     total_capex: float
     normalized_net_profit: float
     sources: tuple[DiagnosticSource, ...]
@@ -462,6 +481,7 @@ class DiagnosticInput:
         _require_number(
             "normalized_operating_cashflow", self.normalized_operating_cashflow
         )
+        _require_number("normalized_earnings", self.normalized_earnings)
         _require_non_negative("total_capex", self.total_capex)
         _require_number("normalized_net_profit", self.normalized_net_profit)
         if not isinstance(self.sources, tuple) or not self.sources:
@@ -469,6 +489,8 @@ class DiagnosticInput:
         if any(not isinstance(source, DiagnosticSource) for source in self.sources):
             raise ContractError("sources must contain DiagnosticSource records")
         for source in self.sources:
+            if source.ticker != self.ticker:
+                raise ContractError("source ticker mismatch")
             if source.report_period != self.report_period:
                 raise ContractError("source report_period mismatch")
             if source.as_of != self.as_of:
@@ -509,6 +531,7 @@ class DiagnosticInput:
                 "value_scale",
                 "current_market_value",
                 "normalized_operating_cashflow",
+                "normalized_earnings",
                 "total_capex",
                 "normalized_net_profit",
                 "sources",
@@ -528,6 +551,7 @@ class DiagnosticInput:
                 value_scale=value["value_scale"],
                 current_market_value=value["current_market_value"],
                 normalized_operating_cashflow=value["normalized_operating_cashflow"],
+                normalized_earnings=value["normalized_earnings"],
                 total_capex=value["total_capex"],
                 normalized_net_profit=value["normalized_net_profit"],
                 sources=sources,
@@ -546,6 +570,7 @@ class DiagnosticInput:
             "value_scale": self.value_scale,
             "current_market_value": self.current_market_value,
             "normalized_operating_cashflow": self.normalized_operating_cashflow,
+            "normalized_earnings": self.normalized_earnings,
             "total_capex": self.total_capex,
             "normalized_net_profit": self.normalized_net_profit,
             "sources": [source.to_dict() for source in self.sources],
@@ -992,6 +1017,7 @@ class GrowthExpectationDiagnostic:
     reasons: tuple[str, ...]
     warnings: tuple[str, ...]
     current_market_value: float | None
+    input_snapshot: DiagnosticInput | None
     assumption_snapshot: AssumptionSnapshot | None
     current_business_value: CurrentBusinessValue | None
     priced_growth_value_range: tuple[float, float] | None
@@ -1040,6 +1066,9 @@ class GrowthExpectationDiagnostic:
         if self.assumption_snapshot is not None:
             if not isinstance(self.assumption_snapshot, AssumptionSnapshot):
                 raise ContractError("assumption_snapshot has an invalid type")
+        if self.input_snapshot is not None:
+            if not isinstance(self.input_snapshot, DiagnosticInput):
+                raise ContractError("input_snapshot has an invalid type")
         if self.current_business_value is not None:
             if not isinstance(self.current_business_value, CurrentBusinessValue):
                 raise ContractError("current_business_value has an invalid type")
@@ -1095,6 +1124,7 @@ class GrowthExpectationDiagnostic:
                 "reasons",
                 "warnings",
                 "current_market_value",
+                "input_snapshot",
                 "assumptions",
                 "assumption_snapshot",
                 "current_business_value",
@@ -1114,6 +1144,11 @@ class GrowthExpectationDiagnostic:
             assumption_snapshot = (
                 AssumptionSnapshot.from_dict(value["assumption_snapshot"])
                 if value.get("assumption_snapshot") is not None
+                else None
+            )
+            input_snapshot = (
+                DiagnosticInput.from_dict(value["input_snapshot"])
+                if value.get("input_snapshot") is not None
                 else None
             )
             current_business_value = (
@@ -1168,6 +1203,7 @@ class GrowthExpectationDiagnostic:
                 reasons=value.get("reasons", []),
                 warnings=value.get("warnings", []),
                 current_market_value=value.get("current_market_value"),
+                input_snapshot=input_snapshot,
                 assumption_snapshot=assumption_snapshot,
                 current_business_value=current_business_value,
                 priced_growth_value_range=priced_growth_value_range,
@@ -1213,6 +1249,11 @@ class GrowthExpectationDiagnostic:
             "reasons": list(self.reasons),
             "warnings": list(self.warnings),
             "current_market_value": self.current_market_value,
+            "input_snapshot": (
+                self.input_snapshot.to_dict()
+                if self.input_snapshot is not None
+                else None
+            ),
             "assumptions": self.assumptions,
             "assumption_snapshot": (
                 self.assumption_snapshot.to_dict()
@@ -1296,6 +1337,8 @@ def _validate_status_semantics(diagnostic: "GrowthExpectationDiagnostic") -> Non
             raise ContractError(f"{status} result requires current_market_value")
         if diagnostic.as_of is None:
             raise ContractError(f"{status} result requires as_of")
+        if diagnostic.input_snapshot is None:
+            raise ContractError(f"{status} result requires input_snapshot")
         if diagnostic.current_business_value is None:
             raise ContractError(f"{status} result requires current_business_value")
         if diagnostic.priced_growth_value_range is None:
@@ -1314,6 +1357,15 @@ def _validate_status_semantics(diagnostic: "GrowthExpectationDiagnostic") -> Non
             )
         if not diagnostic.sensitivity:
             raise ContractError(f"{status} result requires sensitivity")
+        assumption_keys = {
+            item.key for item in diagnostic.assumption_snapshot.assumptions
+        }
+        for scenario in diagnostic.sensitivity:
+            if scenario.assumption_key not in assumption_keys:
+                raise ContractError(
+                    f"sensitivity references unknown assumption: "
+                    f"{scenario.assumption_key!r}"
+                )
         _validate_reverse_mode_exclusivity(diagnostic)
 
     if status == "clean":
@@ -1478,6 +1530,10 @@ def validate_diagnostic_binding(
     if diagnostic.input_digest != expected:
         raise ContractError("input_digest does not match bound input")
     parsed_input = validate_diagnostic_input(input_payload)
+    if diagnostic.input_snapshot is not None and (
+        diagnostic.input_snapshot.to_dict() != parsed_input.to_dict()
+    ):
+        raise ContractError("input_snapshot mismatch")
     if parsed_input.ticker != canonical:
         raise ContractError("input ticker mismatch")
     if diagnostic.valuation_date != parsed_input.valuation_date:
@@ -1542,13 +1598,12 @@ def evaluate_applicability(
     input: DiagnosticInput,
     *,
     industry: str | None = None,
-    normalized_earnings: float | None = None,
 ) -> ApplicabilityVerdict:
     """Evaluate the deterministic model-applicability gate.
 
     ``input`` SHALL be a validated ``DiagnosticInput``, so unit/report-period
-    alignment is derived from its field-level sources instead of being passed
-    as trusted boolean flags by callers.
+    alignment and normalized-earnings positivity are derived from the input
+    itself instead of being passed as trusted side-channel values.
     """
     if not isinstance(input, DiagnosticInput):
         return ApplicabilityVerdict(
@@ -1568,13 +1623,7 @@ def evaluate_applicability(
             reasons=("financial industry is outside the V0 model",),
             warnings=(),
         )
-    if (
-        normalized_earnings is None
-        or isinstance(normalized_earnings, bool)
-        or not isinstance(normalized_earnings, (int, float))
-        or not math.isfinite(normalized_earnings)
-        or normalized_earnings <= 0
-    ):
+    if input.normalized_earnings <= 0:
         return ApplicabilityVerdict(
             applicable=False,
             calculation_status="not_evaluable",
