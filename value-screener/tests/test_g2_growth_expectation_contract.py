@@ -811,16 +811,119 @@ def test_input_contract_rejects_invalid_calendar_date():
         validate_diagnostic_input(payload)
 
 
-@pytest.mark.parametrize("flag", ["yes", 1])
-def test_applicability_rejects_non_boolean_alignment_flags(flag):
+def test_applicability_missing_industry_produces_warning():
+    verdict = evaluate_applicability(
+        industry=None,
+        normalized_earnings=100.0,
+        units_aligned=True,
+        periods_aligned=True,
+    )
+    assert verdict.applicable
+    assert verdict.failure_kind is None
+    assert "industry_unknown" in verdict.warnings
+
+
+@pytest.mark.parametrize("flag", [None, False, "yes", 1])
+def test_applicability_alignment_flags_produce_warnings(flag):
     verdict = evaluate_applicability(
         industry="industrial",
         normalized_earnings=100.0,
         units_aligned=flag,
         periods_aligned=True,
     )
-    assert not verdict.applicable
-    assert verdict.failure_kind == "data_insufficient"
+    assert verdict.applicable
+    assert verdict.failure_kind is None
+    assert "units_alignment_unverified" in verdict.warnings
+
+
+def test_binding_rejects_current_market_value_mismatch():
+    payload = _bound_diagnostic()
+    payload["current_market_value"] = 999999.0
+    with pytest.raises(ContractError, match="current_market_value mismatch"):
+        validate_diagnostic_binding(
+            payload,
+            ticker="600519.SH",
+            input_payload=_valid_input(),
+            assumption_snapshot=_valid_assumptions(),
+            formula_version=FORMULA_VERSION,
+            dossier_snapshot="dossier-v1",
+            profile_version="profile-v1",
+        )
+
+
+def test_failure_allows_expectation_overdraft_not_evaluable_marker():
+    payload = _strip_numbers(
+        _base_diagnostic(),
+        status="not_evaluable",
+        failure_kind="model_not_applicable",
+        reason_codes=["model_out_of_scope"],
+        reasons=["financial industry"],
+    )
+    payload["expectation_overdraft"] = "not_evaluable"
+    parsed = validate_diagnostic(payload)
+    assert parsed.expectation_overdraft == "not_evaluable"
+
+
+def test_failure_rejects_resolved_expectation_overdraft():
+    payload = _strip_numbers(
+        _base_diagnostic(),
+        status="not_evaluable",
+        failure_kind="model_not_applicable",
+        reason_codes=["model_out_of_scope"],
+        reasons=["financial industry"],
+    )
+    payload["expectation_overdraft"] = "within_credible_range"
+    with pytest.raises(ContractError, match="expectation_overdraft"):
+        validate_diagnostic(payload)
+
+
+def test_assumption_snapshot_rejects_invalid_earnings_basis():
+    snapshot = _valid_assumptions()
+    snapshot["assumptions"][0]["value"] = "normalized_ebitda"
+    with pytest.raises(ContractError, match="not supported"):
+        validate_assumption_snapshot(snapshot)
+
+
+def test_assumption_snapshot_rejects_reverse_duration_over_cap():
+    snapshot = _valid_assumptions(reverse_mode="fixed_duration")
+    for item in snapshot["assumptions"]:
+        if item["key"] == "reverse_fixed_duration_years":
+            item["value"] = 100
+    with pytest.raises(ContractError, match="50"):
+        validate_assumption_snapshot(snapshot)
+
+
+def test_reverse_scenario_rejects_duration_over_cap():
+    payload = _base_diagnostic()
+    payload["assumption_snapshot"] = _valid_assumptions(reverse_mode="fixed_duration")
+    payload["reverse_scenarios"] = [
+        {"mode": "fixed_duration", "duration_years": 100.0, "implied_growth_rate": 0.10}
+    ]
+    with pytest.raises(ContractError, match="50"):
+        validate_diagnostic(payload)
+
+
+def test_failure_accepts_expanded_data_reason_code():
+    payload = _strip_numbers(
+        _base_diagnostic(),
+        status="not_evaluable",
+        failure_kind="data_insufficient",
+        reason_codes=["data_negative_earnings"],
+        reasons=["normalized earnings are negative"],
+    )
+    parsed = validate_diagnostic(payload)
+    assert "data_negative_earnings" in parsed.reason_codes
+
+
+def test_input_normalizes_surrounding_whitespace():
+    payload = _valid_input()
+    payload["valuation_date"] = "  2026-08-24  "
+    payload["report_period"] = " 2025-12-31 "
+    payload["currency"] = " CNY "
+    parsed = validate_diagnostic_input(payload)
+    assert parsed.valuation_date == "2026-08-24"
+    assert parsed.report_period == "2025-12-31"
+    assert parsed.currency == "CNY"
 
 
 # Golden cases

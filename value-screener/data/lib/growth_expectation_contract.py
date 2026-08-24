@@ -40,6 +40,13 @@ FAILURE_REASON_CODES = (
     "data_period_mismatch",
     "data_published_at_missing",
     "data_source_unbound",
+    "data_negative_earnings",
+    "data_negative_cashflow",
+    "data_cyclical_peak",
+    "data_discount_rate_ordering",
+    "data_capex_ratio_out_of_range",
+    "data_currency_scale_mismatch",
+    "data_expired",
     "model_out_of_scope",
     "model_precondition_violated",
     "solver_no_solution",
@@ -54,6 +61,13 @@ FAILURE_KIND_REASON_CODES = {
             "data_period_mismatch",
             "data_published_at_missing",
             "data_source_unbound",
+            "data_negative_earnings",
+            "data_negative_cashflow",
+            "data_cyclical_peak",
+            "data_discount_rate_ordering",
+            "data_capex_ratio_out_of_range",
+            "data_currency_scale_mismatch",
+            "data_expired",
         )
     ),
     "model_not_applicable": frozenset(
@@ -93,6 +107,11 @@ REQUIRED_ASSUMPTION_KEYS = (
 )
 REVERSE_FIXED_GROWTH_RATE_KEY = "reverse_fixed_growth_rate"
 REVERSE_FIXED_DURATION_YEARS_KEY = "reverse_fixed_duration_years"
+MAX_REVERSE_DURATION_YEARS = 50
+NORMALIZED_EARNINGS_BASES = (
+    "normalized_operating_cashflow",
+    "normalized_net_profit",
+)
 ASSUMPTION_UNITS_BY_KEY = {
     "normalized_earnings_basis": "",
     "maintenance_capex_ratio": "ratio",
@@ -246,6 +265,11 @@ def _require_digest(name: str, value: Any) -> str:
     return text
 
 
+def _write_normalized(obj: Any, **fields: Any) -> None:
+    for name, value in fields.items():
+        object.__setattr__(obj, name, value)
+
+
 def _canonical_json(value: Any) -> str:
     try:
         return json.dumps(
@@ -283,18 +307,23 @@ class DiagnosticSource:
     degradation_status: str
 
     def __post_init__(self) -> None:
-        _require_text("source_id", self.source_id)
-        _require_choice("field", self.field, MONETARY_INPUT_FIELDS)
-        _require_report_period("report_period", self.report_period)
-        _require_date("as_of", self.as_of)
-        _require_choice("freshness", self.freshness, FRESHNESS_VALUES)
-        _require_choice("currency", self.currency, SUPPORTED_CURRENCIES)
-        _require_choice("value_scale", self.value_scale, SUPPORTED_VALUE_SCALES)
-        _require_date("published_at", self.published_at)
-        _require_choice(
-            "degradation_status",
-            self.degradation_status,
-            SOURCE_DEGRADATION_STATUSES,
+        _write_normalized(
+            self,
+            source_id=_require_text("source_id", self.source_id),
+            field=_require_choice("field", self.field, MONETARY_INPUT_FIELDS),
+            report_period=_require_report_period("report_period", self.report_period),
+            as_of=_require_date("as_of", self.as_of),
+            freshness=_require_choice("freshness", self.freshness, FRESHNESS_VALUES),
+            currency=_require_choice("currency", self.currency, SUPPORTED_CURRENCIES),
+            value_scale=_require_choice(
+                "value_scale", self.value_scale, SUPPORTED_VALUE_SCALES
+            ),
+            published_at=_require_date("published_at", self.published_at),
+            degradation_status=_require_choice(
+                "degradation_status",
+                self.degradation_status,
+                SOURCE_DEGRADATION_STATUSES,
+            ),
         )
 
     @classmethod
@@ -369,11 +398,17 @@ class DiagnosticInput:
             raise ContractError("ticker is not canonical") from exc
         if canonical != self.ticker:
             raise ContractError("ticker must be canonical")
-        _require_date("valuation_date", self.valuation_date)
-        _require_report_period("report_period", self.report_period)
-        _require_date("as_of", self.as_of)
-        _require_choice("currency", self.currency, SUPPORTED_CURRENCIES)
-        _require_choice("value_scale", self.value_scale, SUPPORTED_VALUE_SCALES)
+        _write_normalized(
+            self,
+            ticker=canonical,
+            valuation_date=_require_date("valuation_date", self.valuation_date),
+            report_period=_require_report_period("report_period", self.report_period),
+            as_of=_require_date("as_of", self.as_of),
+            currency=_require_choice("currency", self.currency, SUPPORTED_CURRENCIES),
+            value_scale=_require_choice(
+                "value_scale", self.value_scale, SUPPORTED_VALUE_SCALES
+            ),
+        )
         _require_non_negative("current_market_value", self.current_market_value)
         _require_number(
             "normalized_operating_cashflow", self.normalized_operating_cashflow
@@ -483,15 +518,21 @@ class Assumption:
     version: str
 
     def __post_init__(self) -> None:
-        _require_text("key", self.key)
+        key = _require_text("key", self.key)
         if isinstance(self.value, list):
             object.__setattr__(self, "value", tuple(self.value))
-        _validate_assumption_unit(self.key, self.unit)
-        _require_text("source", self.source)
+        _validate_assumption_unit(key, self.unit)
+        source = _require_text("source", self.source)
+        version = _require_text("version", self.version)
         if not isinstance(self.confirmed_by_user, bool):
             raise ContractError("confirmed_by_user must be a boolean")
-        _require_text("version", self.version)
-        _validate_assumption_value(self.key, self.value)
+        _validate_assumption_value(key, self.value)
+        _write_normalized(
+            self,
+            key=key,
+            source=source,
+            version=version,
+        )
 
     @classmethod
     def from_dict(cls, value: Mapping[str, Any]) -> "Assumption":
@@ -537,7 +578,7 @@ def _validate_assumption_unit(key: str, unit: Any) -> None:
 
 def _validate_assumption_value(key: str, value: Any) -> None:
     if key == "normalized_earnings_basis":
-        _require_text("normalized_earnings_basis", value)
+        _require_choice("normalized_earnings_basis", value, NORMALIZED_EARNINGS_BASES)
         return
     if key == "maintenance_capex_ratio":
         number = _require_number("maintenance_capex_ratio", value)
@@ -578,6 +619,11 @@ def _validate_assumption_value(key: str, value: Any) -> None:
         number = _require_number(REVERSE_FIXED_DURATION_YEARS_KEY, value)
         if number <= 0:
             raise ContractError("reverse_fixed_duration_years must be positive")
+        if number > MAX_REVERSE_DURATION_YEARS:
+            raise ContractError(
+                f"reverse_fixed_duration_years must not exceed "
+                f"{MAX_REVERSE_DURATION_YEARS}"
+            )
         return
     raise ContractError(f"unsupported assumption key: {key!r}")
 
@@ -589,9 +635,11 @@ class AssumptionSnapshot:
     assumptions: tuple[Assumption, ...]
 
     def __post_init__(self) -> None:
-        if self.version != ASSUMPTION_SNAPSHOT_VERSION:
+        version = _require_text("version", self.version)
+        if version != ASSUMPTION_SNAPSHOT_VERSION:
             raise ContractError("unsupported assumption snapshot version")
-        _require_date("created_at", self.created_at)
+        created_at = _require_date("created_at", self.created_at)
+        _write_normalized(self, version=version, created_at=created_at)
         if not isinstance(self.assumptions, tuple) or not self.assumptions:
             raise ContractError("assumptions must be a non-empty list")
         if any(not isinstance(item, Assumption) for item in self.assumptions):
@@ -737,6 +785,10 @@ class ReverseScenario:
             _require_number("duration_years", self.duration_years)
             if self.duration_years <= 0:
                 raise ContractError("duration_years must be positive")
+            if self.duration_years > MAX_REVERSE_DURATION_YEARS:
+                raise ContractError(
+                    f"duration_years must not exceed {MAX_REVERSE_DURATION_YEARS}"
+                )
             _require_non_negative("implied_growth_rate", self.implied_growth_rate)
             if self.growth_rate is not None or self.implied_high_growth_duration is not None:
                 raise ContractError(
@@ -1160,7 +1212,6 @@ def _validate_status_semantics(diagnostic: "GrowthExpectationDiagnostic") -> Non
         or bool(diagnostic.reverse_scenarios)
         or diagnostic.credible_growth_range is not None
         or diagnostic.expectation_gap is not None
-        or diagnostic.expectation_overdraft is not None
         or bool(diagnostic.sensitivity)
     )
 
@@ -1235,6 +1286,11 @@ def _validate_status_semantics(diagnostic: "GrowthExpectationDiagnostic") -> Non
             raise ContractError(f"{status} result requires input_digest")
         if numeric_conclusions:
             raise ContractError(f"{status} result must not contain numeric conclusions")
+        if diagnostic.expectation_overdraft not in (None, "not_evaluable"):
+            raise ContractError(
+                f"{status} result requires expectation_overdraft "
+                "to be null or 'not_evaluable'"
+            )
 
     if status == "failed":
         if diagnostic.quality_status != "failed":
@@ -1303,12 +1359,14 @@ def compute_input_digest(
     profile_version: str,
 ) -> str:
     """Return the canonical digest binding the full diagnostic identity."""
+    parsed_input = DiagnosticInput.from_dict(input_payload).to_dict()
+    parsed_snapshot = AssumptionSnapshot.from_dict(assumption_snapshot).to_dict()
     binding = {
         "ticker": canonical_ticker(ticker),
         "dossier_snapshot": _require_text("dossier_snapshot", dossier_snapshot),
         "profile_version": _require_text("profile_version", profile_version),
-        "input": input_payload,
-        "assumption_snapshot": assumption_snapshot,
+        "input": parsed_input,
+        "assumption_snapshot": parsed_snapshot,
         "formula_version": _require_text("formula_version", formula_version),
         "assumption_snapshot_version": ASSUMPTION_SNAPSHOT_VERSION,
     }
@@ -1364,6 +1422,11 @@ def validate_diagnostic_binding(
         raise ContractError("currency mismatch")
     if diagnostic.value_scale != parsed_input.value_scale:
         raise ContractError("value_scale mismatch")
+    if (
+        diagnostic.current_market_value is not None
+        and diagnostic.current_market_value != parsed_input.current_market_value
+    ):
+        raise ContractError("current_market_value mismatch")
     if diagnostic.calculation_status == "clean":
         if any(source.freshness != "fresh" for source in parsed_input.sources):
             raise ContractError("clean result requires all sources fresh")
@@ -1387,6 +1450,7 @@ class ApplicabilityVerdict:
     failure_kind: str | None
     reason_codes: tuple[str, ...]
     reasons: tuple[str, ...]
+    warnings: tuple[str, ...]
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -1395,6 +1459,7 @@ class ApplicabilityVerdict:
             "failure_kind": self.failure_kind,
             "reason_codes": list(self.reason_codes),
             "reasons": list(self.reasons),
+            "warnings": list(self.warnings),
         }
 
 
@@ -1402,8 +1467,8 @@ def evaluate_applicability(
     *,
     industry: str | None = None,
     normalized_earnings: float | None = None,
-    units_aligned: bool = True,
-    periods_aligned: bool = True,
+    units_aligned: bool | None = None,
+    periods_aligned: bool | None = None,
 ) -> ApplicabilityVerdict:
     """Evaluate the deterministic model-applicability gate."""
     if _is_financial_industry(industry):
@@ -1413,14 +1478,7 @@ def evaluate_applicability(
             failure_kind="model_not_applicable",
             reason_codes=("model_out_of_scope",),
             reasons=("financial industry is outside the V0 model",),
-        )
-    if not isinstance(units_aligned, bool) or not isinstance(periods_aligned, bool):
-        return ApplicabilityVerdict(
-            applicable=False,
-            calculation_status="not_evaluable",
-            failure_kind="data_insufficient",
-            reason_codes=("data_unit_mismatch",),
-            reasons=("unit and report-period alignment flags must be boolean",),
+            warnings=(),
         )
     if (
         normalized_earnings is None
@@ -1435,19 +1493,20 @@ def evaluate_applicability(
             failure_kind="data_insufficient",
             reason_codes=("data_missing",),
             reasons=("positive finite normalized earnings are required",),
+            warnings=(),
         )
-    if not units_aligned or not periods_aligned:
-        return ApplicabilityVerdict(
-            applicable=False,
-            calculation_status="not_evaluable",
-            failure_kind="data_insufficient",
-            reason_codes=("data_unit_mismatch",),
-            reasons=("unit or report-period alignment is required",),
-        )
+    warnings: list[str] = []
+    if not industry or not isinstance(industry, str) or not industry.strip():
+        warnings.append("industry_unknown")
+    if units_aligned is not True:
+        warnings.append("units_alignment_unverified")
+    if periods_aligned is not True:
+        warnings.append("periods_alignment_unverified")
     return ApplicabilityVerdict(
         applicable=True,
         calculation_status=None,
         failure_kind=None,
         reason_codes=(),
         reasons=(),
+        warnings=tuple(warnings),
     )

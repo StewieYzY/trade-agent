@@ -36,6 +36,10 @@ The system SHALL accept a versioned `growth_expectation_diagnostic` input payloa
 - **WHEN** an input payload contains a field outside the frozen contract
 - **THEN** the contract SHALL raise `ContractError`
 
+#### Scenario: Input strings are normalized
+- **WHEN** a text field such as `valuation_date`, `report_period`, or `currency` has surrounding whitespace
+- **THEN** the contract SHALL strip it before storing the validated value
+
 ### Requirement: Growth expectation diagnostic output contract
 
 The system SHALL freeze a versioned `growth_expectation_diagnostic` output with `calculation_status` of exactly `clean`, `degraded`, `not_evaluable`, or `failed`, and SHALL always carry `quality_status` of `warning` or `failed`, `decision_grade` of `diagnostic`, and an `assumptions` mapping derived from the assumption snapshot. A `clean` or `degraded` result SHALL contain a non-negative `current_market_value`, non-negative `current_business_value` ranges, signed `priced_growth_value_range` and `priced_growth_share_range`, at least one reverse scenario with non-negative rates and years, a non-negative `credible_growth_range`, `expectation_gap`, a resolved `expectation_overdraft`, and a non-empty `sensitivity`. A `clean` result SHALL have empty `warnings` and `reasons`; a `degraded` result SHALL have a non-empty `warnings` list. A `not_evaluable` or `failed` result SHALL carry `failure_kind`, non-empty `reason_codes`, non-empty `reasons`, `provenance`, and `input_digest`, and MUST NOT contain numeric conclusions.
@@ -66,7 +70,7 @@ The system SHALL freeze a versioned `growth_expectation_diagnostic` output with 
 
 ### Requirement: User assumption snapshot
 
-The system SHALL represent user assumptions in a versioned `assumption_snapshot` with `version`, `created_at`, and explicit `assumptions`. Each assumption SHALL carry `key`, `value`, `unit`, `source`, `confirmed_by_user`, and `version`. The V0 required assumption keys SHALL be `normalized_earnings_basis`, `maintenance_capex_ratio`, `cost_of_equity`, `maintenance_growth`, `credible_growth_rate`, `mature_pe`, and `reverse_mode`. The reverse mode SHALL also freeze the actual reverse input: `reverse_fixed_growth_rate` for `fixed_growth_rate` and `reverse_fixed_duration_years` for `fixed_duration`. Assumption values SHALL be immutable after validation, and each key SHALL use a frozen unit: `ratio` for `maintenance_capex_ratio`, `decimal` for `cost_of_equity`, `maintenance_growth`, `credible_growth_rate`, and `reverse_fixed_growth_rate`, `x` for `mature_pe`, `years` for `reverse_fixed_duration_years`, and empty unit for `normalized_earnings_basis` and `reverse_mode`. Missing required keys, duplicate keys, unconfirmed assumptions, conflicting assumptions, wrong units, and a missing or conflicting reverse input SHALL fail closed and MUST NOT be replaced by silent defaults.
+The system SHALL represent user assumptions in a versioned `assumption_snapshot` with `version`, `created_at`, and explicit `assumptions`. Each assumption SHALL carry `key`, `value`, `unit`, `source`, `confirmed_by_user`, and `version`. The V0 required assumption keys SHALL be `normalized_earnings_basis`, `maintenance_capex_ratio`, `cost_of_equity`, `maintenance_growth`, `credible_growth_rate`, `mature_pe`, and `reverse_mode`. `normalized_earnings_basis` SHALL be one of `normalized_operating_cashflow` or `normalized_net_profit`. The reverse mode SHALL also freeze the actual reverse input: `reverse_fixed_growth_rate` for `fixed_growth_rate` and `reverse_fixed_duration_years` for `fixed_duration`; reverse duration years SHALL NOT exceed `50`. Assumption values SHALL be immutable after validation, and each key SHALL use a frozen unit: `ratio` for `maintenance_capex_ratio`, `decimal` for `cost_of_equity`, `maintenance_growth`, `credible_growth_rate`, and `reverse_fixed_growth_rate`, `x` for `mature_pe`, `years` for `reverse_fixed_duration_years`, and empty unit for `normalized_earnings_basis` and `reverse_mode`. Missing required keys, duplicate keys, unconfirmed assumptions, conflicting assumptions, wrong units, invalid earnings basis, an over-cap reverse duration, and a missing or conflicting reverse input SHALL fail closed and MUST NOT be replaced by silent defaults.
 
 #### Scenario: All required assumptions present
 - **WHEN** an assumption snapshot contains all required keys with correct units, the matching reverse input, and `confirmed_by_user=True`
@@ -92,9 +96,17 @@ The system SHALL represent user assumptions in a versioned `assumption_snapshot`
 - **WHEN** `reverse_mode` is fixed but its actual growth rate or duration years is absent or conflicting
 - **THEN** the contract SHALL raise `ContractError`
 
+#### Scenario: Invalid earnings basis fails closed
+- **WHEN** `normalized_earnings_basis` is not a frozen V0 basis
+- **THEN** the contract SHALL raise `ContractError`
+
+#### Scenario: Over-cap reverse duration fails closed
+- **WHEN** `reverse_fixed_duration_years` or a reverse scenario duration exceeds `50`
+- **THEN** the contract SHALL raise `ContractError`
+
 ### Requirement: Model applicability and failure semantics
 
-The system SHALL distinguish `data_insufficient`, `model_not_applicable`, and `computation_failed` without masquerading any failure as success. `evaluate_applicability` SHALL return `not_evaluable` for financial industries, negative or missing normalized earnings, non-finite or non-numeric normalized earnings, non-boolean alignment flags, or unit/report-period misalignment. A computation failure SHALL map to `calculation_status=failed` with `failure_kind=computation_failed`, `quality_status=failed`, and a preserved `assumption_snapshot`. Failure results SHALL carry machine-readable `reason_codes` from the `FAILURE_REASON_CODES` vocabulary consistent with their `failure_kind`, and SHALL retain `provenance` and `input_digest`.
+The system SHALL distinguish `data_insufficient`, `model_not_applicable`, and `computation_failed` without masquerading any failure as success. `evaluate_applicability` SHALL return `not_evaluable` for a confirmed financial industry or for negative, missing, non-finite, or non-numeric normalized earnings. Missing industry and non-true `units_aligned` or `periods_aligned` SHALL NOT hard-block; they SHALL instead return an applicable verdict with warnings `industry_unknown`, `units_alignment_unverified`, or `periods_alignment_unverified`. A computation failure SHALL map to `calculation_status=failed` with `failure_kind=computation_failed`, `quality_status=failed`, and a preserved `assumption_snapshot`. Failure results SHALL carry machine-readable `reason_codes` from the `FAILURE_REASON_CODES` vocabulary consistent with their `failure_kind`, and SHALL retain `provenance` and `input_digest`.
 
 #### Scenario: Financial industry is not applicable
 - **WHEN** the input industry is financial
@@ -116,24 +128,32 @@ The system SHALL distinguish `data_insufficient`, `model_not_applicable`, and `c
 - **WHEN** a failure result has missing, unknown, or failure-kind-inconsistent reason codes
 - **THEN** the contract SHALL raise `ContractError`
 
-#### Scenario: Non-boolean alignment flag is not applicable
-- **WHEN** `units_aligned` or `periods_aligned` is not a boolean
-- **THEN** `evaluate_applicability` SHALL return `not_evaluable` with `failure_kind=data_insufficient`
+#### Scenario: Missing industry degrades to warning
+- **WHEN** `industry` is missing and normalized earnings are positive and finite
+- **THEN** `evaluate_applicability` SHALL return an applicable verdict with warning `industry_unknown`
+
+#### Scenario: Non-true alignment flag degrades to warning
+- **WHEN** `units_aligned` or `periods_aligned` is `False`, missing, or non-boolean
+- **THEN** `evaluate_applicability` SHALL return an applicable verdict with the corresponding alignment-unverified warning
 
 #### Scenario: Failed result preserves assumptions
 - **WHEN** `calculation_status` is `failed` and no `assumption_snapshot` is present
 - **THEN** the contract SHALL raise `ContractError`
 
+#### Scenario: Failure may carry the not-evaluable overdraft marker
+- **WHEN** `calculation_status` is `not_evaluable` or `failed`
+- **THEN** `expectation_overdraft` SHALL be either null or the literal marker `not_evaluable`, and MUST NOT be a resolved overdraft level
+
 ### Requirement: Provenance and input digest binding
 
-The system SHALL bind every diagnostic to one identity: `ticker`, `dossier_snapshot`, `profile_version`, `formula_version`, `assumption_snapshot_version`, the input payload, and the assumption snapshot. `provenance` SHALL carry `dossier_snapshot`, `profile_version`, `formula_version`, and `assumption_snapshot_version`. `compute_input_digest` SHALL derive a canonical sha256 digest over the full identity, and `validate_diagnostic_binding` SHALL reject any identity-field mismatch, digest mismatch, or a `clean` result whose sources are not all `fresh`.
+The system SHALL bind every diagnostic to one identity: `ticker`, `dossier_snapshot`, `profile_version`, `formula_version`, `assumption_snapshot_version`, the input payload, and the assumption snapshot. `provenance` SHALL carry `dossier_snapshot`, `profile_version`, `formula_version`, and `assumption_snapshot_version`. `compute_input_digest` SHALL derive a canonical sha256 digest over the full identity, and `validate_diagnostic_binding` SHALL reject any identity-field mismatch, digest mismatch, a diagnostic `current_market_value` that differs from the input payload, or a `clean` result whose sources are not all `fresh`.
 
 #### Scenario: Digest matches bound identity
 - **WHEN** the diagnostic `input_digest` equals the digest of the supplied ticker, input, assumptions, formula version, dossier snapshot, and profile version
 - **THEN** `validate_diagnostic_binding` SHALL return the validated diagnostic
 
 #### Scenario: Identity mismatch fails closed
-- **WHEN** the diagnostic ticker, dossier snapshot, profile version, formula version, or a shared input field does not match the supplied identity
+- **WHEN** the diagnostic ticker, dossier snapshot, profile version, formula version, `current_market_value`, or a shared input field does not match the supplied identity
 - **THEN** `validate_diagnostic_binding` SHALL raise `ContractError`
 
 #### Scenario: Digest mismatch fails closed
