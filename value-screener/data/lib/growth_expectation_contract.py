@@ -41,6 +41,7 @@ FAILURE_REASON_CODES = (
     "data_published_at_missing",
     "data_source_unbound",
     "data_source_provenance_missing",
+    "data_source_failed",
     "data_negative_earnings",
     "data_negative_cashflow",
     "data_cyclical_peak",
@@ -64,6 +65,7 @@ FAILURE_KIND_REASON_CODES = {
             "data_published_at_missing",
             "data_source_unbound",
             "data_source_provenance_missing",
+            "data_source_failed",
             "data_negative_earnings",
             "data_negative_cashflow",
             "data_cyclical_peak",
@@ -1537,13 +1539,26 @@ class ApplicabilityVerdict:
 
 
 def evaluate_applicability(
+    input: DiagnosticInput,
     *,
     industry: str | None = None,
     normalized_earnings: float | None = None,
-    units_aligned: bool | None = None,
-    periods_aligned: bool | None = None,
 ) -> ApplicabilityVerdict:
-    """Evaluate the deterministic model-applicability gate."""
+    """Evaluate the deterministic model-applicability gate.
+
+    ``input`` SHALL be a validated ``DiagnosticInput``, so unit/report-period
+    alignment is derived from its field-level sources instead of being passed
+    as trusted boolean flags by callers.
+    """
+    if not isinstance(input, DiagnosticInput):
+        return ApplicabilityVerdict(
+            applicable=False,
+            calculation_status="not_evaluable",
+            failure_kind="data_insufficient",
+            reason_codes=("data_missing",),
+            reasons=("a validated DiagnosticInput is required",),
+            warnings=(),
+        )
     if _is_financial_industry(industry):
         return ApplicabilityVerdict(
             applicable=False,
@@ -1568,12 +1583,32 @@ def evaluate_applicability(
             reasons=("positive finite normalized earnings are required",),
             warnings=(),
         )
+    failed_fields = sorted(
+        source.field for source in input.sources if source.degradation_status == "failed"
+    )
+    if failed_fields:
+        return ApplicabilityVerdict(
+            applicable=False,
+            calculation_status="not_evaluable",
+            failure_kind="data_insufficient",
+            reason_codes=("data_source_failed",),
+            reasons=(f"failed source fields: {failed_fields}",),
+            warnings=(),
+        )
     warnings: list[str] = []
     if not industry or not isinstance(industry, str) or not industry.strip():
         warnings.append("industry_unknown")
-    if units_aligned is not True:
+    units_aligned = all(
+        source.currency == input.currency and source.value_scale == input.value_scale
+        for source in input.sources
+    )
+    periods_aligned = all(
+        source.report_period == input.report_period and source.as_of == input.as_of
+        for source in input.sources
+    )
+    if not units_aligned:
         warnings.append("units_alignment_unverified")
-    if periods_aligned is not True:
+    if not periods_aligned:
         warnings.append("periods_alignment_unverified")
     return ApplicabilityVerdict(
         applicable=True,

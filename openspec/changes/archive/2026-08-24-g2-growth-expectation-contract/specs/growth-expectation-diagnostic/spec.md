@@ -118,7 +118,7 @@ The system SHALL represent user assumptions in a versioned `assumption_snapshot`
 
 ### Requirement: Model applicability and failure semantics
 
-The system SHALL distinguish `data_insufficient`, `model_not_applicable`, and `computation_failed` without masquerading any failure as success. `evaluate_applicability` SHALL return `not_evaluable` for a confirmed financial industry or for negative, missing, non-finite, or non-numeric normalized earnings. Missing industry and non-true `units_aligned` or `periods_aligned` SHALL NOT hard-block; they SHALL instead return an applicable verdict with warnings `industry_unknown`, `units_alignment_unverified`, or `periods_alignment_unverified`. A computation failure SHALL map to `calculation_status=failed` with `failure_kind=computation_failed`, `quality_status=failed`, and a preserved `assumption_snapshot`. Failure results SHALL carry machine-readable `reason_codes` from the `FAILURE_REASON_CODES` vocabulary consistent with their `failure_kind`, and SHALL retain `provenance` and `input_digest`.
+The system SHALL distinguish `data_insufficient`, `model_not_applicable`, and `computation_failed` without masquerading any failure as success. `evaluate_applicability` SHALL consume a validated `DiagnosticInput`, derive unit and report-period alignment from its field-level sources, and SHALL return `not_evaluable` for a confirmed financial industry, negative, missing, non-finite, or non-numeric normalized earnings, or any source whose `degradation_status` is `failed`. Missing industry SHALL NOT hard-block; it SHALL instead return an applicable verdict with warning `industry_unknown`. A computation failure SHALL map to `calculation_status=failed` with `failure_kind=computation_failed`, `quality_status=failed`, and a preserved `assumption_snapshot`. Failure results SHALL carry machine-readable `reason_codes` from the `FAILURE_REASON_CODES` vocabulary consistent with their `failure_kind`, and SHALL retain `provenance` and `input_digest`.
 
 #### Scenario: Financial industry is not applicable
 - **WHEN** the input industry is financial
@@ -144,9 +144,9 @@ The system SHALL distinguish `data_insufficient`, `model_not_applicable`, and `c
 - **WHEN** `industry` is missing and normalized earnings are positive and finite
 - **THEN** `evaluate_applicability` SHALL return an applicable verdict with warning `industry_unknown`
 
-#### Scenario: Non-true alignment flag degrades to warning
-- **WHEN** `units_aligned` or `periods_aligned` is `False`, missing, or non-boolean
-- **THEN** `evaluate_applicability` SHALL return an applicable verdict with the corresponding alignment-unverified warning
+#### Scenario: Failed source is not evaluable
+- **WHEN** any input source has `degradation_status=failed`
+- **THEN** `evaluate_applicability` SHALL return `not_evaluable` with `failure_kind=data_insufficient`
 
 #### Scenario: Failed result preserves assumptions
 - **WHEN** `calculation_status` is `failed` and no `assumption_snapshot` is present

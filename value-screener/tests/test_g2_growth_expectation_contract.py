@@ -641,30 +641,41 @@ def test_assumption_snapshot_rejects_reverse_duration_over_cap():
 
 
 def test_applicability_rejects_financial_industry():
-    verdict = evaluate_applicability(industry="banks", normalized_earnings=100.0)
+    verdict = evaluate_applicability(
+        validate_diagnostic_input(_valid_input()),
+        industry="banks",
+        normalized_earnings=100.0,
+    )
     assert not verdict.applicable
     assert verdict.failure_kind == "model_not_applicable"
 
 
 def test_applicability_rejects_missing_earnings():
-    verdict = evaluate_applicability(industry="industrial", normalized_earnings=None)
+    verdict = evaluate_applicability(
+        validate_diagnostic_input(_valid_input()),
+        industry="industrial",
+        normalized_earnings=None,
+    )
     assert not verdict.applicable
     assert verdict.failure_kind == "data_insufficient"
 
 
 @pytest.mark.parametrize("bad", [math.nan, math.inf, True, "100"])
 def test_applicability_rejects_non_finite_or_non_numeric_earnings(bad):
-    verdict = evaluate_applicability(industry="industrial", normalized_earnings=bad)
+    verdict = evaluate_applicability(
+        validate_diagnostic_input(_valid_input()),
+        industry="industrial",
+        normalized_earnings=bad,
+    )
     assert not verdict.applicable
     assert verdict.failure_kind == "data_insufficient"
 
 
 def test_applicability_accepts_industrial_positive_earnings():
     verdict = evaluate_applicability(
+        validate_diagnostic_input(_valid_input()),
         industry="industrial",
         normalized_earnings=100.0,
-        units_aligned=True,
-        periods_aligned=True,
     )
     assert verdict.applicable
     assert verdict.failure_kind is None
@@ -672,25 +683,25 @@ def test_applicability_accepts_industrial_positive_earnings():
 
 def test_applicability_missing_industry_produces_warning():
     verdict = evaluate_applicability(
+        validate_diagnostic_input(_valid_input()),
         industry=None,
         normalized_earnings=100.0,
-        units_aligned=True,
-        periods_aligned=True,
     )
     assert verdict.applicable
     assert "industry_unknown" in verdict.warnings
 
 
-@pytest.mark.parametrize("flag", [None, False, "yes", 1])
-def test_applicability_alignment_flags_produce_warnings(flag):
+def test_applicability_failed_source_is_not_evaluable():
+    input_payload = _valid_input()
+    input_payload["sources"][0]["degradation_status"] = "failed"
     verdict = evaluate_applicability(
+        validate_diagnostic_input(input_payload),
         industry="industrial",
         normalized_earnings=100.0,
-        units_aligned=flag,
-        periods_aligned=True,
     )
-    assert verdict.applicable
-    assert "units_alignment_unverified" in verdict.warnings
+    assert not verdict.applicable
+    assert verdict.failure_kind == "data_insufficient"
+    assert "data_source_failed" in verdict.reason_codes
 
 
 def test_reverse_scenarios_must_share_one_mode():
