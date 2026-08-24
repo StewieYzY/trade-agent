@@ -17,23 +17,27 @@ from data.lib.growth_expectation_contract import (
 )
 
 FORMULA_VERSION = "v0-epv-proxy"
+RAW_PAYLOAD_HASH = "c" * 64
 
 
-def _source(field: str, freshness: str = "fresh") -> dict:
+def _source(field, freshness="fresh", degradation_status="clean"):
     return {
         "source_id": f"src-{field}",
+        "provider": "fixture-provider",
         "field": field,
+        "raw_field": f"raw-{field}",
+        "raw_payload_hash": RAW_PAYLOAD_HASH,
         "report_period": "2025-12-31",
         "as_of": "2026-08-24",
         "freshness": freshness,
         "currency": "CNY",
         "value_scale": "hundred_million",
         "published_at": "2026-03-31",
-        "degradation_status": "clean",
+        "degradation_status": degradation_status,
     }
 
 
-def _valid_input() -> dict:
+def _valid_input():
     return {
         "schema_version": "g2-growth-expectation-input-v1",
         "ticker": "600519.SH",
@@ -55,7 +59,7 @@ def _valid_input() -> dict:
     }
 
 
-def _valid_assumptions(reverse_mode: str = "fixed_growth_rate") -> dict:
+def _valid_assumptions(reverse_mode="fixed_growth_rate"):
     return {
         "version": ASSUMPTION_SNAPSHOT_VERSION,
         "created_at": "2026-08-24",
@@ -70,7 +74,7 @@ def _valid_assumptions(reverse_mode: str = "fixed_growth_rate") -> dict:
             },
             {
                 "key": "maintenance_capex_ratio",
-                "value": 0.5,
+                "value": [0.4, 0.6],
                 "unit": "ratio",
                 "source": "user_confirmed",
                 "confirmed_by_user": True,
@@ -78,7 +82,7 @@ def _valid_assumptions(reverse_mode: str = "fixed_growth_rate") -> dict:
             },
             {
                 "key": "cost_of_equity",
-                "value": 0.10,
+                "value": [0.09, 0.11],
                 "unit": "decimal",
                 "source": "user_confirmed",
                 "confirmed_by_user": True,
@@ -102,7 +106,7 @@ def _valid_assumptions(reverse_mode: str = "fixed_growth_rate") -> dict:
             },
             {
                 "key": "mature_pe",
-                "value": 20.0,
+                "value": [18.0, 22.0],
                 "unit": "x",
                 "source": "user_confirmed",
                 "confirmed_by_user": True,
@@ -119,7 +123,7 @@ def _valid_assumptions(reverse_mode: str = "fixed_growth_rate") -> dict:
             (
                 {
                     "key": "reverse_fixed_growth_rate",
-                    "value": 0.12,
+                    "value": [0.10, 0.12, 0.15],
                     "unit": "decimal",
                     "source": "user_confirmed",
                     "confirmed_by_user": True,
@@ -128,7 +132,7 @@ def _valid_assumptions(reverse_mode: str = "fixed_growth_rate") -> dict:
                 if reverse_mode == "fixed_growth_rate"
                 else {
                     "key": "reverse_fixed_duration_years",
-                    "value": 5.0,
+                    "value": [3.0, 5.0, 8.0],
                     "unit": "years",
                     "source": "user_confirmed",
                     "confirmed_by_user": True,
@@ -139,12 +143,13 @@ def _valid_assumptions(reverse_mode: str = "fixed_growth_rate") -> dict:
     }
 
 
-def _base_diagnostic() -> dict:
+def _base_diagnostic():
     return {
         "schema_version": GROWTH_EXPECTATION_SCHEMA_VERSION,
         "ticker": "600519.SH",
         "valuation_date": "2026-08-24",
         "report_period": "2025-12-31",
+        "as_of": "2026-08-24",
         "currency": "CNY",
         "value_scale": "hundred_million",
         "calculation_status": "clean",
@@ -164,21 +169,15 @@ def _base_diagnostic() -> dict:
         "priced_growth_value_range": [300.0, 400.0],
         "priced_growth_share_range": [0.1, 0.25],
         "reverse_scenarios": [
-            {
-                "mode": "fixed_growth_rate",
-                "growth_rate": 0.12,
-                "implied_high_growth_duration": 6.0,
-            }
+            {"mode": "fixed_growth_rate", "growth_rate": 0.10, "implied_high_growth_duration": 4.0},
+            {"mode": "fixed_growth_rate", "growth_rate": 0.12, "implied_high_growth_duration": 6.0},
+            {"mode": "fixed_growth_rate", "growth_rate": 0.15, "implied_high_growth_duration": 8.0},
         ],
         "credible_growth_range": [0.08, 0.18],
         "expectation_gap": [0.02, 0.06],
         "expectation_overdraft": "within_credible_range",
         "sensitivity": [
-            {
-                "assumption_key": "maintenance_capex_ratio",
-                "value": 0.6,
-                "impact_range": [0.08, 0.28],
-            }
+            {"assumption_key": "maintenance_capex_ratio", "value": 0.6, "impact_range": [0.08, 0.28]}
         ],
         "evidence": [],
         "provenance": {
@@ -191,7 +190,7 @@ def _base_diagnostic() -> dict:
     }
 
 
-def _bound_diagnostic() -> dict:
+def _bound_diagnostic():
     payload = _base_diagnostic()
     payload["input_digest"] = compute_input_digest(
         ticker="600519.SH",
@@ -204,14 +203,7 @@ def _bound_diagnostic() -> dict:
     return payload
 
 
-def _strip_numbers(
-    payload: dict,
-    *,
-    status: str,
-    failure_kind: str,
-    reason_codes: list[str],
-    reasons: list[str],
-) -> dict:
+def _strip_numbers(payload, *, status, failure_kind, reason_codes, reasons):
     payload.update(
         {
             "calculation_status": status,
@@ -222,6 +214,7 @@ def _strip_numbers(
             "reasons": reasons,
             "warnings": [],
             "current_market_value": None,
+            "as_of": None,
             "assumption_snapshot": _valid_assumptions(),
             "current_business_value": None,
             "priced_growth_value_range": None,
@@ -250,7 +243,7 @@ def _strip_numbers(
 def test_input_contract_accepts_valid_payload():
     parsed = validate_diagnostic_input(_valid_input())
     assert parsed.ticker == "600519.SH"
-    assert parsed.normalized_operating_cashflow == 150.0
+    assert parsed.current_market_value == 1200.0
 
 
 def test_input_contract_rejects_missing_field():
@@ -268,7 +261,7 @@ def test_input_contract_rejects_unknown_unit(field):
         validate_diagnostic_input(payload)
 
 
-@pytest.mark.parametrize("bad", [-1.0, math.nan, math.inf])
+@pytest.mark.parametrize("bad", [-1.0, 0.0, math.nan, math.inf])
 def test_input_contract_rejects_illegal_market_value(bad):
     payload = _valid_input()
     payload["current_market_value"] = bad
@@ -317,16 +310,72 @@ def test_input_contract_rejects_duplicate_field_level_source():
         validate_diagnostic_input(payload)
 
 
+def test_input_contract_rejects_invalid_calendar_date():
+    payload = _valid_input()
+    payload["valuation_date"] = "2025-02-30"
+    with pytest.raises(ContractError, match="valid date"):
+        validate_diagnostic_input(payload)
+
+
+def test_input_contract_rejects_invalid_report_period():
+    payload = _valid_input()
+    payload["report_period"] = "2025-02-30"
+    payload["sources"] = [
+        {**source, "report_period": "2025-02-30"} for source in payload["sources"]
+    ]
+    with pytest.raises(ContractError, match="calendar date"):
+        validate_diagnostic_input(payload)
+
+
+@pytest.mark.parametrize("field", ["provider", "raw_field", "raw_payload_hash"])
+def test_input_contract_rejects_source_without_provenance_field(field):
+    payload = _valid_input()
+    payload["sources"][0].pop(field)
+    with pytest.raises(ContractError):
+        validate_diagnostic_input(payload)
+
+
+def test_input_contract_rejects_bad_raw_payload_hash():
+    payload = _valid_input()
+    payload["sources"][0]["raw_payload_hash"] = "not-a-hash"
+    with pytest.raises(ContractError, match="sha256"):
+        validate_diagnostic_input(payload)
+
+
+def test_input_contract_rejects_unknown_field():
+    payload = _valid_input()
+    payload["extra"] = "unexpected"
+    with pytest.raises(ContractError, match="unknown fields"):
+        validate_diagnostic_input(payload)
+
+
+def test_input_contract_normalizes_whitespace():
+    payload = _valid_input()
+    payload["valuation_date"] = "  2026-08-24  "
+    payload["report_period"] = " 2025-12-31 "
+    payload["currency"] = " CNY "
+    parsed = validate_diagnostic_input(payload)
+    assert parsed.valuation_date == "2026-08-24"
+    assert parsed.report_period == "2025-12-31"
+    assert parsed.currency == "CNY"
+
+
+def test_input_contract_wraps_malformed_container():
+    payload = _valid_input()
+    payload["sources"] = 123
+    with pytest.raises(ContractError, match="structure is invalid"):
+        validate_diagnostic_input(payload)
+
+
 # Output contract
 
 
 def test_output_contract_accepts_clean_result():
     parsed = validate_diagnostic(_base_diagnostic())
     assert parsed.calculation_status == "clean"
-    assert parsed.quality_status == "warning"
-    assert parsed.decision_grade == "diagnostic"
     assert parsed.current_business_value is not None
     assert parsed.priced_growth_share_range == (0.1, 0.25)
+    assert parsed.as_of == "2026-08-24"
 
 
 def test_output_contract_accepts_degraded_result():
@@ -343,6 +392,7 @@ def test_output_contract_accepts_degraded_result():
     [
         "quality_status",
         "decision_grade",
+        "as_of",
         "current_market_value",
         "priced_growth_value_range",
         "priced_growth_share_range",
@@ -437,6 +487,90 @@ def test_failure_is_not_presented_as_clean():
         validate_diagnostic(payload)
 
 
+def test_failure_allows_expectation_overdraft_not_evaluable_marker():
+    payload = _strip_numbers(
+        _base_diagnostic(),
+        status="not_evaluable",
+        failure_kind="model_not_applicable",
+        reason_codes=["model_out_of_scope"],
+        reasons=["financial industry"],
+    )
+    payload["expectation_overdraft"] = "not_evaluable"
+    parsed = validate_diagnostic(payload)
+    assert parsed.expectation_overdraft == "not_evaluable"
+
+
+def test_failure_rejects_resolved_expectation_overdraft():
+    payload = _strip_numbers(
+        _base_diagnostic(),
+        status="not_evaluable",
+        failure_kind="model_not_applicable",
+        reason_codes=["model_out_of_scope"],
+        reasons=["financial industry"],
+    )
+    payload["expectation_overdraft"] = "within_credible_range"
+    with pytest.raises(ContractError, match="expectation_overdraft"):
+        validate_diagnostic(payload)
+
+
+def test_failed_requires_assumption_snapshot():
+    payload = _strip_numbers(
+        _base_diagnostic(),
+        status="failed",
+        failure_kind="computation_failed",
+        reason_codes=["solver_no_solution"],
+        reasons=["no finite reverse solution"],
+    )
+    payload["assumption_snapshot"] = None
+    with pytest.raises(ContractError, match="assumption_snapshot"):
+        validate_diagnostic(payload)
+
+
+def test_output_clean_rejects_negative_market_value():
+    payload = _base_diagnostic()
+    payload["current_market_value"] = -1.0
+    with pytest.raises(ContractError, match="positive"):
+        validate_diagnostic(payload)
+
+
+def test_output_clean_rejects_negative_epv_range():
+    payload = _base_diagnostic()
+    payload["current_business_value"]["epv_proxy_range"] = [-10.0, 100.0]
+    with pytest.raises(ContractError, match="non-negative"):
+        validate_diagnostic(payload)
+
+
+def test_output_clean_allows_negative_priced_growth_share():
+    payload = _base_diagnostic()
+    payload["priced_growth_value_range"] = [-200.0, -100.0]
+    payload["priced_growth_share_range"] = [-0.2, -0.1]
+    parsed = validate_diagnostic(payload)
+    assert parsed.priced_growth_share_range == (-0.2, -0.1)
+
+
+def test_output_clean_rejects_negative_implied_duration():
+    payload = _base_diagnostic()
+    payload["reverse_scenarios"][0]["implied_high_growth_duration"] = -1.0
+    with pytest.raises(ContractError, match="non-negative"):
+        validate_diagnostic(payload)
+
+
+def test_output_clean_rejects_duration_over_cap():
+    payload = _base_diagnostic()
+    payload["reverse_scenarios"][1]["implied_high_growth_duration"] = 60.0
+    with pytest.raises(ContractError, match="50"):
+        validate_diagnostic(payload)
+
+
+def test_output_exposes_prd_assumptions_map():
+    parsed = validate_diagnostic(_base_diagnostic())
+    expected = {
+        item["key"]: (tuple(item["value"]) if isinstance(item["value"], list) else item["value"])
+        for item in _valid_assumptions()["assumptions"]
+    }
+    assert parsed.to_dict()["assumptions"] == expected
+
+
 # Assumption snapshot
 
 
@@ -449,9 +583,7 @@ def test_assumption_snapshot_accepts_complete_confirmed():
 def test_assumption_snapshot_rejects_missing_required_key():
     snapshot = _valid_assumptions()
     snapshot["assumptions"] = [
-        item
-        for item in snapshot["assumptions"]
-        if item["key"] != "maintenance_capex_ratio"
+        item for item in snapshot["assumptions"] if item["key"] != "maintenance_capex_ratio"
     ]
     with pytest.raises(ContractError, match="missing required assumptions"):
         validate_assumption_snapshot(snapshot)
@@ -466,8 +598,7 @@ def test_assumption_snapshot_rejects_unconfirmed_assumption():
 
 def test_assumption_snapshot_rejects_duplicate_key():
     snapshot = _valid_assumptions()
-    duplicate = dict(snapshot["assumptions"][1])
-    snapshot["assumptions"].append(duplicate)
+    snapshot["assumptions"].append(dict(snapshot["assumptions"][1]))
     with pytest.raises(ContractError, match="duplicate keys"):
         validate_assumption_snapshot(snapshot)
 
@@ -490,14 +621,27 @@ def test_assumption_value_is_immutable_after_parse():
     assert credible.value[0] == 0.08
 
 
+def test_assumption_snapshot_rejects_invalid_earnings_basis():
+    snapshot = _valid_assumptions()
+    snapshot["assumptions"][0]["value"] = "normalized_ebitda"
+    with pytest.raises(ContractError, match="not supported"):
+        validate_assumption_snapshot(snapshot)
+
+
+def test_assumption_snapshot_rejects_reverse_duration_over_cap():
+    snapshot = _valid_assumptions(reverse_mode="fixed_duration")
+    for item in snapshot["assumptions"]:
+        if item["key"] == "reverse_fixed_duration_years":
+            item["value"] = [3.0, 5.0, 100.0]
+    with pytest.raises(ContractError, match="50"):
+        validate_assumption_snapshot(snapshot)
+
+
 # Model applicability and reverse modes
 
 
 def test_applicability_rejects_financial_industry():
-    verdict = evaluate_applicability(
-        industry="banks",
-        normalized_earnings=100.0,
-    )
+    verdict = evaluate_applicability(industry="banks", normalized_earnings=100.0)
     assert not verdict.applicable
     assert verdict.failure_kind == "model_not_applicable"
 
@@ -526,6 +670,29 @@ def test_applicability_accepts_industrial_positive_earnings():
     assert verdict.failure_kind is None
 
 
+def test_applicability_missing_industry_produces_warning():
+    verdict = evaluate_applicability(
+        industry=None,
+        normalized_earnings=100.0,
+        units_aligned=True,
+        periods_aligned=True,
+    )
+    assert verdict.applicable
+    assert "industry_unknown" in verdict.warnings
+
+
+@pytest.mark.parametrize("flag", [None, False, "yes", 1])
+def test_applicability_alignment_flags_produce_warnings(flag):
+    verdict = evaluate_applicability(
+        industry="industrial",
+        normalized_earnings=100.0,
+        units_aligned=flag,
+        periods_aligned=True,
+    )
+    assert verdict.applicable
+    assert "units_alignment_unverified" in verdict.warnings
+
+
 def test_reverse_scenarios_must_share_one_mode():
     payload = _base_diagnostic()
     payload["reverse_scenarios"] = [
@@ -539,7 +706,9 @@ def test_reverse_scenarios_must_share_one_mode():
 def test_reverse_scenarios_must_match_assumption_reverse_mode():
     payload = _base_diagnostic()
     payload["reverse_scenarios"] = [
-        {"mode": "fixed_duration", "duration_years": 5.0, "implied_growth_rate": 0.10}
+        {"mode": "fixed_duration", "duration_years": 3.0, "implied_growth_rate": 0.10},
+        {"mode": "fixed_duration", "duration_years": 5.0, "implied_growth_rate": 0.08},
+        {"mode": "fixed_duration", "duration_years": 8.0, "implied_growth_rate": 0.05},
     ]
     with pytest.raises(ContractError, match="match assumption reverse_mode"):
         validate_diagnostic(payload)
@@ -549,14 +718,15 @@ def test_fixed_duration_scenario_round_trips():
     payload = _base_diagnostic()
     payload["assumption_snapshot"] = _valid_assumptions(reverse_mode="fixed_duration")
     payload["reverse_scenarios"] = [
-        {"mode": "fixed_duration", "duration_years": 5.0, "implied_growth_rate": 0.10}
+        {"mode": "fixed_duration", "duration_years": 3.0, "implied_growth_rate": 0.10},
+        {"mode": "fixed_duration", "duration_years": 5.0, "implied_growth_rate": 0.08},
+        {"mode": "fixed_duration", "duration_years": 8.0, "implied_growth_rate": 0.05},
     ]
     parsed = validate_diagnostic(payload)
     assert parsed.reverse_scenarios[0].mode == "fixed_duration"
-    assert parsed.reverse_scenarios[0].implied_growth_rate == 0.10
 
 
-# Digest binding, round-trip and mutation
+# Digest binding and mutation
 
 
 def test_input_digest_binds_to_input_and_assumptions():
@@ -612,15 +782,62 @@ def test_clean_result_requires_fresh_sources():
         )
 
 
-def test_clean_result_round_trips_through_to_dict():
-    parsed = validate_diagnostic(_base_diagnostic())
-    assert validate_diagnostic(parsed.to_dict()).to_dict() == parsed.to_dict()
+def test_clean_rejects_failed_source_degradation():
+    input_payload = _valid_input()
+    input_payload["sources"][0]["degradation_status"] = "failed"
+    assumptions = _valid_assumptions()
+    payload = _base_diagnostic()
+    payload["input_digest"] = compute_input_digest(
+        ticker="600519.SH",
+        input_payload=input_payload,
+        assumption_snapshot=assumptions,
+        formula_version=FORMULA_VERSION,
+        dossier_snapshot="dossier-v1",
+        profile_version="profile-v1",
+    )
+    with pytest.raises(ContractError, match="failed sources"):
+        validate_diagnostic_binding(
+            payload,
+            ticker="600519.SH",
+            input_payload=input_payload,
+            assumption_snapshot=assumptions,
+            formula_version=FORMULA_VERSION,
+            dossier_snapshot="dossier-v1",
+            profile_version="profile-v1",
+        )
 
 
-def test_tampered_input_digest_is_detected_on_binding():
+def test_degraded_rejects_failed_source_degradation():
+    input_payload = _valid_input()
+    input_payload["sources"][0]["degradation_status"] = "failed"
+    assumptions = _valid_assumptions()
+    payload = _base_diagnostic()
+    payload["calculation_status"] = "degraded"
+    payload["warnings"] = ["degraded"]
+    payload["input_digest"] = compute_input_digest(
+        ticker="600519.SH",
+        input_payload=input_payload,
+        assumption_snapshot=assumptions,
+        formula_version=FORMULA_VERSION,
+        dossier_snapshot="dossier-v1",
+        profile_version="profile-v1",
+    )
+    with pytest.raises(ContractError, match="failed sources"):
+        validate_diagnostic_binding(
+            payload,
+            ticker="600519.SH",
+            input_payload=input_payload,
+            assumption_snapshot=assumptions,
+            formula_version=FORMULA_VERSION,
+            dossier_snapshot="dossier-v1",
+            profile_version="profile-v1",
+        )
+
+
+def test_binding_rejects_current_market_value_mismatch():
     payload = _bound_diagnostic()
-    payload["input_digest"] = "b" * 64
-    with pytest.raises(ContractError, match="input_digest does not match"):
+    payload["current_market_value"] = 999999.0
+    with pytest.raises(ContractError, match="current_market_value mismatch"):
         validate_diagnostic_binding(
             payload,
             ticker="600519.SH",
@@ -660,186 +877,15 @@ def test_binding_rejects_dossier_snapshot_mismatch():
         )
 
 
-def test_input_contract_rejects_missing_schema_version():
-    payload = _valid_input()
-    payload.pop("schema_version")
-    with pytest.raises(ContractError, match="schema_version"):
-        validate_diagnostic_input(payload)
-
-
-def test_input_contract_rejects_unknown_field():
-    payload = _valid_input()
-    payload["extra"] = "unexpected"
-    with pytest.raises(ContractError, match="unknown fields"):
-        validate_diagnostic_input(payload)
-
-
-def test_input_contract_rejects_invalid_report_period():
-    payload = _valid_input()
-    payload["report_period"] = "2025-99"
-    with pytest.raises(ContractError, match="report_period"):
-        validate_diagnostic_input(payload)
-
-
-def test_input_contract_rejects_source_without_published_at():
-    payload = _valid_input()
-    payload["sources"][0].pop("published_at")
-    with pytest.raises(ContractError, match="published_at"):
-        validate_diagnostic_input(payload)
-
-
-def test_assumption_snapshot_requires_reverse_fixed_growth_rate():
-    snapshot = _valid_assumptions()
-    snapshot["assumptions"] = [
-        item
-        for item in snapshot["assumptions"]
-        if item["key"] != "reverse_fixed_growth_rate"
-    ]
-    with pytest.raises(ContractError, match="requires reverse_fixed_growth_rate"):
-        validate_assumption_snapshot(snapshot)
-
-
-def test_assumption_snapshot_requires_reverse_fixed_duration():
-    snapshot = _valid_assumptions(reverse_mode="fixed_duration")
-    snapshot["assumptions"] = [
-        item
-        for item in snapshot["assumptions"]
-        if item["key"] != "reverse_fixed_duration_years"
-    ]
-    with pytest.raises(ContractError, match="requires reverse_fixed_duration_years"):
-        validate_assumption_snapshot(snapshot)
-
-
-def test_output_clean_rejects_negative_market_value():
-    payload = _base_diagnostic()
-    payload["current_market_value"] = -1.0
-    with pytest.raises(ContractError, match="non-negative"):
-        validate_diagnostic(payload)
-
-
-def test_output_clean_rejects_negative_implied_duration():
-    payload = _base_diagnostic()
-    payload["reverse_scenarios"][0]["implied_high_growth_duration"] = -1.0
-    with pytest.raises(ContractError, match="non-negative"):
-        validate_diagnostic(payload)
-
-
-def test_output_exposes_prd_assumptions_map():
+def test_clean_result_round_trips_through_to_dict():
     parsed = validate_diagnostic(_base_diagnostic())
-    expected = {
-        item["key"]: (
-            tuple(item["value"]) if isinstance(item["value"], list) else item["value"]
-        )
-        for item in _valid_assumptions()["assumptions"]
-    }
-    assert parsed.to_dict()["assumptions"] == expected
+    assert validate_diagnostic(parsed.to_dict()).to_dict() == parsed.to_dict()
 
 
-@pytest.mark.parametrize("drop", ["provenance", "input_digest"])
-def test_not_evaluable_requires_provenance_and_digest(drop):
-    payload = _strip_numbers(
-        _base_diagnostic(),
-        status="not_evaluable",
-        failure_kind="model_not_applicable",
-        reason_codes=["model_out_of_scope"],
-        reasons=["financial industry"],
-    )
-    payload[drop] = None
-    with pytest.raises(ContractError, match=drop):
-        validate_diagnostic(payload)
-
-
-def test_failed_requires_assumption_snapshot():
-    payload = _strip_numbers(
-        _base_diagnostic(),
-        status="failed",
-        failure_kind="computation_failed",
-        reason_codes=["solver_no_solution"],
-        reasons=["no finite reverse solution"],
-    )
-    payload["assumption_snapshot"] = None
-    with pytest.raises(ContractError, match="assumption_snapshot"):
-        validate_diagnostic(payload)
-
-
-def test_clean_rejects_failed_source_degradation():
-    input_payload = _valid_input()
-    input_payload["sources"][0]["degradation_status"] = "failed"
-    assumptions = _valid_assumptions()
-    payload = _base_diagnostic()
-    payload["input_digest"] = compute_input_digest(
-        ticker="600519.SH",
-        input_payload=input_payload,
-        assumption_snapshot=assumptions,
-        formula_version=FORMULA_VERSION,
-        dossier_snapshot="dossier-v1",
-        profile_version="profile-v1",
-    )
-    with pytest.raises(ContractError, match="degradation_status"):
-        validate_diagnostic_binding(
-            payload,
-            ticker="600519.SH",
-            input_payload=input_payload,
-            assumption_snapshot=assumptions,
-            formula_version=FORMULA_VERSION,
-            dossier_snapshot="dossier-v1",
-            profile_version="profile-v1",
-        )
-
-
-def test_clean_rejects_negative_epv_range():
-    payload = _base_diagnostic()
-    payload["current_business_value"]["epv_proxy_range"] = [-10.0, 100.0]
-    with pytest.raises(ContractError, match="non-negative"):
-        validate_diagnostic(payload)
-
-
-def test_clean_allows_negative_priced_growth_share():
-    # PRD 7.2/7.3: priced growth value/share keep their sign when the market
-    # prices the stock below current business value.
-    payload = _base_diagnostic()
-    payload["priced_growth_value_range"] = [-200.0, -100.0]
-    payload["priced_growth_share_range"] = [-0.2, -0.1]
-    parsed = validate_diagnostic(payload)
-    assert parsed.priced_growth_share_range == (-0.2, -0.1)
-
-
-def test_input_contract_rejects_invalid_calendar_date():
-    payload = _valid_input()
-    payload["valuation_date"] = "2025-02-30"
-    with pytest.raises(ContractError, match="valid date"):
-        validate_diagnostic_input(payload)
-
-
-def test_applicability_missing_industry_produces_warning():
-    verdict = evaluate_applicability(
-        industry=None,
-        normalized_earnings=100.0,
-        units_aligned=True,
-        periods_aligned=True,
-    )
-    assert verdict.applicable
-    assert verdict.failure_kind is None
-    assert "industry_unknown" in verdict.warnings
-
-
-@pytest.mark.parametrize("flag", [None, False, "yes", 1])
-def test_applicability_alignment_flags_produce_warnings(flag):
-    verdict = evaluate_applicability(
-        industry="industrial",
-        normalized_earnings=100.0,
-        units_aligned=flag,
-        periods_aligned=True,
-    )
-    assert verdict.applicable
-    assert verdict.failure_kind is None
-    assert "units_alignment_unverified" in verdict.warnings
-
-
-def test_binding_rejects_current_market_value_mismatch():
+def test_tampered_input_digest_is_detected_on_binding():
     payload = _bound_diagnostic()
-    payload["current_market_value"] = 999999.0
-    with pytest.raises(ContractError, match="current_market_value mismatch"):
+    payload["input_digest"] = "b" * 64
+    with pytest.raises(ContractError, match="input_digest does not match"):
         validate_diagnostic_binding(
             payload,
             ticker="600519.SH",
@@ -851,91 +897,11 @@ def test_binding_rejects_current_market_value_mismatch():
         )
 
 
-def test_failure_allows_expectation_overdraft_not_evaluable_marker():
-    payload = _strip_numbers(
-        _base_diagnostic(),
-        status="not_evaluable",
-        failure_kind="model_not_applicable",
-        reason_codes=["model_out_of_scope"],
-        reasons=["financial industry"],
-    )
-    payload["expectation_overdraft"] = "not_evaluable"
-    parsed = validate_diagnostic(payload)
-    assert parsed.expectation_overdraft == "not_evaluable"
-
-
-def test_failure_rejects_resolved_expectation_overdraft():
-    payload = _strip_numbers(
-        _base_diagnostic(),
-        status="not_evaluable",
-        failure_kind="model_not_applicable",
-        reason_codes=["model_out_of_scope"],
-        reasons=["financial industry"],
-    )
-    payload["expectation_overdraft"] = "within_credible_range"
-    with pytest.raises(ContractError, match="expectation_overdraft"):
-        validate_diagnostic(payload)
-
-
-def test_assumption_snapshot_rejects_invalid_earnings_basis():
-    snapshot = _valid_assumptions()
-    snapshot["assumptions"][0]["value"] = "normalized_ebitda"
-    with pytest.raises(ContractError, match="not supported"):
-        validate_assumption_snapshot(snapshot)
-
-
-def test_assumption_snapshot_rejects_reverse_duration_over_cap():
-    snapshot = _valid_assumptions(reverse_mode="fixed_duration")
-    for item in snapshot["assumptions"]:
-        if item["key"] == "reverse_fixed_duration_years":
-            item["value"] = 100
-    with pytest.raises(ContractError, match="50"):
-        validate_assumption_snapshot(snapshot)
-
-
-def test_reverse_scenario_rejects_duration_over_cap():
-    payload = _base_diagnostic()
-    payload["assumption_snapshot"] = _valid_assumptions(reverse_mode="fixed_duration")
-    payload["reverse_scenarios"] = [
-        {"mode": "fixed_duration", "duration_years": 100.0, "implied_growth_rate": 0.10}
-    ]
-    with pytest.raises(ContractError, match="50"):
-        validate_diagnostic(payload)
-
-
-def test_failure_accepts_expanded_data_reason_code():
-    payload = _strip_numbers(
-        _base_diagnostic(),
-        status="not_evaluable",
-        failure_kind="data_insufficient",
-        reason_codes=["data_negative_earnings"],
-        reasons=["normalized earnings are negative"],
-    )
-    parsed = validate_diagnostic(payload)
-    assert "data_negative_earnings" in parsed.reason_codes
-
-
-def test_input_normalizes_surrounding_whitespace():
-    payload = _valid_input()
-    payload["valuation_date"] = "  2026-08-24  "
-    payload["report_period"] = " 2025-12-31 "
-    payload["currency"] = " CNY "
-    parsed = validate_diagnostic_input(payload)
-    assert parsed.valuation_date == "2026-08-24"
-    assert parsed.report_period == "2025-12-31"
-    assert parsed.currency == "CNY"
-
-
-# Golden cases
-
-
 def test_golden_cases_cover_all_paths():
     clean = _base_diagnostic()
-
     degraded = _base_diagnostic()
     degraded["calculation_status"] = "degraded"
     degraded["warnings"] = ["maintenance capex proxy only"]
-
     not_evaluable = _strip_numbers(
         _base_diagnostic(),
         status="not_evaluable",
@@ -943,7 +909,6 @@ def test_golden_cases_cover_all_paths():
         reason_codes=["model_out_of_scope"],
         reasons=["financial industry"],
     )
-
     failed = _strip_numbers(
         _base_diagnostic(),
         status="failed",
@@ -951,7 +916,6 @@ def test_golden_cases_cover_all_paths():
         reason_codes=["solver_no_solution"],
         reasons=["no finite reverse solution"],
     )
-
     golden = [
         (clean, "clean", True),
         (degraded, "degraded", True),

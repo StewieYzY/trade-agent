@@ -2,7 +2,7 @@
 
 ### Requirement: Growth expectation diagnostic input contract
 
-The system SHALL accept a versioned `growth_expectation_diagnostic` input payload with the required fields `schema_version`, `ticker`, `valuation_date`, `report_period`, `as_of`, `currency`, `value_scale`, `current_market_value`, `normalized_operating_cashflow`, `total_capex`, `normalized_net_profit`, and `sources`. `schema_version` SHALL be `g2-growth-expectation-input-v1`. `ticker` SHALL be canonical. `currency` SHALL be one of `CNY`, `HKD`, `USD`; `value_scale` SHALL be one of `absolute`, `thousand`, `million`, `hundred_million`. `report_period` SHALL be an ISO date (`YYYY-MM-DD`) or quarter (`YYYYQn`). `current_market_value` and `total_capex` SHALL be finite numbers greater than or equal to zero; `normalized_operating_cashflow` and `normalized_net_profit` SHALL be finite numbers. Each source SHALL carry `source_id`, `field`, `report_period`, `as_of`, `freshness`, `currency`, `value_scale`, `published_at`, and `degradation_status`; every monetary input field SHALL have exactly one source, source units SHALL match the payload units, and source `report_period` and `as_of` SHALL match the payload-level values. Unknown input fields SHALL be rejected.
+The system SHALL accept a versioned `growth_expectation_diagnostic` input payload with the required fields `schema_version`, `ticker`, `valuation_date`, `report_period`, `as_of`, `currency`, `value_scale`, `current_market_value`, `normalized_operating_cashflow`, `total_capex`, `normalized_net_profit`, and `sources`. `schema_version` SHALL be `g2-growth-expectation-input-v1`. `ticker` SHALL be canonical. `currency` SHALL be one of `CNY`, `HKD`, `USD`; `value_scale` SHALL be one of `absolute`, `thousand`, `million`, `hundred_million`. `report_period` SHALL be a valid calendar ISO date (`YYYY-MM-DD`) or quarter (`YYYYQn`). `current_market_value` SHALL be a finite positive number; `total_capex` SHALL be a finite number greater than or equal to zero. `normalized_operating_cashflow` and `normalized_net_profit` SHALL be finite numbers. Each source SHALL carry `source_id`, `provider`, `field`, `raw_field`, `raw_payload_hash`, `report_period`, `as_of`, `freshness`, `currency`, `value_scale`, `published_at`, and `degradation_status`; `raw_payload_hash` SHALL be a lowercase sha256 digest. Every monetary input field SHALL have exactly one source, source units SHALL match the payload units, and source `report_period` and `as_of` SHALL match the payload-level values. Unknown input fields SHALL be rejected.
 
 #### Scenario: Valid input is accepted
 - **WHEN** a payload contains all required fields, canonical ticker, supported units, finite monetary values, and complete matching field-level source metadata
@@ -21,11 +21,15 @@ The system SHALL accept a versioned `growth_expectation_diagnostic` input payloa
 - **THEN** the contract SHALL raise `ContractError`
 
 #### Scenario: Invalid calendar date fails closed
-- **WHEN** a date field such as `valuation_date` or `as_of` is not a real calendar date
+- **WHEN** a date field such as `valuation_date`, `report_period`, or `as_of` is not a real calendar date
 - **THEN** the contract SHALL raise `ContractError`
 
 #### Scenario: Source mismatch fails closed
 - **WHEN** a source `report_period`, `as_of`, `currency`, or `value_scale` does not match the payload-level values
+- **THEN** the contract SHALL raise `ContractError`
+
+#### Scenario: Source provenance fields are required
+- **WHEN** a source is missing `provider`, `raw_field`, or `raw_payload_hash`, or has a malformed `raw_payload_hash`
 - **THEN** the contract SHALL raise `ContractError`
 
 #### Scenario: Field-level source coverage is enforced
@@ -36,13 +40,17 @@ The system SHALL accept a versioned `growth_expectation_diagnostic` input payloa
 - **WHEN** an input payload contains a field outside the frozen contract
 - **THEN** the contract SHALL raise `ContractError`
 
+#### Scenario: Malformed container fails closed
+- **WHEN** a required list field such as `sources` or `assumptions` is not iterable
+- **THEN** the contract SHALL raise `ContractError` and MUST NOT leak a raw `TypeError`
+
 #### Scenario: Input strings are normalized
 - **WHEN** a text field such as `valuation_date`, `report_period`, or `currency` has surrounding whitespace
 - **THEN** the contract SHALL strip it before storing the validated value
 
 ### Requirement: Growth expectation diagnostic output contract
 
-The system SHALL freeze a versioned `growth_expectation_diagnostic` output with `calculation_status` of exactly `clean`, `degraded`, `not_evaluable`, or `failed`, and SHALL always carry `quality_status` of `warning` or `failed`, `decision_grade` of `diagnostic`, and an `assumptions` mapping derived from the assumption snapshot. A `clean` or `degraded` result SHALL contain a non-negative `current_market_value`, non-negative `current_business_value` ranges, signed `priced_growth_value_range` and `priced_growth_share_range`, at least one reverse scenario with non-negative rates and years, a non-negative `credible_growth_range`, `expectation_gap`, a resolved `expectation_overdraft`, and a non-empty `sensitivity`. A `clean` result SHALL have empty `warnings` and `reasons`; a `degraded` result SHALL have a non-empty `warnings` list. A `not_evaluable` or `failed` result SHALL carry `failure_kind`, non-empty `reason_codes`, non-empty `reasons`, `provenance`, and `input_digest`, and MUST NOT contain numeric conclusions.
+The system SHALL freeze a versioned `growth_expectation_diagnostic` output with `calculation_status` of exactly `clean`, `degraded`, `not_evaluable`, or `failed`, and SHALL always carry `quality_status` of `warning` or `failed`, `decision_grade` of `diagnostic`, and an `assumptions` mapping derived from the assumption snapshot. A `clean` or `degraded` result SHALL contain a positive `current_market_value`, an `as_of`, non-negative `current_business_value` ranges, signed `priced_growth_value_range` and `priced_growth_share_range`, at least one reverse scenario with non-negative rates and capped years, a non-negative `credible_growth_range`, `expectation_gap`, a resolved `expectation_overdraft`, and a non-empty `sensitivity`. A `clean` result SHALL have empty `warnings` and `reasons`; a `degraded` result SHALL have a non-empty `warnings` list. A `not_evaluable` or `failed` result SHALL carry `failure_kind`, non-empty `reason_codes`, non-empty `reasons`, `provenance`, and `input_digest`, and MUST NOT contain numeric conclusions.
 
 #### Scenario: Clean result has complete output
 - **WHEN** `calculation_status` is `clean`
@@ -68,9 +76,13 @@ The system SHALL freeze a versioned `growth_expectation_diagnostic` output with 
 - **WHEN** a `clean` result binds to a source whose `degradation_status` is not `clean`
 - **THEN** `validate_diagnostic_binding` SHALL raise `ContractError`
 
+#### Scenario: Degraded result rejects failed sources
+- **WHEN** a `degraded` result binds to a source whose `degradation_status` is `failed`
+- **THEN** `validate_diagnostic_binding` SHALL raise `ContractError`
+
 ### Requirement: User assumption snapshot
 
-The system SHALL represent user assumptions in a versioned `assumption_snapshot` with `version`, `created_at`, and explicit `assumptions`. Each assumption SHALL carry `key`, `value`, `unit`, `source`, `confirmed_by_user`, and `version`. The V0 required assumption keys SHALL be `normalized_earnings_basis`, `maintenance_capex_ratio`, `cost_of_equity`, `maintenance_growth`, `credible_growth_rate`, `mature_pe`, and `reverse_mode`. `normalized_earnings_basis` SHALL be one of `normalized_operating_cashflow` or `normalized_net_profit`. The reverse mode SHALL also freeze the actual reverse input: `reverse_fixed_growth_rate` for `fixed_growth_rate` and `reverse_fixed_duration_years` for `fixed_duration`; reverse duration years SHALL NOT exceed `50`. Assumption values SHALL be immutable after validation, and each key SHALL use a frozen unit: `ratio` for `maintenance_capex_ratio`, `decimal` for `cost_of_equity`, `maintenance_growth`, `credible_growth_rate`, and `reverse_fixed_growth_rate`, `x` for `mature_pe`, `years` for `reverse_fixed_duration_years`, and empty unit for `normalized_earnings_basis` and `reverse_mode`. Missing required keys, duplicate keys, unconfirmed assumptions, conflicting assumptions, wrong units, invalid earnings basis, an over-cap reverse duration, and a missing or conflicting reverse input SHALL fail closed and MUST NOT be replaced by silent defaults.
+The system SHALL represent user assumptions in a versioned `assumption_snapshot` with `version`, `created_at`, and explicit `assumptions`. Each assumption SHALL carry `key`, `value`, `unit`, `source`, `confirmed_by_user`, and `version`. The V0 required assumption keys SHALL be `normalized_earnings_basis`, `maintenance_capex_ratio`, `cost_of_equity`, `maintenance_growth`, `credible_growth_rate`, `mature_pe`, and `reverse_mode`. `normalized_earnings_basis` SHALL be one of `normalized_operating_cashflow` or `normalized_net_profit`. `maintenance_capex_ratio`, `cost_of_equity`, and `mature_pe` SHALL be ordered two-value ranges; `credible_growth_rate` SHALL be a conservative/base/optimistic three-value range. The reverse mode SHALL also freeze the actual reverse input: `reverse_fixed_growth_rate` as a conservative/base/optimistic three-value range for `fixed_growth_rate`, and `reverse_fixed_duration_years` as a short/mid/long three-value range, each positive and not exceeding `50`, for `fixed_duration`. Assumption values SHALL be immutable after validation, and each key SHALL use a frozen unit: `ratio` for `maintenance_capex_ratio`, `decimal` for `cost_of_equity`, `maintenance_growth`, `credible_growth_rate`, and `reverse_fixed_growth_rate`, `x` for `mature_pe`, `years` for `reverse_fixed_duration_years`, and empty unit for `normalized_earnings_basis` and `reverse_mode`. Missing required keys, duplicate keys, unconfirmed assumptions, conflicting assumptions, wrong units, invalid earnings basis, unordered or out-of-range intervals, an over-cap reverse duration, and a missing or conflicting reverse input SHALL fail closed and MUST NOT be replaced by silent defaults.
 
 #### Scenario: All required assumptions present
 - **WHEN** an assumption snapshot contains all required keys with correct units, the matching reverse input, and `confirmed_by_user=True`

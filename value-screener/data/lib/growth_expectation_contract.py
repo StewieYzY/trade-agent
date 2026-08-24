@@ -40,6 +40,7 @@ FAILURE_REASON_CODES = (
     "data_period_mismatch",
     "data_published_at_missing",
     "data_source_unbound",
+    "data_source_provenance_missing",
     "data_negative_earnings",
     "data_negative_cashflow",
     "data_cyclical_peak",
@@ -49,6 +50,7 @@ FAILURE_REASON_CODES = (
     "data_expired",
     "model_out_of_scope",
     "model_precondition_violated",
+    "reverse_duration_exceeds_cap",
     "solver_no_solution",
     "solver_non_finite",
 )
@@ -61,6 +63,7 @@ FAILURE_KIND_REASON_CODES = {
             "data_period_mismatch",
             "data_published_at_missing",
             "data_source_unbound",
+            "data_source_provenance_missing",
             "data_negative_earnings",
             "data_negative_cashflow",
             "data_cyclical_peak",
@@ -71,7 +74,11 @@ FAILURE_KIND_REASON_CODES = {
         )
     ),
     "model_not_applicable": frozenset(
-        ("model_out_of_scope", "model_precondition_violated")
+        (
+            "model_out_of_scope",
+            "model_precondition_violated",
+            "reverse_duration_exceeds_cap",
+        )
     ),
     "computation_failed": frozenset(("solver_no_solution", "solver_non_finite")),
 }
@@ -167,6 +174,11 @@ def _require_report_period(name: str, value: Any) -> str:
     text = _require_text(name, value)
     if not _REPORT_PERIOD_RE.match(text):
         raise ContractError(f"{name} must be a date (YYYY-MM-DD) or quarter (YYYYQn)")
+    if "Q" not in text:
+        try:
+            date.fromisoformat(text)
+        except ValueError as exc:
+            raise ContractError(f"{name} must be a valid calendar date") from exc
     return text
 
 
@@ -193,10 +205,23 @@ def _require_non_negative(name: str, value: Any) -> float:
     return number
 
 
+def _require_positive(name: str, value: Any) -> float:
+    number = _require_number(name, value)
+    if number <= 0:
+        raise ContractError(f"{name} must be positive")
+    return number
+
+
 def _require_optional_non_negative(name: str, value: Any) -> float | None:
     if value is None:
         return None
     return _require_non_negative(name, value)
+
+
+def _require_optional_positive(name: str, value: Any) -> float | None:
+    if value is None:
+        return None
+    return _require_positive(name, value)
 
 
 def _require_optional_number(name: str, value: Any) -> float | None:
@@ -258,6 +283,11 @@ def _require_no_unknown_fields(
         raise ContractError(f"{name} contains unknown fields: {unknown}")
 
 
+def _raise_invalid_structure(name: str, exc: Exception) -> None:
+    detail = exc.args[0] if isinstance(exc, KeyError) else str(exc)
+    raise ContractError(f"{name} structure is invalid: {detail}") from exc
+
+
 def _require_digest(name: str, value: Any) -> str:
     text = _require_text(name, value)
     if not _DIGEST_RE.match(text):
@@ -297,7 +327,10 @@ def _is_financial_industry(industry: str | None) -> bool:
 @dataclass(frozen=True)
 class DiagnosticSource:
     source_id: str
+    provider: str
     field: str
+    raw_field: str
+    raw_payload_hash: str
     report_period: str
     as_of: str
     freshness: str
@@ -310,7 +343,9 @@ class DiagnosticSource:
         _write_normalized(
             self,
             source_id=_require_text("source_id", self.source_id),
+            provider=_require_text("provider", self.provider),
             field=_require_choice("field", self.field, MONETARY_INPUT_FIELDS),
+            raw_field=_require_text("raw_field", self.raw_field),
             report_period=_require_report_period("report_period", self.report_period),
             as_of=_require_date("as_of", self.as_of),
             freshness=_require_choice("freshness", self.freshness, FRESHNESS_VALUES),
@@ -324,6 +359,9 @@ class DiagnosticSource:
                 self.degradation_status,
                 SOURCE_DEGRADATION_STATUSES,
             ),
+            raw_payload_hash=_require_digest(
+                "raw_payload_hash", self.raw_payload_hash
+            ),
         )
 
     @classmethod
@@ -335,7 +373,10 @@ class DiagnosticSource:
             value,
             (
                 "source_id",
+                "provider",
                 "field",
+                "raw_field",
+                "raw_payload_hash",
                 "report_period",
                 "as_of",
                 "freshness",
@@ -348,7 +389,10 @@ class DiagnosticSource:
         try:
             return cls(
                 source_id=value["source_id"],
+                provider=value["provider"],
                 field=value["field"],
+                raw_field=value["raw_field"],
+                raw_payload_hash=value["raw_payload_hash"],
                 report_period=value["report_period"],
                 as_of=value["as_of"],
                 freshness=value["freshness"],
@@ -357,13 +401,16 @@ class DiagnosticSource:
                 published_at=value["published_at"],
                 degradation_status=value["degradation_status"],
             )
-        except KeyError as exc:
-            raise ContractError(f"source missing field: {exc.args[0]}") from exc
+        except (KeyError, TypeError) as exc:
+            _raise_invalid_structure("source", exc)
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "source_id": self.source_id,
+            "provider": self.provider,
             "field": self.field,
+            "raw_field": self.raw_field,
+            "raw_payload_hash": self.raw_payload_hash,
             "report_period": self.report_period,
             "as_of": self.as_of,
             "freshness": self.freshness,
@@ -409,7 +456,7 @@ class DiagnosticInput:
                 "value_scale", self.value_scale, SUPPORTED_VALUE_SCALES
             ),
         )
-        _require_non_negative("current_market_value", self.current_market_value)
+        _require_positive("current_market_value", self.current_market_value)
         _require_number(
             "normalized_operating_cashflow", self.normalized_operating_cashflow
         )
@@ -483,8 +530,8 @@ class DiagnosticInput:
                 normalized_net_profit=value["normalized_net_profit"],
                 sources=sources,
             )
-        except KeyError as exc:
-            raise ContractError(f"input missing field: {exc.args[0]}") from exc
+        except (KeyError, TypeError) as exc:
+            _raise_invalid_structure("input", exc)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -552,8 +599,8 @@ class Assumption:
                 confirmed_by_user=value["confirmed_by_user"],
                 version=value["version"],
             )
-        except KeyError as exc:
-            raise ContractError(f"assumption missing field: {exc.args[0]}") from exc
+        except (KeyError, TypeError) as exc:
+            _raise_invalid_structure("assumption", exc)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -581,13 +628,13 @@ def _validate_assumption_value(key: str, value: Any) -> None:
         _require_choice("normalized_earnings_basis", value, NORMALIZED_EARNINGS_BASES)
         return
     if key == "maintenance_capex_ratio":
-        number = _require_number("maintenance_capex_ratio", value)
-        if not 0 <= number <= 1:
+        low, high = _require_range("maintenance_capex_ratio", value)
+        if not (0 <= low and high <= 1):
             raise ContractError("maintenance_capex_ratio must be within [0, 1]")
         return
     if key == "cost_of_equity":
-        number = _require_number("cost_of_equity", value)
-        if number <= 0:
+        low, high = _require_range("cost_of_equity", value)
+        if low <= 0:
             raise ContractError("cost_of_equity must be positive")
         return
     if key == "maintenance_growth":
@@ -603,26 +650,36 @@ def _validate_assumption_value(key: str, value: Any) -> None:
             raise ContractError("credible_growth_rate must be ordered")
         return
     if key == "mature_pe":
-        number = _require_number("mature_pe", value)
-        if number <= 0:
+        low, high = _require_range("mature_pe", value)
+        if low <= 0:
             raise ContractError("mature_pe must be positive")
         return
     if key == "reverse_mode":
         _require_choice("reverse_mode", value, REVERSE_MODES)
         return
     if key == REVERSE_FIXED_GROWTH_RATE_KEY:
-        number = _require_number(REVERSE_FIXED_GROWTH_RATE_KEY, value)
-        if number < 0:
-            raise ContractError("reverse_fixed_growth_rate must be non-negative")
+        if not isinstance(value, (list, tuple)) or len(value) != 3:
+            raise ContractError(
+                "reverse_fixed_growth_rate must be a three-value range"
+            )
+        low = _require_non_negative(REVERSE_FIXED_GROWTH_RATE_KEY + "[0]", value[0])
+        mid = _require_non_negative(REVERSE_FIXED_GROWTH_RATE_KEY + "[1]", value[1])
+        high = _require_non_negative(REVERSE_FIXED_GROWTH_RATE_KEY + "[2]", value[2])
+        if not low <= mid <= high:
+            raise ContractError("reverse_fixed_growth_rate must be ordered")
         return
     if key == REVERSE_FIXED_DURATION_YEARS_KEY:
-        number = _require_number(REVERSE_FIXED_DURATION_YEARS_KEY, value)
-        if number <= 0:
-            raise ContractError("reverse_fixed_duration_years must be positive")
-        if number > MAX_REVERSE_DURATION_YEARS:
+        if not isinstance(value, (list, tuple)) or len(value) != 3:
             raise ContractError(
-                f"reverse_fixed_duration_years must not exceed "
-                f"{MAX_REVERSE_DURATION_YEARS}"
+                "reverse_fixed_duration_years must be a three-value range"
+            )
+        low = _require_number(REVERSE_FIXED_DURATION_YEARS_KEY + "[0]", value[0])
+        mid = _require_number(REVERSE_FIXED_DURATION_YEARS_KEY + "[1]", value[1])
+        high = _require_number(REVERSE_FIXED_DURATION_YEARS_KEY + "[2]", value[2])
+        if not (0 < low <= mid <= high <= MAX_REVERSE_DURATION_YEARS):
+            raise ContractError(
+                f"reverse_fixed_duration_years must be positive, ordered, "
+                f"and not exceed {MAX_REVERSE_DURATION_YEARS}"
             )
         return
     raise ContractError(f"unsupported assumption key: {key!r}")
@@ -683,7 +740,7 @@ class AssumptionSnapshot:
         maintenance_growth = next(
             item.value for item in self.assumptions if item.key == "maintenance_growth"
         )
-        if cost_of_equity <= maintenance_growth:
+        if cost_of_equity[0] <= maintenance_growth:
             raise ContractError("cost_of_equity must exceed maintenance_growth")
 
     @classmethod
@@ -704,10 +761,8 @@ class AssumptionSnapshot:
                 created_at=value["created_at"],
                 assumptions=assumptions,
             )
-        except KeyError as exc:
-            raise ContractError(
-                f"assumption snapshot missing field: {exc.args[0]}"
-            ) from exc
+        except (KeyError, TypeError) as exc:
+            _raise_invalid_structure("assumption snapshot", exc)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -749,10 +804,8 @@ class CurrentBusinessValue:
                 mature_multiple_range=tuple(value["mature_multiple_range"]),
                 anchor_divergence=value.get("anchor_divergence"),
             )
-        except KeyError as exc:
-            raise ContractError(
-                f"current_business_value missing field: {exc.args[0]}"
-            ) from exc
+        except (KeyError, TypeError) as exc:
+            _raise_invalid_structure("current_business_value", exc)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -774,9 +827,14 @@ class ReverseScenario:
         _require_choice("mode", self.mode, REVERSE_MODES)
         if self.mode == "fixed_growth_rate":
             _require_non_negative("growth_rate", self.growth_rate)
-            _require_non_negative(
+            implied_duration = _require_non_negative(
                 "implied_high_growth_duration", self.implied_high_growth_duration
             )
+            if implied_duration > MAX_REVERSE_DURATION_YEARS:
+                raise ContractError(
+                    f"implied_high_growth_duration must not exceed "
+                    f"{MAX_REVERSE_DURATION_YEARS}"
+                )
             if self.duration_years is not None or self.implied_growth_rate is not None:
                 raise ContractError(
                     "fixed_growth_rate scenario has unexpected duration fields"
@@ -818,10 +876,8 @@ class ReverseScenario:
                 implied_growth_rate=value.get("implied_growth_rate"),
                 implied_high_growth_duration=value.get("implied_high_growth_duration"),
             )
-        except KeyError as exc:
-            raise ContractError(
-                f"reverse scenario missing field: {exc.args[0]}"
-            ) from exc
+        except (KeyError, TypeError) as exc:
+            _raise_invalid_structure("reverse scenario", exc)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -859,10 +915,8 @@ class SensitivityScenario:
                 value=value["value"],
                 impact_range=tuple(value["impact_range"]),
             )
-        except KeyError as exc:
-            raise ContractError(
-                f"sensitivity scenario missing field: {exc.args[0]}"
-            ) from exc
+        except (KeyError, TypeError) as exc:
+            _raise_invalid_structure("sensitivity scenario", exc)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -907,8 +961,8 @@ class DiagnosticProvenance:
                 formula_version=value["formula_version"],
                 assumption_snapshot_version=value["assumption_snapshot_version"],
             )
-        except KeyError as exc:
-            raise ContractError(f"provenance missing field: {exc.args[0]}") from exc
+        except (KeyError, TypeError) as exc:
+            _raise_invalid_structure("provenance", exc)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -925,6 +979,7 @@ class GrowthExpectationDiagnostic:
     ticker: str
     valuation_date: str
     report_period: str
+    as_of: str | None
     currency: str
     value_scale: str
     calculation_status: str
@@ -959,6 +1014,8 @@ class GrowthExpectationDiagnostic:
             raise ContractError("ticker must be canonical")
         _require_date("valuation_date", self.valuation_date)
         _require_report_period("report_period", self.report_period)
+        if self.as_of is not None:
+            _require_date("as_of", self.as_of)
         _require_choice("currency", self.currency, SUPPORTED_CURRENCIES)
         _require_choice("value_scale", self.value_scale, SUPPORTED_VALUE_SCALES)
         _require_choice("calculation_status", self.calculation_status, CALCULATION_STATUSES)
@@ -995,7 +1052,7 @@ class GrowthExpectationDiagnostic:
             not isinstance(item, SensitivityScenario) for item in self.sensitivity
         ):
             raise ContractError("sensitivity must contain SensitivityScenario records")
-        _require_optional_non_negative("current_market_value", self.current_market_value)
+        _require_optional_positive("current_market_value", self.current_market_value)
         _require_optional_range("priced_growth_value_range", self.priced_growth_value_range)
         _require_optional_range("priced_growth_share_range", self.priced_growth_share_range)
         _require_optional_range("credible_growth_range", self.credible_growth_range)
@@ -1025,6 +1082,7 @@ class GrowthExpectationDiagnostic:
                 "ticker",
                 "valuation_date",
                 "report_period",
+                "as_of",
                 "currency",
                 "value_scale",
                 "calculation_status",
@@ -1097,6 +1155,7 @@ class GrowthExpectationDiagnostic:
                 ticker=value["ticker"],
                 valuation_date=value["valuation_date"],
                 report_period=value["report_period"],
+                as_of=value.get("as_of"),
                 currency=value["currency"],
                 value_scale=value["value_scale"],
                 calculation_status=value["calculation_status"],
@@ -1120,8 +1179,8 @@ class GrowthExpectationDiagnostic:
                 provenance=provenance,
                 input_digest=value.get("input_digest"),
             )
-        except KeyError as exc:
-            raise ContractError(f"diagnostic missing field: {exc.args[0]}") from exc
+        except (KeyError, TypeError) as exc:
+            _raise_invalid_structure("diagnostic", exc)
         if "assumptions" in value:
             if instance.assumption_snapshot is None:
                 raise ContractError("assumptions requires assumption_snapshot")
@@ -1141,6 +1200,7 @@ class GrowthExpectationDiagnostic:
             "ticker": self.ticker,
             "valuation_date": self.valuation_date,
             "report_period": self.report_period,
+            "as_of": self.as_of,
             "currency": self.currency,
             "value_scale": self.value_scale,
             "calculation_status": self.calculation_status,
@@ -1232,6 +1292,8 @@ def _validate_status_semantics(diagnostic: "GrowthExpectationDiagnostic") -> Non
             raise ContractError(f"{status} result requires input_digest")
         if diagnostic.current_market_value is None:
             raise ContractError(f"{status} result requires current_market_value")
+        if diagnostic.as_of is None:
+            raise ContractError(f"{status} result requires as_of")
         if diagnostic.current_business_value is None:
             raise ContractError(f"{status} result requires current_business_value")
         if diagnostic.priced_growth_value_range is None:
@@ -1321,27 +1383,29 @@ def _validate_reverse_mode_exclusivity(diagnostic: "GrowthExpectationDiagnostic"
     if next(iter(modes)) != reverse_mode:
         raise ContractError("reverse_scenarios mode must match assumption reverse_mode")
     if reverse_mode == "fixed_growth_rate":
-        fixed_rate = next(
+        fixed_rates = next(
             item.value
             for item in diagnostic.assumption_snapshot.assumptions
             if item.key == REVERSE_FIXED_GROWTH_RATE_KEY
         )
-        for scenario in diagnostic.reverse_scenarios:
-            if scenario.growth_rate != fixed_rate:
-                raise ContractError(
-                    "reverse scenario growth_rate must match reverse_fixed_growth_rate"
-                )
+        scenario_rates = {scenario.growth_rate for scenario in diagnostic.reverse_scenarios}
+        if scenario_rates != set(fixed_rates):
+            raise ContractError(
+                "reverse scenarios must cover reverse_fixed_growth_rate scenarios"
+            )
     else:
-        fixed_duration = next(
+        fixed_durations = next(
             item.value
             for item in diagnostic.assumption_snapshot.assumptions
             if item.key == REVERSE_FIXED_DURATION_YEARS_KEY
         )
-        for scenario in diagnostic.reverse_scenarios:
-            if scenario.duration_years != fixed_duration:
-                raise ContractError(
-                    "reverse scenario duration_years must match reverse_fixed_duration_years"
-                )
+        scenario_durations = {
+            scenario.duration_years for scenario in diagnostic.reverse_scenarios
+        }
+        if scenario_durations != set(fixed_durations):
+            raise ContractError(
+                "reverse scenarios must cover reverse_fixed_duration_years scenarios"
+            )
 
 
 def validate_diagnostic(value: Mapping[str, Any]) -> GrowthExpectationDiagnostic:
@@ -1418,6 +1482,8 @@ def validate_diagnostic_binding(
         raise ContractError("valuation_date mismatch")
     if diagnostic.report_period != parsed_input.report_period:
         raise ContractError("report_period mismatch")
+    if diagnostic.as_of is not None and diagnostic.as_of != parsed_input.as_of:
+        raise ContractError("as_of mismatch")
     if diagnostic.currency != parsed_input.currency:
         raise ContractError("currency mismatch")
     if diagnostic.value_scale != parsed_input.value_scale:
@@ -1427,6 +1493,13 @@ def validate_diagnostic_binding(
         and diagnostic.current_market_value != parsed_input.current_market_value
     ):
         raise ContractError("current_market_value mismatch")
+    if diagnostic.calculation_status in ("clean", "degraded"):
+        if any(
+            source.degradation_status == "failed" for source in parsed_input.sources
+        ):
+            raise ContractError(
+                f"{diagnostic.calculation_status} result cannot use failed sources"
+            )
     if diagnostic.calculation_status == "clean":
         if any(source.freshness != "fresh" for source in parsed_input.sources):
             raise ContractError("clean result requires all sources fresh")
