@@ -196,6 +196,13 @@ def _require_range(name: str, value: Any) -> tuple[float, float]:
     return (low, high)
 
 
+def _require_non_negative_range(name: str, value: Any) -> tuple[float, float]:
+    low, high = _require_range(name, value)
+    if low < 0:
+        raise ContractError(f"{name} must be non-negative")
+    return (low, high)
+
+
 def _require_optional_range(name: str, value: Any) -> tuple[float, float] | None:
     if value is None:
         return None
@@ -674,8 +681,8 @@ class CurrentBusinessValue:
     anchor_divergence: str | None
 
     def __post_init__(self) -> None:
-        _require_range("epv_proxy_range", self.epv_proxy_range)
-        _require_range("mature_multiple_range", self.mature_multiple_range)
+        _require_non_negative_range("epv_proxy_range", self.epv_proxy_range)
+        _require_non_negative_range("mature_multiple_range", self.mature_multiple_range)
         if self.anchor_divergence is not None:
             _require_text("anchor_divergence", self.anchor_divergence)
 
@@ -1234,6 +1241,8 @@ def _validate_status_semantics(diagnostic: "GrowthExpectationDiagnostic") -> Non
             raise ContractError("failed result requires quality_status='failed'")
         if diagnostic.provenance is None:
             raise ContractError("failed result requires provenance")
+        if diagnostic.assumption_snapshot is None:
+            raise ContractError("failed result requires assumption_snapshot")
 
     if status == "not_evaluable":
         if diagnostic.quality_status != "warning":
@@ -1355,10 +1364,13 @@ def validate_diagnostic_binding(
         raise ContractError("currency mismatch")
     if diagnostic.value_scale != parsed_input.value_scale:
         raise ContractError("value_scale mismatch")
-    if diagnostic.calculation_status == "clean" and any(
-        source.freshness != "fresh" for source in parsed_input.sources
-    ):
-        raise ContractError("clean result requires all sources fresh")
+    if diagnostic.calculation_status == "clean":
+        if any(source.freshness != "fresh" for source in parsed_input.sources):
+            raise ContractError("clean result requires all sources fresh")
+        if any(
+            source.degradation_status != "clean" for source in parsed_input.sources
+        ):
+            raise ContractError("clean result requires clean source degradation_status")
     parsed_snapshot = validate_assumption_snapshot(assumption_snapshot)
     if (
         diagnostic.assumption_snapshot is not None
@@ -1401,6 +1413,14 @@ def evaluate_applicability(
             failure_kind="model_not_applicable",
             reason_codes=("model_out_of_scope",),
             reasons=("financial industry is outside the V0 model",),
+        )
+    if not isinstance(units_aligned, bool) or not isinstance(periods_aligned, bool):
+        return ApplicabilityVerdict(
+            applicable=False,
+            calculation_status="not_evaluable",
+            failure_kind="data_insufficient",
+            reason_codes=("data_unit_mismatch",),
+            reasons=("unit and report-period alignment flags must be boolean",),
         )
     if (
         normalized_earnings is None

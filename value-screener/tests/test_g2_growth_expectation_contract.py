@@ -222,7 +222,7 @@ def _strip_numbers(
             "reasons": reasons,
             "warnings": [],
             "current_market_value": None,
-            "assumption_snapshot": None,
+            "assumption_snapshot": _valid_assumptions(),
             "current_business_value": None,
             "priced_growth_value_range": None,
             "priced_growth_share_range": None,
@@ -747,6 +747,80 @@ def test_not_evaluable_requires_provenance_and_digest(drop):
     payload[drop] = None
     with pytest.raises(ContractError, match=drop):
         validate_diagnostic(payload)
+
+
+def test_failed_requires_assumption_snapshot():
+    payload = _strip_numbers(
+        _base_diagnostic(),
+        status="failed",
+        failure_kind="computation_failed",
+        reason_codes=["solver_no_solution"],
+        reasons=["no finite reverse solution"],
+    )
+    payload["assumption_snapshot"] = None
+    with pytest.raises(ContractError, match="assumption_snapshot"):
+        validate_diagnostic(payload)
+
+
+def test_clean_rejects_failed_source_degradation():
+    input_payload = _valid_input()
+    input_payload["sources"][0]["degradation_status"] = "failed"
+    assumptions = _valid_assumptions()
+    payload = _base_diagnostic()
+    payload["input_digest"] = compute_input_digest(
+        ticker="600519.SH",
+        input_payload=input_payload,
+        assumption_snapshot=assumptions,
+        formula_version=FORMULA_VERSION,
+        dossier_snapshot="dossier-v1",
+        profile_version="profile-v1",
+    )
+    with pytest.raises(ContractError, match="degradation_status"):
+        validate_diagnostic_binding(
+            payload,
+            ticker="600519.SH",
+            input_payload=input_payload,
+            assumption_snapshot=assumptions,
+            formula_version=FORMULA_VERSION,
+            dossier_snapshot="dossier-v1",
+            profile_version="profile-v1",
+        )
+
+
+def test_clean_rejects_negative_epv_range():
+    payload = _base_diagnostic()
+    payload["current_business_value"]["epv_proxy_range"] = [-10.0, 100.0]
+    with pytest.raises(ContractError, match="non-negative"):
+        validate_diagnostic(payload)
+
+
+def test_clean_allows_negative_priced_growth_share():
+    # PRD 7.2/7.3: priced growth value/share keep their sign when the market
+    # prices the stock below current business value.
+    payload = _base_diagnostic()
+    payload["priced_growth_value_range"] = [-200.0, -100.0]
+    payload["priced_growth_share_range"] = [-0.2, -0.1]
+    parsed = validate_diagnostic(payload)
+    assert parsed.priced_growth_share_range == (-0.2, -0.1)
+
+
+def test_input_contract_rejects_invalid_calendar_date():
+    payload = _valid_input()
+    payload["valuation_date"] = "2025-02-30"
+    with pytest.raises(ContractError, match="valid date"):
+        validate_diagnostic_input(payload)
+
+
+@pytest.mark.parametrize("flag", ["yes", 1])
+def test_applicability_rejects_non_boolean_alignment_flags(flag):
+    verdict = evaluate_applicability(
+        industry="industrial",
+        normalized_earnings=100.0,
+        units_aligned=flag,
+        periods_aligned=True,
+    )
+    assert not verdict.applicable
+    assert verdict.failure_kind == "data_insufficient"
 
 
 # Golden cases

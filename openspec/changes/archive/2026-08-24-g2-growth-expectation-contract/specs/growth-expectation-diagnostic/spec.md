@@ -20,6 +20,10 @@ The system SHALL accept a versioned `growth_expectation_diagnostic` input payloa
 - **WHEN** a monetary input is negative where non-negativity is required, or any monetary input is `NaN` or infinite
 - **THEN** the contract SHALL raise `ContractError`
 
+#### Scenario: Invalid calendar date fails closed
+- **WHEN** a date field such as `valuation_date` or `as_of` is not a real calendar date
+- **THEN** the contract SHALL raise `ContractError`
+
 #### Scenario: Source mismatch fails closed
 - **WHEN** a source `report_period`, `as_of`, `currency`, or `value_scale` does not match the payload-level values
 - **THEN** the contract SHALL raise `ContractError`
@@ -34,7 +38,7 @@ The system SHALL accept a versioned `growth_expectation_diagnostic` input payloa
 
 ### Requirement: Growth expectation diagnostic output contract
 
-The system SHALL freeze a versioned `growth_expectation_diagnostic` output with `calculation_status` of exactly `clean`, `degraded`, `not_evaluable`, or `failed`, and SHALL always carry `quality_status` of `warning` or `failed`, `decision_grade` of `diagnostic`, and an `assumptions` mapping derived from the assumption snapshot. A `clean` or `degraded` result SHALL contain a non-negative `current_market_value`, `current_business_value`, `priced_growth_value_range`, `priced_growth_share_range`, at least one reverse scenario with non-negative rates and years, `credible_growth_range`, `expectation_gap`, a resolved `expectation_overdraft`, and a non-empty `sensitivity`. A `clean` result SHALL have empty `warnings` and `reasons`; a `degraded` result SHALL have a non-empty `warnings` list. A `not_evaluable` or `failed` result SHALL carry `failure_kind`, non-empty `reason_codes`, non-empty `reasons`, `provenance`, and `input_digest`, and MUST NOT contain numeric conclusions.
+The system SHALL freeze a versioned `growth_expectation_diagnostic` output with `calculation_status` of exactly `clean`, `degraded`, `not_evaluable`, or `failed`, and SHALL always carry `quality_status` of `warning` or `failed`, `decision_grade` of `diagnostic`, and an `assumptions` mapping derived from the assumption snapshot. A `clean` or `degraded` result SHALL contain a non-negative `current_market_value`, non-negative `current_business_value` ranges, signed `priced_growth_value_range` and `priced_growth_share_range`, at least one reverse scenario with non-negative rates and years, a non-negative `credible_growth_range`, `expectation_gap`, a resolved `expectation_overdraft`, and a non-empty `sensitivity`. A `clean` result SHALL have empty `warnings` and `reasons`; a `degraded` result SHALL have a non-empty `warnings` list. A `not_evaluable` or `failed` result SHALL carry `failure_kind`, non-empty `reason_codes`, non-empty `reasons`, `provenance`, and `input_digest`, and MUST NOT contain numeric conclusions.
 
 #### Scenario: Clean result has complete output
 - **WHEN** `calculation_status` is `clean`
@@ -55,6 +59,10 @@ The system SHALL freeze a versioned `growth_expectation_diagnostic` output with 
 #### Scenario: Economically meaningless clean result is rejected
 - **WHEN** a `clean` result has a negative market value, negative reverse year, or negative credible growth rate
 - **THEN** the contract SHALL raise `ContractError`
+
+#### Scenario: Clean result requires clean sources
+- **WHEN** a `clean` result binds to a source whose `degradation_status` is not `clean`
+- **THEN** `validate_diagnostic_binding` SHALL raise `ContractError`
 
 ### Requirement: User assumption snapshot
 
@@ -86,7 +94,7 @@ The system SHALL represent user assumptions in a versioned `assumption_snapshot`
 
 ### Requirement: Model applicability and failure semantics
 
-The system SHALL distinguish `data_insufficient`, `model_not_applicable`, and `computation_failed` without masquerading any failure as success. `evaluate_applicability` SHALL return `not_evaluable` for financial industries, negative or missing normalized earnings, non-finite or non-numeric normalized earnings, or unit/report-period misalignment. A computation failure SHALL map to `calculation_status=failed` with `failure_kind=computation_failed` and `quality_status=failed`. Failure results SHALL carry machine-readable `reason_codes` from the `FAILURE_REASON_CODES` vocabulary consistent with their `failure_kind`, and SHALL retain `provenance` and `input_digest`.
+The system SHALL distinguish `data_insufficient`, `model_not_applicable`, and `computation_failed` without masquerading any failure as success. `evaluate_applicability` SHALL return `not_evaluable` for financial industries, negative or missing normalized earnings, non-finite or non-numeric normalized earnings, non-boolean alignment flags, or unit/report-period misalignment. A computation failure SHALL map to `calculation_status=failed` with `failure_kind=computation_failed`, `quality_status=failed`, and a preserved `assumption_snapshot`. Failure results SHALL carry machine-readable `reason_codes` from the `FAILURE_REASON_CODES` vocabulary consistent with their `failure_kind`, and SHALL retain `provenance` and `input_digest`.
 
 #### Scenario: Financial industry is not applicable
 - **WHEN** the input industry is financial
@@ -106,6 +114,14 @@ The system SHALL distinguish `data_insufficient`, `model_not_applicable`, and `c
 
 #### Scenario: Failure reason codes are required and consistent
 - **WHEN** a failure result has missing, unknown, or failure-kind-inconsistent reason codes
+- **THEN** the contract SHALL raise `ContractError`
+
+#### Scenario: Non-boolean alignment flag is not applicable
+- **WHEN** `units_aligned` or `periods_aligned` is not a boolean
+- **THEN** `evaluate_applicability` SHALL return `not_evaluable` with `failure_kind=data_insufficient`
+
+#### Scenario: Failed result preserves assumptions
+- **WHEN** `calculation_status` is `failed` and no `assumption_snapshot` is present
 - **THEN** the contract SHALL raise `ContractError`
 
 ### Requirement: Provenance and input digest binding
