@@ -123,6 +123,22 @@ def test_fixed_growth_below_discount_rate_can_find_internal_curve_root():
     assert duration == pytest.approx(6.0, abs=0.05)
 
 
+def test_fixed_growth_finds_shortest_of_two_roots_in_one_coarse_cell():
+    target = 1498.375650824236
+
+    duration = _solve_duration(
+        target,
+        150.0,
+        0.0,
+        0.10,
+        0.02,
+        50.0,
+        terminal_earnings=30.0,
+    )
+
+    assert duration == pytest.approx(0.493221, abs=1e-5)
+
+
 def test_fixed_duration_reverse_can_solve_growth_above_five_without_false_failure():
     growth = _solve_growth(
         1_000_000_000.0,
@@ -291,6 +307,36 @@ def test_extreme_finite_growth_returns_failed_artifact_not_overflow():
     assert diagnostic.reason_codes == ("solver_non_finite",)
 
 
+def test_extreme_finite_credible_growth_degrades_on_incomplete_sensitivity():
+    payload = input_payload(market_value=1800.0, industry="consumer")
+    snapshot_payload = assumptions()
+    for item in snapshot_payload["assumptions"]:
+        if item["key"] == "credible_growth_rate":
+            item["value"] = [0.08, 0.12, 1e20]
+
+    diagnostic = compute_growth_expectation_diagnostic(
+        validate_diagnostic_input(payload),
+        validate_assumption_snapshot(snapshot_payload),
+        dossier_snapshot="dossier-v1",
+        profile_version="profile-v1",
+    )
+
+    assert diagnostic.calculation_status == "degraded"
+    assert any(
+        warning.startswith("sensitivity_incomplete:credible_growth_rate=")
+        for warning in diagnostic.warnings
+    )
+    assert validate_growth_expectation_artifact(
+        diagnostic.to_dict(),
+        ticker="600519.SH",
+        input_payload=payload,
+        assumption_snapshot=snapshot_payload,
+        formula_version=FORMULA_VERSION,
+        dossier_snapshot="dossier-v1",
+        profile_version="profile-v1",
+    ).calculation_status == "degraded"
+
+
 def test_engine_semantic_binding_rejects_rehashed_derived_mutation():
     diagnostic = _compute()
     payload = diagnostic.to_dict()
@@ -344,6 +390,59 @@ def test_engine_semantic_binding_rejects_rehashed_failure_reason_mutation():
     mutated["diagnostic_digest"] = compute_diagnostic_digest(mutated)
 
     with pytest.raises(ValueError, match="failure"):
+        validate_growth_expectation_artifact(
+            mutated,
+            ticker="600519.SH",
+            input_payload=payload,
+            assumption_snapshot=snapshot.to_dict(),
+            formula_version=FORMULA_VERSION,
+            dossier_snapshot="dossier-v1",
+            profile_version="profile-v1",
+        )
+
+
+def test_engine_semantic_binding_rejects_rehashed_failure_warning_mutation():
+    payload = input_payload(industry="consumer")
+    payload["normalized_net_profit"] = -90.0
+    snapshot = validate_assumption_snapshot(assumptions())
+    diagnostic = compute_growth_expectation_diagnostic(
+        validate_diagnostic_input(payload),
+        snapshot,
+        dossier_snapshot="dossier-v1",
+        profile_version="profile-v1",
+    )
+    mutated = diagnostic.to_dict()
+    mutated["warnings"] = ["fabricated_failure_warning"]
+    mutated["diagnostic_digest"] = compute_diagnostic_digest(mutated)
+
+    with pytest.raises(ValueError, match="warnings"):
+        validate_growth_expectation_artifact(
+            mutated,
+            ticker="600519.SH",
+            input_payload=payload,
+            assumption_snapshot=snapshot.to_dict(),
+            formula_version=FORMULA_VERSION,
+            dossier_snapshot="dossier-v1",
+            profile_version="profile-v1",
+        )
+
+
+def test_engine_semantic_binding_rejects_rehashed_failed_warning_mutation():
+    payload = input_payload(market_value=100.0, industry="consumer")
+    snapshot = validate_assumption_snapshot(assumptions())
+    diagnostic = compute_growth_expectation_diagnostic(
+        validate_diagnostic_input(payload),
+        snapshot,
+        dossier_snapshot="dossier-v1",
+        profile_version="profile-v1",
+    )
+    assert diagnostic.calculation_status == "failed"
+
+    mutated = diagnostic.to_dict()
+    mutated["warnings"] = ["fabricated_failed_warning"]
+    mutated["diagnostic_digest"] = compute_diagnostic_digest(mutated)
+
+    with pytest.raises(ValueError, match="warnings"):
         validate_growth_expectation_artifact(
             mutated,
             ticker="600519.SH",

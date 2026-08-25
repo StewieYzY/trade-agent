@@ -122,49 +122,113 @@ def _solve_duration(
         for years in points
     ]
     tolerance = SOLVER_RESIDUAL_TOLERANCE * max(1.0, target)
-    for years, value in zip(points, values):
-        if math.isfinite(value) and abs(value - target) <= tolerance:
-            return years
-    for left, right, left_value, right_value in zip(
-        points[:-1], points[1:], values[:-1], values[1:]
-    ):
-        if not (math.isfinite(left_value) and math.isfinite(right_value)):
-            continue
-        if (left_value - target) * (right_value - target) > 0:
-            continue
-        lo, hi = left, right
-        for _ in range(60):
-            mid = (lo + hi) / 2
-            value = _pv_growth(
-                earnings_basis,
-                growth,
-                mid,
-                discount,
-                terminal_growth,
-                terminal_multiple,
-                terminal_earnings=terminal_earnings,
-            )
-            if not math.isfinite(value):
-                break
-            if abs(value - target) <= tolerance:
-                return mid
-            if (left_value - target) * (value - target) <= 0:
-                hi = mid
-                right_value = value
-            else:
-                lo = mid
-                left_value = value
-        result = _pv_growth(
+
+    def residual(years: float) -> float:
+        value = _pv_growth(
             earnings_basis,
             growth,
-            (lo + hi) / 2,
+            years,
             discount,
             terminal_growth,
             terminal_multiple,
             terminal_earnings=terminal_earnings,
         )
-        if math.isfinite(result) and abs(result - target) <= tolerance:
+        return value - target if math.isfinite(value) else math.nan
+
+    def solve_bracket(
+        left: float,
+        right: float,
+        left_residual: float,
+        right_residual: float,
+    ) -> float | None:
+        if abs(left_residual) <= tolerance:
+            return left
+        if abs(right_residual) <= tolerance:
+            return right
+        if left_residual * right_residual > 0:
+            return None
+        lo, hi = left, right
+        lo_residual, hi_residual = left_residual, right_residual
+        for _ in range(80):
+            mid = (lo + hi) / 2
+            mid_residual = residual(mid)
+            if not math.isfinite(mid_residual):
+                return None
+            if lo_residual * mid_residual <= 0:
+                hi, hi_residual = mid, mid_residual
+            else:
+                lo, lo_residual = mid, mid_residual
+        result = residual((lo + hi) / 2)
+        if math.isfinite(result) and abs(result) <= tolerance:
             return (lo + hi) / 2
+        return None
+
+    def scan(
+        scan_points: list[float],
+        scan_values: list[float],
+    ) -> float | None:
+        for years, value in zip(scan_points, scan_values):
+            if math.isfinite(value) and abs(value - target) <= tolerance:
+                return years
+        for left, right, left_value, right_value in zip(
+            scan_points[:-1],
+            scan_points[1:],
+            scan_values[:-1],
+            scan_values[1:],
+        ):
+            if not (math.isfinite(left_value) and math.isfinite(right_value)):
+                continue
+            result = solve_bracket(
+                left,
+                right,
+                left_value - target,
+                right_value - target,
+            )
+            if result is not None:
+                return result
+        return None
+
+    direct = scan(points, values)
+    if direct is not None:
+        return direct
+
+    # A fixed-growth curve can turn around within a coarse cell. Refine the
+    # cells adjacent to sampled local extrema, then scan them in duration order
+    # so the first returned root is the shortest deterministic solution.
+    extrema_cells: set[int] = set()
+    residual_values = [
+        value - target if math.isfinite(value) else math.nan for value in values
+    ]
+    for index in range(1, len(points) - 1):
+        left_residual, center_residual, right_residual = (
+            residual_values[index - 1],
+            residual_values[index],
+            residual_values[index + 1],
+        )
+        if not all(
+            math.isfinite(item)
+            for item in (left_residual, center_residual, right_residual)
+        ):
+            continue
+        if (
+            (center_residual <= left_residual and center_residual <= right_residual)
+            or (
+                center_residual >= left_residual
+                and center_residual >= right_residual
+            )
+        ):
+            extrema_cells.update((index - 1, index))
+
+    for index in sorted(extrema_cells):
+        left, right = points[index], points[index + 1]
+        refined_points = [
+            left + (right - left) * offset / 64
+            for offset in range(65)
+        ]
+        refined_values = [residual(years) + target for years in refined_points]
+        result = scan(refined_points, refined_values)
+        if result is not None:
+            return result
     return None
 
 
@@ -391,7 +455,7 @@ def _sensitivity(
                 local[assumption_key] = (float(point), float(point))
             try:
                 metrics = _diagnostic_metrics(input, local)
-            except (LookupError, ValueError):
+            except (LookupError, OverflowError, ValueError):
                 warnings.append(
                     f"sensitivity_incomplete:{assumption_key}={point}"
                 )
@@ -611,6 +675,8 @@ def validate_growth_expectation_artifact(
         assumption_snapshot=parsed_snapshot,
     )
     if diagnostic.calculation_status in {"not_evaluable", "failed"}:
+        if diagnostic.warnings:
+            raise ContractError("failure warnings are not reproducible")
         if not verdict.applicable:
             expected_status = verdict.calculation_status
             expected_kind = verdict.failure_kind
