@@ -17,17 +17,17 @@
 > 架构决策：`design/architecture-decisions.md`
 >
 > runtime/integration baseline：
-> `6c1eff4 feat(g2): add dossier data quality provenance`
+> `ed85508 merge: g2 growth expectation contract`
 >
 > 当前 main/docs baseline：
-> `main@6c1eff4`；`main` 相对 `origin/main@f0c4992` ahead 4，尚未 push。
+> `main@ed85508 == origin/main@ed85508`，已 push。
 > 根目录既有 untracked user WIP（`.cache/`、`data/`、`debate/`、`watchlist/`
 > 等）保持 untouched，未被本次 stage/commit。
 >
 > 历史 GitHub 审查入口：
 > `PR #1 codex/mainline-sync-2026-08-05 → main`
 >
-> 当前本地集成以 `main@6c1eff4` 为准，远端基线为 `origin/main@f0c4992`；
+> 当前本地集成以 `main@ed85508` 为准，远端基线为 `origin/main@ed85508`；
 > PR #1 以下信息仅作
 > 历史审查快照，不再作为当前 branch 或 merge 状态判断依据。
 >
@@ -122,6 +122,20 @@
 - 当前 `main` 相对 `origin/main` ahead 4，尚未 push。
 - 不宣称 G2 capability passed，不启动 G3；下一步推进 G2 3.1
   `g2-growth-expectation-contract`。
+
+## 0.6. 2026-08-25 G2 3.1 growth expectation contract closure
+
+- `g2-growth-expectation-contract` 已 archive 至
+  `openspec/changes/archive/2026-08-24-g2-growth-expectation-contract/`。
+- child commit：`dfd59d4 fix(g2): close growth expectation contract review gaps`；
+  已通过 merge commit `ed85508` 合入 `main`。
+- contract 已冻结输入/输出、用户 assumption snapshot、模型适用性、失败语义、
+  provenance 绑定和 golden cases；不包含计算引擎或 dossier/InvestmentThesis 集成。
+- 合并后全量测试：`1240 passed`；OpenSpec strict：`34 passed, 0 failed`；
+  compileall、`git diff --check` 通过。
+- `main == origin/main == ed85508`；专用 child worktree 和分支已清理。
+- G2 capability 仍为 `not passed`，不启动 G3；下一步推进 G2 3.2
+  `g2-growth-expectation-v0-engine`。
 
 ## 1. 本文件的唯一权威地位
 
@@ -1011,7 +1025,7 @@ M4: not started as current execution milestone
 - 不进入 G1 ranking/hard gate。
 
 ```text
-M4.5: planned, no child started
+M4.5: 3.1 contract closed; 3.2 v0 engine is next
 ```
 
 ## 18. M5：InvestmentThesis 与 A/B
