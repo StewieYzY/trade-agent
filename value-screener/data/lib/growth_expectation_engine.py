@@ -355,7 +355,7 @@ def _sensitivity(
 ) -> tuple[tuple[SensitivityScenario, ...], tuple[str, ...]]:
     base_rate = sum(assumptions["cost_of_equity"]) / 2
     base_ratio = sum(assumptions["maintenance_capex_ratio"]) / 2
-    base_credible = sum(assumptions["credible_growth_rate"]) / 3
+    base_credible = float(assumptions["credible_growth_rate"][1])
     base_pe = sum(assumptions["mature_pe"]) / 2
     base_assumptions = dict(assumptions)
     base_assumptions["maintenance_capex_ratio"] = (base_ratio, base_ratio)

@@ -170,6 +170,8 @@ def test_sensitivity_has_single_variable_outputs_including_credible_growth():
     assert ("cost_of_equity", "value_pulled_forward_years") in impacts
     credible_business = impacts[("credible_growth_rate", "current_business_value")]
     assert credible_business[0] == pytest.approx(credible_business[1])
+    credible_gap = impacts[("credible_growth_rate", "expectation_gap")]
+    assert credible_gap[0] < 0 < credible_gap[1]
 
 
 def test_legacy_sensitivity_artifact_round_trips_without_metric_field():

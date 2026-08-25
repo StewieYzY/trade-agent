@@ -1,6 +1,6 @@
 ## Context
 
-本 repair 基于 `g2-growth-expectation-v0-engine` 的独立 child-only review。原 engine 已合入 main，但 reverse solver 将 business-value midpoint 同时当作 earnings 与 terminal profit，且没有对 solver 输出做方程残差验证。contract 已冻结，repair 不修改 contract schema，只修 engine 的实现和测试。
+本 repair 基于 `g2-growth-expectation-v0-engine` 的独立 child-only review。原 engine 已合入 main，但 reverse solver 将 business-value midpoint 同时当作 earnings 与 terminal profit，且没有对 solver 输出做方程残差验证。repair 保持原 contract 的既有字段兼容，并以一个向后兼容的可选 `SensitivityScenario.metric` 扩展表达多维 sensitivity；不改变既有输入/输出必需字段语义。
 
 ## Goals / Non-Goals
 
