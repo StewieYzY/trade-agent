@@ -1712,7 +1712,7 @@ def _validate_sensitivity_binding(
             )
         bound_value = assumptions[scenario.assumption_key]
         if isinstance(bound_value, tuple):
-            low, high = bound_value
+            low, high = min(bound_value), max(bound_value)
             if not low <= scenario.value <= high:
                 raise ContractError(
                     f"sensitivity value is outside assumption "
