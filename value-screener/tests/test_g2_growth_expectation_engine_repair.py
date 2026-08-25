@@ -17,7 +17,7 @@ from test_g2_growth_expectation_engine import (
 )
 
 
-def _compute(*, market_value=1200.0, mode="fixed_growth_rate", net_profit=90.0):
+def _compute(*, market_value=3000.0, mode="fixed_growth_rate", net_profit=90.0):
     payload = input_payload(market_value=market_value, industry="consumer")
     payload["normalized_net_profit"] = net_profit
     return compute_growth_expectation_diagnostic(
@@ -34,6 +34,8 @@ def test_fixed_growth_reverse_satisfies_market_value_residual():
     discount = 0.10
     terminal_multiple = 20.0
 
+    assert diagnostic.calculation_status in {"clean", "degraded"}
+    assert len(diagnostic.reverse_scenarios) == 3
     for scenario in diagnostic.reverse_scenarios:
         value = _pv_growth(
             earnings,
@@ -42,8 +44,34 @@ def test_fixed_growth_reverse_satisfies_market_value_residual():
             discount,
             0.02,
             terminal_multiple,
+            terminal_earnings=90.0,
         )
         assert value == pytest.approx(3000.0, rel=1e-8)
+
+
+def test_fixed_duration_reverse_satisfies_market_value_residual():
+    diagnostic = _compute(market_value=3000.0, mode="fixed_duration")
+    assert diagnostic.calculation_status in {"clean", "degraded"}
+    assert len(diagnostic.reverse_scenarios) == 3
+    for scenario in diagnostic.reverse_scenarios:
+        value = _pv_growth(
+            150.0,
+            scenario.implied_growth_rate,
+            scenario.duration_years,
+            0.10,
+            0.02,
+            20.0,
+            terminal_earnings=90.0,
+        )
+        assert value == pytest.approx(3000.0, rel=1e-8)
+
+
+def test_market_value_below_terminal_floor_fails_closed():
+    diagnostic = _compute(market_value=100.0)
+
+    assert diagnostic.calculation_status == "failed"
+    assert diagnostic.reason_codes == ("solver_no_solution",)
+    assert not diagnostic.reverse_scenarios
 
 
 def test_fixed_duration_reverse_can_solve_growth_above_five_without_false_failure():
@@ -61,6 +89,31 @@ def test_fixed_duration_reverse_can_solve_growth_above_five_without_false_failur
 
     assert growth is not None
     assert growth > 5.0
+
+
+def test_adaptive_growth_search_checks_configured_maximum():
+    from data.lib.growth_expectation_engine import MAX_SOLVER_GROWTH, _pv_growth, _solve_growth
+
+    target = _pv_growth(
+        150.0,
+        MAX_SOLVER_GROWTH,
+        3.0,
+        0.10,
+        0.02,
+        20.0,
+        terminal_earnings=90.0,
+    )
+    growth = _solve_growth(
+        target,
+        150.0,
+        3.0,
+        0.10,
+        0.02,
+        20.0,
+        terminal_earnings=90.0,
+    )
+
+    assert growth == pytest.approx(MAX_SOLVER_GROWTH, rel=1e-8)
 
 
 def test_negative_net_profit_returns_contract_compatible_failure_artifact():
@@ -107,8 +160,10 @@ def test_sensitivity_has_single_variable_outputs_including_credible_growth():
         "mature_pe",
     } <= keys
     impacts = {
-        item.assumption_key: item.impact_range
+        (item.assumption_key, item.metric): item.impact_range
         for item in diagnostic.sensitivity
     }
-    assert impacts["maintenance_capex_ratio"] != impacts["cost_of_equity"]
-    assert impacts["credible_growth_rate"] != impacts["mature_pe"]
+    assert impacts[("maintenance_capex_ratio", "current_business_value")] != impacts[("cost_of_equity", "current_business_value")]
+    assert impacts[("credible_growth_rate", "expectation_gap")] != impacts[("mature_pe", "current_business_value")]
+    assert ("maintenance_capex_ratio", "reverse_base") in impacts
+    assert ("cost_of_equity", "value_pulled_forward_years") in impacts

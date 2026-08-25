@@ -2,7 +2,7 @@
 
 ### Requirement: Reverse solutions must satisfy the valuation equation
 
-The engine SHALL use a separately defined normalized earnings basis for reverse valuation, SHALL bracket each solution within the allowed duration/growth domain, and SHALL reject any result whose discounted value does not match current market value within a documented residual tolerance.
+The engine SHALL use a separately defined normalized earnings basis for reverse valuation, SHALL bracket each solution within the allowed duration/growth domain, and SHALL reject any result whose discounted value does not match current market value within a documented residual tolerance. A target below the zero-growth terminal floor SHALL be treated as no finite reverse solution rather than as a zero-year numeric conclusion.
 
 #### Scenario: Fixed growth result has bounded residual
 - **WHEN** fixed-growth reverse returns a duration
@@ -18,7 +18,7 @@ The engine SHALL use a separately defined normalized earnings basis for reverse 
 
 ### Requirement: Sensitivity is single-variable and complete
 
-The engine SHALL perturb one validated assumption at a time while holding other assumptions at deterministic base values, and SHALL expose reproducible impact ranges for valuation/reverse and expectation interpretation outputs required by the archived V0 spec.
+The engine SHALL perturb one validated assumption at a time while holding other assumptions at deterministic base values, and SHALL expose reproducible, metric-labelled impact ranges for current-business value, reverse base, expectation gap, expectation overdraft rank and value-pulled-forward years required by the archived V0 spec.
 
 #### Scenario: Different assumptions produce different impacts
 - **WHEN** maintenance capex ratio and cost of equity are varied over the same input

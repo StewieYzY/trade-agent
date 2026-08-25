@@ -1018,11 +1018,13 @@ class SensitivityScenario:
     assumption_key: str
     value: float
     impact_range: tuple[float, float]
+    metric: str = "current_business_value"
 
     def __post_init__(self) -> None:
         _require_text("assumption_key", self.assumption_key)
         _require_number("value", self.value)
         _require_range("impact_range", self.impact_range)
+        _require_text("metric", self.metric)
 
     @classmethod
     def from_dict(cls, value: Mapping[str, Any]) -> "SensitivityScenario":
@@ -1031,13 +1033,14 @@ class SensitivityScenario:
         _require_no_unknown_fields(
             "sensitivity scenario",
             value,
-            ("assumption_key", "value", "impact_range"),
+            ("assumption_key", "value", "impact_range", "metric"),
         )
         try:
             return cls(
                 assumption_key=value["assumption_key"],
                 value=value["value"],
                 impact_range=tuple(value["impact_range"]),
+                metric=value.get("metric", "current_business_value"),
             )
         except (KeyError, TypeError) as exc:
             _raise_invalid_structure("sensitivity scenario", exc)
@@ -1047,6 +1050,7 @@ class SensitivityScenario:
             "assumption_key": self.assumption_key,
             "value": self.value,
             "impact_range": list(self.impact_range),
+            "metric": self.metric,
         }
 
 

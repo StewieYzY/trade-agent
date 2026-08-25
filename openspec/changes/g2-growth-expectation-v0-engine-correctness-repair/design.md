@@ -30,7 +30,7 @@ fixed-growth 在 `[0, MAX_REVERSE_DURATION_YEARS]` 检查目标是否可被包�
 
 ### 3. Sensitivity 使用单变量情景
 
-每条 sensitivity 固定其他 assumptions 为 base/midpoint，只替换当前 assumption 的合法边界/中值；影响范围记录与该 assumption 相关的 valuation/reverse/gap/overdraft/pulled-forward 结果的摘要。由于 archived contract 的 `SensitivityScenario.impact_range` 只有二维数值范围，扩展信息放入 scenario key 命名和 impact range，不修改 contract。
+每条 sensitivity 固定其他 assumptions 为 base/midpoint，只替换当前 assumption 的合法边界/中值；影响范围分别记录 current-business value、reverse base、expectation gap、overdraft rank 和 pulled-forward years。为避免二维 impact range 丢失 metric 语义，`SensitivityScenario` 增加向后兼容的 `metric` 字段，并允许三值 credible-growth assumption 进行边界绑定。
 
 ### 4. Failure artifact 保留输入但不保留 numeric conclusions
 

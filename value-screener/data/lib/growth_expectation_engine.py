@@ -74,12 +74,18 @@ def _pv_growth(
     terminal_earnings = (
         earnings_basis if terminal_earnings is None else terminal_earnings
     )
-    yearly = 0.0
-    for year in range(1, int(math.ceil(years)) + 1):
-        if year > years:
-            break
-        yearly += (
-            earnings_basis * (1 + growth) ** year / (1 + discount) ** year
+    full_years = int(math.floor(years))
+    yearly = sum(
+        earnings_basis * (1 + growth) ** year / (1 + discount) ** year
+        for year in range(1, full_years + 1)
+    )
+    fraction = years - full_years
+    if fraction:
+        next_year = full_years + 1
+        yearly += fraction * (
+            earnings_basis
+            * (1 + growth) ** next_year
+            / (1 + discount) ** next_year
         )
     terminal_profit = terminal_earnings * (1 + growth) ** years
     terminal = terminal_profit * terminal_multiple / (1 + discount) ** years
@@ -107,7 +113,9 @@ def _solve_duration(
     )
     if not math.isfinite(floor):
         return None
-    if target <= floor:
+    if target < floor:
+        return None
+    if abs(target - floor) <= SOLVER_RESIDUAL_TOLERANCE * max(1.0, target):
         return 0.0
     lo, hi = 0.0, float(MAX_SOLVER_YEARS)
     upper = _pv_growth(
@@ -173,10 +181,12 @@ def _solve_growth(
     )
     if not math.isfinite(floor):
         return None
-    if target <= floor:
+    if target < floor:
+        return None
+    if abs(target - floor) <= SOLVER_RESIDUAL_TOLERANCE * max(1.0, target):
         return 0.0
     lo, hi = 0.0, 1.0
-    while hi < MAX_SOLVER_GROWTH:
+    while True:
         upper = _pv_growth(
             earnings_basis,
             hi,
@@ -188,9 +198,9 @@ def _solve_growth(
         )
         if math.isfinite(upper) and upper >= target:
             break
-        hi *= 2
-    else:
-        return None
+        if hi >= MAX_SOLVER_GROWTH:
+            return None
+        hi = min(hi * 2, MAX_SOLVER_GROWTH)
     for _ in range(80):
         mid = (lo + hi) / 2
         value = _pv_growth(
@@ -283,61 +293,131 @@ def _reverse_scenarios(
     return tuple(result)
 
 
+def _diagnostic_metrics(
+    input: DiagnosticInput, assumptions: dict[str, object]
+) -> dict[str, object]:
+    epv_range = _epv_range(input, assumptions)
+    mature_range = _range_product(input.normalized_net_profit, assumptions["mature_pe"])
+    business = (min(epv_range[0], mature_range[0]), max(epv_range[1], mature_range[1]))
+    reverse = _reverse_scenarios(input, assumptions)
+    credible = (
+        float(assumptions["credible_growth_rate"][0]),
+        float(assumptions["credible_growth_rate"][2]),
+    )
+    base_reverse = reverse[1]
+    implied = (
+        base_reverse.implied_growth_rate
+        if base_reverse.implied_growth_rate is not None
+        else base_reverse.growth_rate
+    )
+    credible_mid = float(assumptions["credible_growth_rate"][1])
+    if implied <= credible_mid:
+        overdraft = "within_credible_range"
+    elif implied <= credible[1]:
+        overdraft = "above_base_case"
+    else:
+        overdraft = "above_credible_upper_bound"
+    earnings_basis = (
+        input.normalized_operating_cashflow
+        if assumptions["normalized_earnings_basis"]
+        == "normalized_operating_cashflow"
+        else input.normalized_net_profit
+    )
+    pulled_forward = _solve_duration(
+        input.current_market_value,
+        earnings_basis,
+        credible_mid,
+        sum(assumptions["cost_of_equity"]) / 2,
+        float(assumptions["maintenance_growth"]),
+        sum(assumptions["mature_pe"]) / 2,
+        terminal_earnings=input.normalized_net_profit,
+    )
+    if pulled_forward is None:
+        raise LookupError("no finite value-pulled-forward duration")
+    return {
+        "epv_range": epv_range,
+        "mature_range": mature_range,
+        "business": business,
+        "reverse": reverse,
+        "credible": credible,
+        "implied": float(implied),
+        "expectation_gap": (
+            float(implied) - credible[1],
+            float(implied) - credible[0],
+        ),
+        "overdraft": overdraft,
+        "pulled_forward": pulled_forward,
+    }
+
+
 def _sensitivity(
     input: DiagnosticInput, assumptions: dict[str, object]
 ) -> tuple[SensitivityScenario, ...]:
     base_rate = sum(assumptions["cost_of_equity"]) / 2
     base_ratio = sum(assumptions["maintenance_capex_ratio"]) / 2
     base_pe = sum(assumptions["mature_pe"]) / 2
-    basis = (
-        input.normalized_operating_cashflow
-        if assumptions["normalized_earnings_basis"]
-        == "normalized_operating_cashflow"
-        else input.normalized_net_profit
-    )
-    ratio_values = []
-    for ratio in assumptions["maintenance_capex_ratio"]:
-        local = dict(assumptions)
-        local["maintenance_capex_ratio"] = (ratio, ratio)
-        local["cost_of_equity"] = (base_rate, base_rate)
-        ratio_values.append(_epv_range(input, local)[0])
-    rate_values = []
-    for rate in assumptions["cost_of_equity"]:
-        local = dict(assumptions)
-        local["maintenance_capex_ratio"] = (base_ratio, base_ratio)
-        local["cost_of_equity"] = (rate, rate)
-        rate_values.append(_epv_range(input, local)[0])
-    credible_values = tuple(
-        input.current_market_value
-        - _pv_growth(
-            basis,
-            float(growth),
-            5.0,
-            base_rate,
-            float(assumptions["maintenance_growth"]),
-            base_pe,
-            terminal_earnings=input.normalized_net_profit,
+    points = {
+        "maintenance_capex_ratio": (
+            assumptions["maintenance_capex_ratio"],
+            lambda local, value: local.update(
+                maintenance_capex_ratio=(value, value),
+                cost_of_equity=(base_rate, base_rate),
+            ),
+        ),
+        "cost_of_equity": (
+            assumptions["cost_of_equity"],
+            lambda local, value: local.update(
+                maintenance_capex_ratio=(base_ratio, base_ratio),
+                cost_of_equity=(value, value),
+            ),
+        ),
+        "credible_growth_rate": (
+            assumptions["credible_growth_rate"],
+            lambda local, value: local.update(
+                credible_growth_rate=(value, value, value),
+            ),
+        ),
+        "mature_pe": (
+            assumptions["mature_pe"],
+            lambda local, value: local.update(mature_pe=(value, value)),
+        ),
+    }
+    metric_values: dict[tuple[str, str], list[float]] = {}
+    for assumption_key, (bounds, apply_value) in points.items():
+        for point in bounds:
+            local = dict(assumptions)
+            apply_value(local, float(point))
+            try:
+                metrics = _diagnostic_metrics(input, local)
+            except (LookupError, ValueError):
+                continue
+            scalar_values = {
+                "current_business_value": sum(metrics["business"]) / 2,
+                "reverse_base": metrics["implied"],
+                "expectation_gap": sum(metrics["expectation_gap"]) / 2,
+                "value_pulled_forward_years": metrics["pulled_forward"],
+                "expectation_overdraft": float(
+                    {
+                        "within_credible_range": 0,
+                        "above_base_case": 1,
+                        "above_credible_upper_bound": 2,
+                    }[metrics["overdraft"]]
+                ),
+            }
+            for metric, scalar in scalar_values.items():
+                metric_values.setdefault((assumption_key, metric), []).append(scalar)
+    output = []
+    for (assumption_key, metric), values in metric_values.items():
+        bound = assumptions[assumption_key]
+        value = float(bound[1])
+        output.append(
+            SensitivityScenario(
+                assumption_key,
+                value,
+                (min(values), max(values)),
+                metric=metric,
+            )
         )
-        for growth in assumptions["credible_growth_rate"]
-    )
-    output = [
-        SensitivityScenario(
-            "maintenance_capex_ratio",
-            float(assumptions["maintenance_capex_ratio"][1]),
-            (min(ratio_values), max(ratio_values)),
-        ),
-        SensitivityScenario(
-            "cost_of_equity",
-            float(assumptions["cost_of_equity"][1]),
-            (min(rate_values), max(rate_values)),
-        ),
-        SensitivityScenario(
-            "credible_growth_rate",
-            float(assumptions["credible_growth_rate"][1]),
-            (min(credible_values), max(credible_values)),
-        ),
-        SensitivityScenario("mature_pe", float(assumptions["mature_pe"][1]), _range_product(input.normalized_net_profit, assumptions["mature_pe"])),
-    ]
     return tuple(output)
 
 
