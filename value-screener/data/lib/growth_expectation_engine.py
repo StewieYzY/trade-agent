@@ -23,7 +23,7 @@ from data.lib.growth_expectation_contract import (
     evaluate_applicability,
 )
 
-FORMULA_VERSION = "v0-epv-proxy"
+FORMULA_VERSION = "v0-epv-proxy-repair-2"
 MAX_SOLVER_YEARS = 50
 MAX_SOLVER_GROWTH = 1_000_000.0
 SOLVER_RESIDUAL_TOLERANCE = 1e-8
@@ -105,62 +105,67 @@ def _solve_duration(
     *,
     terminal_earnings: float,
 ) -> float | None:
-    floor = _pv_growth(
-        earnings_basis,
-        0.0,
-        0.0,
-        discount,
-        terminal_growth,
-        terminal_multiple,
-        terminal_earnings=terminal_earnings,
-    )
-    if not math.isfinite(floor):
-        return None
-    if target < floor:
-        return None
-    if abs(target - floor) <= SOLVER_RESIDUAL_TOLERANCE * max(1.0, target):
-        return 0.0
-    lo, hi = 0.0, float(MAX_SOLVER_YEARS)
-    upper = _pv_growth(
-        earnings_basis,
-        growth,
-        hi,
-        discount,
-        terminal_growth,
-        terminal_multiple,
-        terminal_earnings=terminal_earnings,
-    )
-    if not math.isfinite(upper) or upper < target:
-        return None
-    for _ in range(80):
-        mid = (lo + hi) / 2
-        value = _pv_growth(
+    points = [
+        MAX_SOLVER_YEARS * index / 200
+        for index in range(201)
+    ]
+    values = [
+        _pv_growth(
             earnings_basis,
             growth,
-            mid,
+            years,
             discount,
             terminal_growth,
             terminal_multiple,
             terminal_earnings=terminal_earnings,
         )
-        if not math.isfinite(value):
-            return None
-        if value >= target:
-            hi = mid
-        else:
-            lo = mid
-    result = _pv_growth(
-        earnings_basis,
-        growth,
-        hi,
-        discount,
-        terminal_growth,
-        terminal_multiple,
-        terminal_earnings=terminal_earnings,
-    )
-    if abs(result - target) > SOLVER_RESIDUAL_TOLERANCE * max(1.0, target):
-        return None
-    return hi
+        for years in points
+    ]
+    tolerance = SOLVER_RESIDUAL_TOLERANCE * max(1.0, target)
+    for years, value in zip(points, values):
+        if math.isfinite(value) and abs(value - target) <= tolerance:
+            return years
+    for left, right, left_value, right_value in zip(
+        points[:-1], points[1:], values[:-1], values[1:]
+    ):
+        if not (math.isfinite(left_value) and math.isfinite(right_value)):
+            continue
+        if (left_value - target) * (right_value - target) > 0:
+            continue
+        lo, hi = left, right
+        for _ in range(60):
+            mid = (lo + hi) / 2
+            value = _pv_growth(
+                earnings_basis,
+                growth,
+                mid,
+                discount,
+                terminal_growth,
+                terminal_multiple,
+                terminal_earnings=terminal_earnings,
+            )
+            if not math.isfinite(value):
+                break
+            if abs(value - target) <= tolerance:
+                return mid
+            if (left_value - target) * (value - target) <= 0:
+                hi = mid
+                right_value = value
+            else:
+                lo = mid
+                left_value = value
+        result = _pv_growth(
+            earnings_basis,
+            growth,
+            (lo + hi) / 2,
+            discount,
+            terminal_growth,
+            terminal_multiple,
+            terminal_earnings=terminal_earnings,
+        )
+        if math.isfinite(result) and abs(result - target) <= tolerance:
+            return (lo + hi) / 2
+    return None
 
 
 def _solve_growth(
@@ -593,11 +598,49 @@ def validate_growth_expectation_artifact(
         dossier_snapshot=dossier_snapshot,
         profile_version=profile_version,
     )
-    if diagnostic.calculation_status not in {"clean", "degraded"}:
-        return diagnostic
     parsed_input = validate_diagnostic_input(input_payload)
     parsed_snapshot = validate_assumption_snapshot(assumption_snapshot)
     assumptions = _values(parsed_snapshot)
+    verdict = evaluate_applicability(
+        parsed_input,
+        assumption_snapshot=parsed_snapshot,
+    )
+    if diagnostic.calculation_status in {"not_evaluable", "failed"}:
+        if not verdict.applicable:
+            expected_status = verdict.calculation_status
+            expected_kind = verdict.failure_kind
+            expected_code = verdict.reason_codes[0]
+            if (
+                diagnostic.calculation_status != expected_status
+                or diagnostic.failure_kind != expected_kind
+                or diagnostic.reason_codes != (expected_code,)
+                or diagnostic.input_snapshot != parsed_input
+            ):
+                raise ContractError("failure artifact is not reproducible")
+            return diagnostic
+        if parsed_input.normalized_net_profit <= 0:
+            if (
+                diagnostic.calculation_status != "not_evaluable"
+                or diagnostic.failure_kind != "data_insufficient"
+                or diagnostic.reason_codes != ("invalid_value",)
+            ):
+                raise ContractError("failure reason is not reproducible")
+            return diagnostic
+        try:
+            _diagnostic_metrics(parsed_input, assumptions)
+        except LookupError:
+            if diagnostic.failure_kind != "computation_failed" or diagnostic.reason_codes != (
+                "solver_no_solution",
+            ):
+                raise ContractError("solver failure reason is not reproducible")
+            return diagnostic
+        except (ValueError, OverflowError):
+            if diagnostic.failure_kind != "computation_failed" or diagnostic.reason_codes != (
+                "solver_non_finite",
+            ):
+                raise ContractError("numeric failure reason is not reproducible")
+            return diagnostic
+        raise ContractError("failure artifact claims failure for computable input")
     if parsed_input.normalized_net_profit <= 0:
         raise ContractError("positive normalized net profit is required")
     try:
@@ -623,6 +666,12 @@ def validate_growth_expectation_artifact(
     )
     if diagnostic.current_business_value != expected_business:
         raise ContractError("current_business_value is not reproducible")
+    expected_credible = (
+        float(assumptions["credible_growth_rate"][0]),
+        float(assumptions["credible_growth_rate"][2]),
+    )
+    if diagnostic.credible_growth_range != expected_credible:
+        raise ContractError("credible_growth_range is not reproducible")
     if diagnostic.priced_growth_value_range != expected_priced:
         raise ContractError("priced_growth_value_range is not reproducible")
     if diagnostic.priced_growth_share_range != expected_share:

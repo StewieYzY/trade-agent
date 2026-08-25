@@ -9,7 +9,9 @@ from data.lib.growth_expectation_contract import (
     validate_diagnostic_input,
 )
 from data.lib.growth_expectation_engine import (
-    _pv_growth,
+    FORMULA_VERSION,
+    _solve_duration,
+    _solve_growth,
     compute_growth_expectation_diagnostic,
     validate_growth_expectation_artifact,
 )
@@ -30,6 +32,36 @@ def _compute(*, market_value=3000.0, mode="fixed_growth_rate", net_profit=90.0):
     )
 
 
+def _manual_pv(
+    earnings_basis,
+    growth,
+    years,
+    discount,
+    terminal_multiple,
+    terminal_earnings,
+):
+    full_years = int(years)
+    yearly = sum(
+        earnings_basis * (1 + growth) ** year / (1 + discount) ** year
+        for year in range(1, full_years + 1)
+    )
+    fraction = years - full_years
+    if fraction:
+        next_year = full_years + 1
+        yearly += fraction * (
+            earnings_basis
+            * (1 + growth) ** next_year
+            / (1 + discount) ** next_year
+        )
+    terminal = (
+        terminal_earnings
+        * (1 + growth) ** years
+        * terminal_multiple
+        / (1 + discount) ** years
+    )
+    return yearly + terminal
+
+
 def test_fixed_growth_reverse_satisfies_market_value_residual():
     diagnostic = _compute(market_value=3000.0)
     earnings = 150.0
@@ -39,14 +71,13 @@ def test_fixed_growth_reverse_satisfies_market_value_residual():
     assert diagnostic.calculation_status in {"clean", "degraded"}
     assert len(diagnostic.reverse_scenarios) == 3
     for scenario in diagnostic.reverse_scenarios:
-        value = _pv_growth(
+        value = _manual_pv(
             earnings,
             scenario.growth_rate,
             scenario.implied_high_growth_duration,
             discount,
-            0.02,
             terminal_multiple,
-            terminal_earnings=90.0,
+            90.0,
         )
         assert value == pytest.approx(3000.0, rel=1e-8)
 
@@ -56,14 +87,13 @@ def test_fixed_duration_reverse_satisfies_market_value_residual():
     assert diagnostic.calculation_status in {"clean", "degraded"}
     assert len(diagnostic.reverse_scenarios) == 3
     for scenario in diagnostic.reverse_scenarios:
-        value = _pv_growth(
+        value = _manual_pv(
             150.0,
             scenario.implied_growth_rate,
             scenario.duration_years,
             0.10,
-            0.02,
             20.0,
-            terminal_earnings=90.0,
+            90.0,
         )
         assert value == pytest.approx(3000.0, rel=1e-8)
 
@@ -76,9 +106,23 @@ def test_market_value_below_terminal_floor_fails_closed():
     assert not diagnostic.reverse_scenarios
 
 
-def test_fixed_duration_reverse_can_solve_growth_above_five_without_false_failure():
-    from data.lib.growth_expectation_engine import _solve_growth
+def test_fixed_growth_below_discount_rate_can_find_internal_curve_root():
+    target = _manual_pv(150.0, 0.01, 6.0, 0.10, 20.0, 90.0)
 
+    duration = _solve_duration(
+        target,
+        150.0,
+        0.01,
+        0.10,
+        0.02,
+        20.0,
+        terminal_earnings=90.0,
+    )
+
+    assert duration == pytest.approx(6.0, abs=0.05)
+
+
+def test_fixed_duration_reverse_can_solve_growth_above_five_without_false_failure():
     growth = _solve_growth(
         1_000_000_000.0,
         150.0,
@@ -94,16 +138,15 @@ def test_fixed_duration_reverse_can_solve_growth_above_five_without_false_failur
 
 
 def test_adaptive_growth_search_checks_configured_maximum():
-    from data.lib.growth_expectation_engine import MAX_SOLVER_GROWTH, _pv_growth, _solve_growth
+    from data.lib.growth_expectation_engine import MAX_SOLVER_GROWTH
 
-    target = _pv_growth(
+    target = _manual_pv(
         150.0,
         MAX_SOLVER_GROWTH,
         3.0,
         0.10,
-        0.02,
         20.0,
-        terminal_earnings=90.0,
+        90.0,
     )
     growth = _solve_growth(
         target,
@@ -139,7 +182,7 @@ def test_negative_net_profit_returns_contract_compatible_failure_artifact():
         ticker="600519.SH",
         input_payload=payload,
         assumption_snapshot=snapshot.to_dict(),
-        formula_version="v0-epv-proxy",
+        formula_version=FORMULA_VERSION,
         dossier_snapshot="dossier-v1",
         profile_version="profile-v1",
     ).input_snapshot is not None
@@ -187,7 +230,7 @@ def test_legacy_sensitivity_artifact_round_trips_without_metric_field():
         ticker="600519.SH",
         input_payload=input_payload(market_value=3000.0, industry="consumer"),
         assumption_snapshot=assumptions(),
-        formula_version="v0-epv-proxy",
+        formula_version=FORMULA_VERSION,
         dossier_snapshot="dossier-v1",
         profile_version="profile-v1",
     )
@@ -234,7 +277,53 @@ def test_engine_semantic_binding_rejects_rehashed_derived_mutation():
             ticker="600519.SH",
             input_payload=input_payload(market_value=3000.0, industry="consumer"),
             assumption_snapshot=assumptions(),
-            formula_version="v0-epv-proxy",
+            formula_version=FORMULA_VERSION,
+            dossier_snapshot="dossier-v1",
+            profile_version="profile-v1",
+        )
+
+
+def test_engine_semantic_binding_rejects_credible_growth_mutation():
+    diagnostic = _compute()
+    payload = diagnostic.to_dict()
+    payload["credible_growth_range"] = [0.5, 0.6]
+    payload["diagnostic_digest"] = compute_diagnostic_digest(payload)
+
+    with pytest.raises(ValueError, match="credible_growth_range"):
+        validate_growth_expectation_artifact(
+            payload,
+            ticker="600519.SH",
+            input_payload=input_payload(market_value=3000.0, industry="consumer"),
+            assumption_snapshot=assumptions(),
+            formula_version=FORMULA_VERSION,
+            dossier_snapshot="dossier-v1",
+            profile_version="profile-v1",
+        )
+
+
+def test_engine_semantic_binding_rejects_rehashed_failure_reason_mutation():
+    payload = input_payload(industry="consumer")
+    payload["normalized_net_profit"] = -90.0
+    snapshot = validate_assumption_snapshot(assumptions())
+    diagnostic = compute_growth_expectation_diagnostic(
+        validate_diagnostic_input(payload),
+        snapshot,
+        dossier_snapshot="dossier-v1",
+        profile_version="profile-v1",
+    )
+    mutated = diagnostic.to_dict()
+    mutated["failure_kind"] = "model_not_applicable"
+    mutated["reason_codes"] = ["model_not_applicable"]
+    mutated["reasons"] = ["fabricated failure"]
+    mutated["diagnostic_digest"] = compute_diagnostic_digest(mutated)
+
+    with pytest.raises(ValueError, match="failure"):
+        validate_growth_expectation_artifact(
+            mutated,
+            ticker="600519.SH",
+            input_payload=payload,
+            assumption_snapshot=snapshot.to_dict(),
+            formula_version=FORMULA_VERSION,
             dossier_snapshot="dossier-v1",
             profile_version="profile-v1",
         )

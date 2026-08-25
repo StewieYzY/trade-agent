@@ -28,6 +28,8 @@ reverse 模型使用 `normalized_earnings_basis` 作为当前 earnings；高增�
 
 fixed-growth 在 `[0, MAX_REVERSE_DURATION_YEARS]` 检查目标是否可被包围，fixed-duration 从 `growth=0` 开始自适应扩张上界，直到找到包围或识别非有限解。二分结束后必须验证 `abs(PV-target) <= tolerance * max(1,target)`，否则返回 computation failure。
 
+对于 fixed-growth，PV 曲线不假设随 duration 单调；引擎扫描有限域并对相邻区间进行 bracket，再在首个有效区间内求根。
+
 ### 3. Sensitivity 使用单变量情景
 
 每条 sensitivity 固定其他 assumptions 为 base/midpoint，只替换当前 assumption 的合法边界/中值；影响范围分别记录 current-business value、reverse base、expectation gap、overdraft rank 和 pulled-forward years。为避免二维 impact range 丢失 metric 语义，`SensitivityScenario` 增加向后兼容的 `metric` 字段，并允许三值 credible-growth assumption 进行边界绑定。
@@ -39,6 +41,12 @@ failure/not-evaluable artifact 携带 `input_snapshot=input`、assumption snapsh
 ### 5. Overdraft 分类按 credible low/mid/high
 
 若 implied assumption <= credible midpoint，返回 `within_credible_range`；大于 midpoint 且不超过 high，返回 `above_base_case`；大于 high，返回 `above_credible_upper_bound`。fixed-growth 模式比较 fixed base growth；fixed-duration 比较 solved base implied growth。
+
+### 6. Numeric conclusions and failure status
+
+当 reverse 无有限解时，遵守已归档 contract 的 `failed/not_evaluable` 语义：不发布任何 numeric conclusions，包括 signed priced-growth。signed priced-growth 仅在 `clean/degraded` 计算结果中输出；这不是修改 canonical contract，而是明确 partial computation 不可发布的边界。
+
+`FORMULA_VERSION` 使用 repair-specific 版本，确保 reverse basis、fractional-year cash-flow 和 solver semantics 的变化可被 provenance 区分。
 
 ## Risks / Trade-offs
 

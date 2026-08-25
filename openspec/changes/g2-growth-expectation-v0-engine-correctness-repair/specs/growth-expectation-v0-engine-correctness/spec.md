@@ -4,6 +4,8 @@
 
 The engine SHALL use a separately defined normalized earnings basis for reverse valuation, SHALL bracket each solution within the allowed duration/growth domain, and SHALL reject any result whose discounted value does not match current market value within a documented residual tolerance. A target below the zero-growth terminal floor SHALL be treated as no finite reverse solution rather than as a zero-year numeric conclusion.
 
+The engine MUST NOT assume that fixed-growth present value is monotonic in duration when growth is below the discount rate. It SHALL search the finite duration domain for an internal bracket. When no reverse solution exists, the engine SHALL follow the archived contract and return a failure artifact without numeric conclusions; signed priced-growth is published only for clean/degraded computable artifacts.
+
 #### Scenario: Fixed growth result has bounded residual
 - **WHEN** fixed-growth reverse returns a duration
 - **THEN** evaluating the same scenario with the engine's frozen assumptions SHALL reproduce current market value within tolerance
