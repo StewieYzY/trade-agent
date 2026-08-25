@@ -14,7 +14,10 @@ from data.lib.growth_expectation_contract import (
     SensitivityScenario,
     AssumptionSnapshot,
     CurrentBusinessValue,
+    ContractError,
     validate_diagnostic_binding,
+    validate_diagnostic_input,
+    validate_assumption_snapshot,
     compute_diagnostic_digest,
     compute_input_digest,
     evaluate_applicability,
@@ -443,7 +446,7 @@ def _failure(input: DiagnosticInput, snapshot: AssumptionSnapshot, *, dossier_sn
     finalized = replace(
         payload, diagnostic_digest=compute_diagnostic_digest(payload.to_dict())
     )
-    return validate_diagnostic_binding(
+    return validate_growth_expectation_artifact(
         finalized.to_dict(),
         ticker=input.ticker,
         input_payload=input.to_dict(),
@@ -491,7 +494,7 @@ def compute_growth_expectation_diagnostic(
     except LookupError as exc:
         return _failure(input, assumption_snapshot, dossier_snapshot=dossier_snapshot, profile_version=profile_version,
                         failure_kind="computation_failed", reason_code="solver_no_solution", reason=str(exc))
-    except ValueError as exc:
+    except (ValueError, OverflowError) as exc:
         return _failure(input, assumption_snapshot, dossier_snapshot=dossier_snapshot, profile_version=profile_version,
                         failure_kind="computation_failed", reason_code="solver_non_finite", reason=str(exc))
     priced = (input.current_market_value - business[1], input.current_market_value - business[0])
@@ -559,7 +562,7 @@ def compute_growth_expectation_diagnostic(
     finalized = replace(
         artifact, diagnostic_digest=compute_diagnostic_digest(artifact.to_dict())
     )
-    return validate_diagnostic_binding(
+    return validate_growth_expectation_artifact(
         finalized.to_dict(),
         ticker=input.ticker,
         input_payload=input.to_dict(),
@@ -568,3 +571,72 @@ def compute_growth_expectation_diagnostic(
         dossier_snapshot=dossier_snapshot,
         profile_version=profile_version,
     )
+
+
+def validate_growth_expectation_artifact(
+    value: dict[str, object],
+    *,
+    ticker: str,
+    input_payload: dict[str, object],
+    assumption_snapshot: dict[str, object],
+    formula_version: str,
+    dossier_snapshot: str,
+    profile_version: str,
+) -> GrowthExpectationDiagnostic:
+    """Validate contract binding plus deterministic derived conclusions."""
+    diagnostic = validate_diagnostic_binding(
+        value,
+        ticker=ticker,
+        input_payload=input_payload,
+        assumption_snapshot=assumption_snapshot,
+        formula_version=formula_version,
+        dossier_snapshot=dossier_snapshot,
+        profile_version=profile_version,
+    )
+    if diagnostic.calculation_status not in {"clean", "degraded"}:
+        return diagnostic
+    parsed_input = validate_diagnostic_input(input_payload)
+    parsed_snapshot = validate_assumption_snapshot(assumption_snapshot)
+    assumptions = _values(parsed_snapshot)
+    if parsed_input.normalized_net_profit <= 0:
+        raise ContractError("positive normalized net profit is required")
+    try:
+        metrics = _diagnostic_metrics(parsed_input, assumptions)
+        expected_sensitivity, _ = _sensitivity(parsed_input, assumptions)
+    except (LookupError, ValueError, OverflowError) as exc:
+        raise ContractError("derived artifact cannot be recomputed") from exc
+    expected_business = CurrentBusinessValue(
+        metrics["epv_range"],
+        metrics["mature_range"],
+        "wide"
+        if abs(metrics["epv_range"][1] - metrics["mature_range"][0])
+        > max(metrics["epv_range"][1], metrics["mature_range"][1]) * 0.5
+        else None,
+    )
+    expected_priced = (
+        parsed_input.current_market_value - metrics["business"][1],
+        parsed_input.current_market_value - metrics["business"][0],
+    )
+    expected_share = (
+        expected_priced[0] / parsed_input.current_market_value,
+        expected_priced[1] / parsed_input.current_market_value,
+    )
+    if diagnostic.current_business_value != expected_business:
+        raise ContractError("current_business_value is not reproducible")
+    if diagnostic.priced_growth_value_range != expected_priced:
+        raise ContractError("priced_growth_value_range is not reproducible")
+    if diagnostic.priced_growth_share_range != expected_share:
+        raise ContractError("priced_growth_share_range is not reproducible")
+    if diagnostic.reverse_scenarios != metrics["reverse"]:
+        raise ContractError("reverse_scenarios are not reproducible")
+    if diagnostic.expectation_gap != metrics["expectation_gap"]:
+        raise ContractError("expectation_gap is not reproducible")
+    if diagnostic.expectation_overdraft != metrics["overdraft"]:
+        raise ContractError("expectation_overdraft is not reproducible")
+    if diagnostic.value_pulled_forward_years != metrics["pulled_forward"]:
+        raise ContractError("value_pulled_forward_years is not reproducible")
+    if diagnostic.sensitivity != expected_sensitivity:
+        raise ContractError("sensitivity is not reproducible")
+    if diagnostic.evidence:
+        raise ContractError("engine V0 does not produce evidence records")
+    return diagnostic

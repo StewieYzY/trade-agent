@@ -11,6 +11,7 @@ from data.lib.growth_expectation_contract import (
 from data.lib.growth_expectation_engine import (
     _pv_growth,
     compute_growth_expectation_diagnostic,
+    validate_growth_expectation_artifact,
 )
 from test_g2_growth_expectation_engine import (
     assumptions,
@@ -202,3 +203,38 @@ def test_incomplete_sensitivity_is_visible_as_warning():
         warning.startswith("sensitivity_incomplete:")
         for warning in diagnostic.warnings
     )
+
+
+def test_extreme_finite_growth_returns_failed_artifact_not_overflow():
+    payload = input_payload(market_value=1800.0, industry="consumer")
+    snapshot_payload = assumptions()
+    for item in snapshot_payload["assumptions"]:
+        if item["key"] == "reverse_fixed_growth_rate":
+            item["value"] = [1e100, 1e154, 1e308]
+    diagnostic = compute_growth_expectation_diagnostic(
+        validate_diagnostic_input(payload),
+        validate_assumption_snapshot(snapshot_payload),
+        dossier_snapshot="dossier-v1",
+        profile_version="profile-v1",
+    )
+
+    assert diagnostic.calculation_status == "failed"
+    assert diagnostic.reason_codes == ("solver_non_finite",)
+
+
+def test_engine_semantic_binding_rejects_rehashed_derived_mutation():
+    diagnostic = _compute()
+    payload = diagnostic.to_dict()
+    payload["priced_growth_value_range"] = [0.0, 0.0]
+    payload["diagnostic_digest"] = compute_diagnostic_digest(payload)
+
+    with pytest.raises(ValueError, match="priced_growth_value_range"):
+        validate_growth_expectation_artifact(
+            payload,
+            ticker="600519.SH",
+            input_payload=input_payload(market_value=3000.0, industry="consumer"),
+            assumption_snapshot=assumptions(),
+            formula_version="v0-epv-proxy",
+            dossier_snapshot="dossier-v1",
+            profile_version="profile-v1",
+        )
