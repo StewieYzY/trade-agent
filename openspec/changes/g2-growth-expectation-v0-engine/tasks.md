@@ -1,13 +1,13 @@
-- [ ] 1.1 Read and reference the archived contract and define engine public API/formula version.
-- [ ] 1.2 Write RED tests for EPV/mature anchor ranges and signed priced-growth values.
-- [ ] 1.3 Write RED tests for fixed-growth and fixed-duration reverse solving, no-finite-solution, and mode exclusivity.
-- [ ] 1.4 Write RED tests for sensitivity monotonicity, expectation gap/overdraft, industry warning, invalid input and provenance/digest binding.
-- [ ] 2.1 Implement pure numeric helpers for assumptions, anchors, finite-horizon valuation and bounded reverse solvers.
-- [ ] 2.2 Implement sensitivity generation and status mapping without silent defaults.
-- [ ] 2.3 Implement immutable artifact facade and contract binding/digest validation.
-- [ ] 2.4 Add focused regression cases for deterministic serialization and edge conditions.
-- [ ] 3.1 Run focused tests and fix all failures.
-- [ ] 3.2 Run full pytest, compileall, OpenSpec strict validation and git diff check.
-- [ ] 3.3 Perform independent child-only review from fresh read-only context and resolve findings.
+- [x] 1.1 Read and reference the archived contract and define engine public API/formula version.
+- [x] 1.2 Write RED tests for EPV/mature anchor ranges and signed priced-growth values.
+- [x] 1.3 Write RED tests for fixed-growth and fixed-duration reverse solving, no-finite-solution, and mode exclusivity.
+- [x] 1.4 Write RED tests for sensitivity monotonicity, expectation gap/overdraft, industry warning, invalid input and provenance/digest binding.
+- [x] 2.1 Implement pure numeric helpers for assumptions, anchors, finite-horizon valuation and bounded reverse solvers.
+- [x] 2.2 Implement sensitivity generation and status mapping without silent defaults.
+- [x] 2.3 Implement immutable artifact facade and contract binding/digest validation.
+- [x] 2.4 Add focused regression cases for deterministic serialization and edge conditions.
+- [x] 3.1 Run focused tests and fix all failures.
+- [x] 3.2 Run full pytest, compileall, OpenSpec strict validation and git diff check.
+- [x] 3.3 Perform independent child-only review from fresh read-only context and resolve findings.
 - [ ] 4.1 Archive the completed child change after review and validation.
 - [ ] 4.2 Merge to main, push origin/main, and clean only this worktree/branch.
