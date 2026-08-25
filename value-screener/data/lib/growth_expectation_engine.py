@@ -598,6 +598,11 @@ def validate_growth_expectation_artifact(
         dossier_snapshot=dossier_snapshot,
         profile_version=profile_version,
     )
+    legacy_formula = "v0-epv-proxy"
+    if formula_version == legacy_formula:
+        return diagnostic
+    if formula_version != FORMULA_VERSION:
+        raise ContractError("unsupported engine formula version")
     parsed_input = validate_diagnostic_input(input_payload)
     parsed_snapshot = validate_assumption_snapshot(assumption_snapshot)
     assumptions = _values(parsed_snapshot)
@@ -614,6 +619,7 @@ def validate_growth_expectation_artifact(
                 diagnostic.calculation_status != expected_status
                 or diagnostic.failure_kind != expected_kind
                 or diagnostic.reason_codes != (expected_code,)
+                or diagnostic.reasons != verdict.reasons
                 or diagnostic.input_snapshot != parsed_input
             ):
                 raise ContractError("failure artifact is not reproducible")
@@ -623,21 +629,25 @@ def validate_growth_expectation_artifact(
                 diagnostic.calculation_status != "not_evaluable"
                 or diagnostic.failure_kind != "data_insufficient"
                 or diagnostic.reason_codes != ("invalid_value",)
+                or diagnostic.reasons
+                != (
+                    "positive normalized net profit is required for mature PE anchor",
+                )
             ):
                 raise ContractError("failure reason is not reproducible")
             return diagnostic
         try:
             _diagnostic_metrics(parsed_input, assumptions)
-        except LookupError:
+        except LookupError as exc:
             if diagnostic.failure_kind != "computation_failed" or diagnostic.reason_codes != (
                 "solver_no_solution",
-            ):
+            ) or diagnostic.reasons != (str(exc),):
                 raise ContractError("solver failure reason is not reproducible")
             return diagnostic
-        except (ValueError, OverflowError):
+        except (ValueError, OverflowError) as exc:
             if diagnostic.failure_kind != "computation_failed" or diagnostic.reason_codes != (
                 "solver_non_finite",
-            ):
+            ) or diagnostic.reasons != (str(exc),):
                 raise ContractError("numeric failure reason is not reproducible")
             return diagnostic
         raise ContractError("failure artifact claims failure for computable input")
@@ -645,7 +655,9 @@ def validate_growth_expectation_artifact(
         raise ContractError("positive normalized net profit is required")
     try:
         metrics = _diagnostic_metrics(parsed_input, assumptions)
-        expected_sensitivity, _ = _sensitivity(parsed_input, assumptions)
+        expected_sensitivity, sensitivity_warnings = _sensitivity(
+            parsed_input, assumptions
+        )
     except (LookupError, ValueError, OverflowError) as exc:
         raise ContractError("derived artifact cannot be recomputed") from exc
     expected_business = CurrentBusinessValue(
@@ -664,6 +676,24 @@ def validate_growth_expectation_artifact(
         expected_priced[0] / parsed_input.current_market_value,
         expected_priced[1] / parsed_input.current_market_value,
     )
+    expected_warnings = list(verdict.warnings)
+    expected_warnings.extend(sensitivity_warnings)
+    if any(source.freshness != "fresh" for source in parsed_input.sources):
+        expected_warnings.append("source_freshness_degraded")
+    if any(source.degradation_status != "clean" for source in parsed_input.sources):
+        expected_warnings.append("source_degradation_visible")
+    if abs(metrics["epv_range"][1] - metrics["mature_range"][0]) > max(
+        metrics["epv_range"][1], metrics["mature_range"][1]
+    ) * 0.5:
+        expected_warnings.append("anchor_divergence")
+    expected_warnings = tuple(expected_warnings)
+    expected_status = "degraded" if expected_warnings else "clean"
+    if diagnostic.calculation_status != expected_status:
+        raise ContractError("calculation_status is not reproducible")
+    if diagnostic.warnings != expected_warnings:
+        raise ContractError("warnings are not reproducible")
+    if diagnostic.failure_kind is not None:
+        raise ContractError("successful artifact has failure_kind")
     if diagnostic.current_business_value != expected_business:
         raise ContractError("current_business_value is not reproducible")
     expected_credible = (

@@ -4,6 +4,7 @@ import pytest
 
 from data.lib.growth_expectation_contract import (
     compute_diagnostic_digest,
+    compute_input_digest,
     validate_diagnostic_binding,
     validate_assumption_snapshot,
     validate_diagnostic_input,
@@ -248,6 +249,31 @@ def test_incomplete_sensitivity_is_visible_as_warning():
     )
 
 
+def test_semantic_binding_rejects_rehashed_warning_mutation():
+    payload = input_payload(market_value=1800.0, industry="consumer")
+    payload["sources"][0]["freshness"] = "stale"
+    diagnostic = compute_growth_expectation_diagnostic(
+        validate_diagnostic_input(payload),
+        validate_assumption_snapshot(assumptions()),
+        dossier_snapshot="dossier-v1",
+        profile_version="profile-v1",
+    )
+    mutated = diagnostic.to_dict()
+    mutated["warnings"] = ["arbitrary_warning"]
+    mutated["diagnostic_digest"] = compute_diagnostic_digest(mutated)
+
+    with pytest.raises(ValueError, match="warnings"):
+        validate_growth_expectation_artifact(
+            mutated,
+            ticker="600519.SH",
+            input_payload=payload,
+            assumption_snapshot=assumptions(),
+            formula_version=FORMULA_VERSION,
+            dossier_snapshot="dossier-v1",
+            profile_version="profile-v1",
+        )
+
+
 def test_extreme_finite_growth_returns_failed_artifact_not_overflow():
     payload = input_payload(market_value=1800.0, industry="consumer")
     snapshot_payload = assumptions()
@@ -327,3 +353,31 @@ def test_engine_semantic_binding_rejects_rehashed_failure_reason_mutation():
             dossier_snapshot="dossier-v1",
             profile_version="profile-v1",
         )
+
+
+def test_legacy_formula_artifact_uses_contract_only_compatibility_path():
+    diagnostic = _compute(market_value=3000.0)
+    payload = diagnostic.to_dict()
+    legacy_formula = "v0-epv-proxy"
+    payload["provenance"]["formula_version"] = legacy_formula
+    payload["input_digest"] = compute_input_digest(
+        ticker="600519.SH",
+        input_payload=input_payload(market_value=3000.0, industry="consumer"),
+        assumption_snapshot=assumptions(),
+        formula_version=legacy_formula,
+        dossier_snapshot="dossier-v1",
+        profile_version="profile-v1",
+    )
+    payload["diagnostic_digest"] = compute_diagnostic_digest(payload)
+
+    accepted = validate_growth_expectation_artifact(
+        payload,
+        ticker="600519.SH",
+        input_payload=input_payload(market_value=3000.0, industry="consumer"),
+        assumption_snapshot=assumptions(),
+        formula_version=legacy_formula,
+        dossier_snapshot="dossier-v1",
+        profile_version="profile-v1",
+    )
+
+    assert accepted.provenance.formula_version == legacy_formula
