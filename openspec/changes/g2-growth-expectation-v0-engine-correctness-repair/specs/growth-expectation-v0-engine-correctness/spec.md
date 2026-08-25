@@ -18,7 +18,7 @@ The engine SHALL use a separately defined normalized earnings basis for reverse 
 
 ### Requirement: Sensitivity is single-variable and complete
 
-The engine SHALL perturb one validated assumption at a time while holding other assumptions at deterministic base values, and SHALL expose reproducible, metric-labelled impact ranges for current-business value, reverse base, expectation gap, expectation overdraft rank and value-pulled-forward years required by the archived V0 spec.
+The engine SHALL perturb one validated assumption at a time while holding other assumptions at deterministic base values, and SHALL expose reproducible, metric-labelled impact ranges for current-business value, reverse base, expectation gap, expectation overdraft rank and value-pulled-forward years required by the archived V0 spec. If a legal perturbation is not evaluable, the artifact SHALL retain a visible sensitivity warning and MUST NOT silently present the remaining points as complete.
 
 #### Scenario: Different assumptions produce different impacts
 - **WHEN** maintenance capex ratio and cost of equity are varied over the same input

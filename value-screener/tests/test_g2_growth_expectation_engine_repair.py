@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from data.lib.growth_expectation_contract import (
+    compute_diagnostic_digest,
     validate_diagnostic_binding,
     validate_assumption_snapshot,
     validate_diagnostic_input,
@@ -167,3 +168,35 @@ def test_sensitivity_has_single_variable_outputs_including_credible_growth():
     assert impacts[("credible_growth_rate", "expectation_gap")] != impacts[("mature_pe", "current_business_value")]
     assert ("maintenance_capex_ratio", "reverse_base") in impacts
     assert ("cost_of_equity", "value_pulled_forward_years") in impacts
+    credible_business = impacts[("credible_growth_rate", "current_business_value")]
+    assert credible_business[0] == pytest.approx(credible_business[1])
+
+
+def test_legacy_sensitivity_artifact_round_trips_without_metric_field():
+    diagnostic = _compute(market_value=3000.0)
+    payload = diagnostic.to_dict()
+    for scenario in payload["sensitivity"]:
+        scenario.pop("metric", None)
+    payload["diagnostic_digest"] = compute_diagnostic_digest(payload)
+
+    bound = validate_diagnostic_binding(
+        payload,
+        ticker="600519.SH",
+        input_payload=input_payload(market_value=3000.0, industry="consumer"),
+        assumption_snapshot=assumptions(),
+        formula_version="v0-epv-proxy",
+        dossier_snapshot="dossier-v1",
+        profile_version="profile-v1",
+    )
+
+    assert bound.to_dict() == payload
+
+
+def test_incomplete_sensitivity_is_visible_as_warning():
+    diagnostic = _compute(market_value=1800.0)
+
+    assert diagnostic.calculation_status == "degraded"
+    assert any(
+        warning.startswith("sensitivity_incomplete:")
+        for warning in diagnostic.warnings
+    )

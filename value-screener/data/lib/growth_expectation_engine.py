@@ -352,44 +352,41 @@ def _diagnostic_metrics(
 
 def _sensitivity(
     input: DiagnosticInput, assumptions: dict[str, object]
-) -> tuple[SensitivityScenario, ...]:
+) -> tuple[tuple[SensitivityScenario, ...], tuple[str, ...]]:
     base_rate = sum(assumptions["cost_of_equity"]) / 2
     base_ratio = sum(assumptions["maintenance_capex_ratio"]) / 2
+    base_credible = sum(assumptions["credible_growth_rate"]) / 3
     base_pe = sum(assumptions["mature_pe"]) / 2
+    base_assumptions = dict(assumptions)
+    base_assumptions["maintenance_capex_ratio"] = (base_ratio, base_ratio)
+    base_assumptions["cost_of_equity"] = (base_rate, base_rate)
+    base_assumptions["credible_growth_rate"] = (
+        base_credible,
+        base_credible,
+        base_credible,
+    )
+    base_assumptions["mature_pe"] = (base_pe, base_pe)
     points = {
-        "maintenance_capex_ratio": (
-            assumptions["maintenance_capex_ratio"],
-            lambda local, value: local.update(
-                maintenance_capex_ratio=(value, value),
-                cost_of_equity=(base_rate, base_rate),
-            ),
-        ),
-        "cost_of_equity": (
-            assumptions["cost_of_equity"],
-            lambda local, value: local.update(
-                maintenance_capex_ratio=(base_ratio, base_ratio),
-                cost_of_equity=(value, value),
-            ),
-        ),
-        "credible_growth_rate": (
-            assumptions["credible_growth_rate"],
-            lambda local, value: local.update(
-                credible_growth_rate=(value, value, value),
-            ),
-        ),
-        "mature_pe": (
-            assumptions["mature_pe"],
-            lambda local, value: local.update(mature_pe=(value, value)),
-        ),
+        "maintenance_capex_ratio": assumptions["maintenance_capex_ratio"],
+        "cost_of_equity": assumptions["cost_of_equity"],
+        "credible_growth_rate": assumptions["credible_growth_rate"],
+        "mature_pe": assumptions["mature_pe"],
     }
     metric_values: dict[tuple[str, str], list[float]] = {}
-    for assumption_key, (bounds, apply_value) in points.items():
+    warnings: list[str] = []
+    for assumption_key, bounds in points.items():
         for point in bounds:
-            local = dict(assumptions)
-            apply_value(local, float(point))
+            local = dict(base_assumptions)
+            if assumption_key == "credible_growth_rate":
+                local[assumption_key] = (float(point), float(point), float(point))
+            else:
+                local[assumption_key] = (float(point), float(point))
             try:
                 metrics = _diagnostic_metrics(input, local)
             except (LookupError, ValueError):
+                warnings.append(
+                    f"sensitivity_incomplete:{assumption_key}={point}"
+                )
                 continue
             scalar_values = {
                 "current_business_value": sum(metrics["business"]) / 2,
@@ -418,7 +415,9 @@ def _sensitivity(
                 metric=metric,
             )
         )
-    return tuple(output)
+    if not output:
+        raise LookupError("no evaluable sensitivity perturbation")
+    return tuple(output), tuple(sorted(set(warnings)))
 
 
 def _failure(input: DiagnosticInput, snapshot: AssumptionSnapshot, *, dossier_snapshot: str, profile_version: str, failure_kind: str, reason_code: str, reason: str) -> GrowthExpectationDiagnostic:
@@ -488,6 +487,7 @@ def compute_growth_expectation_diagnostic(
         mature_range = _range_product(input.normalized_net_profit, assumptions["mature_pe"])
         business = (min(epv_range[0], mature_range[0]), max(epv_range[1], mature_range[1]))
         reverse = _reverse_scenarios(input, assumptions)
+        sensitivity, sensitivity_warnings = _sensitivity(input, assumptions)
     except LookupError as exc:
         return _failure(input, assumption_snapshot, dossier_snapshot=dossier_snapshot, profile_version=profile_version,
                         failure_kind="computation_failed", reason_code="solver_no_solution", reason=str(exc))
@@ -528,6 +528,7 @@ def compute_growth_expectation_diagnostic(
             reason_code="solver_no_solution", reason="no finite value-pulled-forward duration",
         )
     warnings = list(verdict.warnings)
+    warnings.extend(sensitivity_warnings)
     if any(source.freshness != "fresh" for source in input.sources):
         warnings.append("source_freshness_degraded")
     if any(source.degradation_status != "clean" for source in input.sources):
@@ -551,7 +552,7 @@ def compute_growth_expectation_diagnostic(
             epv_range, mature_range, "wide" if "anchor_divergence" in warnings else None),
         priced_growth_value_range=priced, priced_growth_share_range=share, reverse_scenarios=reverse,
         credible_growth_range=credible, expectation_gap=gap, value_pulled_forward_years=pulled_forward,
-        expectation_overdraft=overdraft, sensitivity=_sensitivity(input, assumptions),
+        expectation_overdraft=overdraft, sensitivity=sensitivity,
         evidence=(), counter_evidence=(), unknowns=(), what_would_change_my_mind=(),
         provenance=provenance, input_digest=input_digest, diagnostic_digest="0" * 64,
     )
