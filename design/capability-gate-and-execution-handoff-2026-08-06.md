@@ -20,15 +20,16 @@
 > `ed85508 merge: g2 growth expectation contract`
 >
 > 当前 main/docs baseline：
-> `main@ed85508 == origin/main@ed85508`，已 push。
+> 代码合入基线为 `ed85508`；当前 handoff 已提交并 push，`main` 与
+> `origin/main` 已同步。
 > 根目录既有 untracked user WIP（`.cache/`、`data/`、`debate/`、`watchlist/`
 > 等）保持 untouched，未被本次 stage/commit。
 >
 > 历史 GitHub 审查入口：
 > `PR #1 codex/mainline-sync-2026-08-05 → main`
 >
-> 当前本地集成以 `main@ed85508` 为准，远端基线为 `origin/main@ed85508`；
-> PR #1 以下信息仅作
+> 当前本地集成以代码基线 `main@ed85508` 为准；handoff docs 已在其后同步提交并
+> push。PR #1 以下信息仅作
 > 历史审查快照，不再作为当前 branch 或 merge 状态判断依据。
 >
 > 当前直接执行阶段：
@@ -133,7 +134,7 @@
   provenance 绑定和 golden cases；不包含计算引擎或 dossier/InvestmentThesis 集成。
 - 合并后全量测试：`1240 passed`；OpenSpec strict：`34 passed, 0 failed`；
   compileall、`git diff --check` 通过。
-- `main == origin/main == ed85508`；专用 child worktree 和分支已清理。
+- `main` 与 `origin/main` 已同步；专用 child worktree 和分支已清理。
 - G2 capability 仍为 `not passed`，不启动 G3；下一步推进 G2 3.2
   `g2-growth-expectation-v0-engine`。
 
