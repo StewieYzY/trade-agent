@@ -63,6 +63,7 @@ def mock_full_council():
             "what_would_change_my_mind": "市场份额大幅下降",
             "out_of_circle": False,
             "historical_parallel": "可口可乐",
+            "new_evidence": ["ROE 32.1%"],
         })
 
     # R3: DA 盲点
@@ -76,6 +77,8 @@ def mock_full_council():
         "what_would_change_my_mind": "N/A",
         "out_of_circle": False,
         "historical_parallel": None,
+        "evidence_quality_assessment": {"buffett": "accurate"},
+        "recommendation": "no_clear_winner",
         "blind_spots": [
             {
                 "title": "市场集中度风险",
@@ -103,6 +106,8 @@ def mock_full_council():
             }
         ],
         "pending_verification": ["市场份额变化趋势", "新品类拓展情况"],
+        "divergence_level": "medium",
+        "calibration_status": "uncalibrated",
     }
 
     # 完整序列：R1×4 + R2×4 + R3 + R4 = 10 次调用

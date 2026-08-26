@@ -46,6 +46,8 @@ def _mk_synth() -> SynthesizerOutput:
         "dissent_points": ["冯柳逆向"],
         "pending_verification": ["国际客流恢复"],
         "key_variables": [{"name": "免税收入", "value": "待跟踪", "why_it_matters": "核心增长"}],
+        "divergence_level": "medium",
+        "calibration_status": "uncalibrated",
     })
 
 

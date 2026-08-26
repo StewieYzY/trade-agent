@@ -1287,30 +1287,54 @@ async def run_debate(
     # 不阻断——凭空数字有 dossier 嵌套误判风险，隐性串台字符串匹配有逃逸面）。
     # 在 error_rate/降级判断之前：降级豁免 R3 DA 跳过，不豁免串台铁证。
     # 延迟 import 打破循环依赖（verify_quality_gate 顶部 import run_debate）。
-    from council.verify_quality_gate import detect_circular_reference, verify_r1_feature_grounding
+    from council.verify_quality_gate import (
+        detect_circular_reference,
+        verify_da_fact_check,
+        verify_divergence_report,
+        verify_r1_feature_grounding,
+        verify_r2_new_evidence,
+    )
 
     r1_quality_warnings: list[str] = []
+    quality_warnings: list[str] = []
+
+    def fail_quality_gate(stage: str, issues: list[str]) -> None:
+        reasons = (
+            (stage,)
+            if stage == "r1_circular_reference"
+            else tuple(
+                dict.fromkeys(
+                    [stage, *[f"{stage}: {issue}" for issue in issues]]
+                )
+            )
+        )
+        persist_quality(
+            "failed",
+            reasons=reasons,
+            final_quality_gate="failed",
+        )
+        if audit_writer is not None:
+            audit_writer.abort()
+        raise ValueError(
+            f"quality_gate_failed: {stage} — {'; '.join(issues)}"
+        )
+
+    def record_quality_warnings(stage: str, warnings: list[str]) -> None:
+        quality_warnings.extend(
+            f"{stage}: {warning}" for warning in warnings
+        )
+
     for agent in round1:
         ok_circ, circ_issues = detect_circular_reference(agent)
         if not ok_circ:
-            persist_quality(
-                "failed",
-                reasons=("r1_circular_reference",),
-                final_quality_gate="failed",
-            )
-            if audit_writer is not None:
-                audit_writer.abort()
-            raise ValueError(
-                f"circular_reference: {agent.name} 的 R1 core_thesis 引用其他 agent"
-                f"（{circ_issues}）。R1 other_opinions=None 本该隔离，引用他人只能是"
-                f"模型编造/串台。不产出'成功'JSON 落盘。检查 system prompt 案例锚定"
-                f"是否诱导复读或模型幻觉后重跑。"
-            )
+            fail_quality_gate("r1_circular_reference", circ_issues)
         ok_ground, ground_issues = verify_r1_feature_grounding(agent, features)
         if not ok_ground:
             r1_quality_warnings.append(
                 f"{agent.name}: {ground_issues}"
             )
+        if ground_issues:
+            record_quality_warnings("r1", [f"{agent.name}: {issue}" for issue in ground_issues])
     if not r1_errors:
         completed_stages.append("r1")
 
@@ -1348,6 +1372,14 @@ async def run_debate(
         da_skipped_reason = "runtime_degraded"
         round2 = None
         da_result = None
+        ok_da, da_issues = verify_da_fact_check(
+            None,
+            agent_ids=tuple(agents),
+            da_skipped_reason=da_skipped_reason,
+        )
+        if not ok_da:
+            fail_quality_gate("da", da_issues)
+        record_quality_warnings("da", da_issues)
         append_stage("r1", _append_round, path, 1, round1 if round1 else None)
         append_stage("r2", _append_round, path, 2, None)  # 跳 R2
         append_stage("da", _append_round, path, 3, None)  # 跳 R3
@@ -1393,6 +1425,11 @@ async def run_debate(
                         audit_writer.abort()
                     raise
             append_stage("r2", _append_round, path, 2, round2)
+            for agent in round2:
+                ok_r2, r2_warnings = verify_r2_new_evidence(agent, features)
+                if not ok_r2:
+                    fail_quality_gate("r2", r2_warnings)
+                record_quality_warnings("r2", r2_warnings)
             completed_stages.append("r2")
             da_result = None
             append_stage("da", _append_round, path, 3, None)
@@ -1413,6 +1450,14 @@ async def run_debate(
                 da_skipped_reason = "low_divergence" if level == "low" else "extreme_divergence"
                 round2 = None
                 da_result = None
+                ok_da, da_issues = verify_da_fact_check(
+                    None,
+                    agent_ids=tuple(agents),
+                    da_skipped_reason=da_skipped_reason,
+                )
+                if not ok_da:
+                    fail_quality_gate("da", da_issues)
+                record_quality_warnings("da", da_issues)
                 append_stage("r2", _append_round, path, 2, None)
                 append_stage("da", _append_round, path, 3, None)
             else:
@@ -1445,6 +1490,11 @@ async def run_debate(
                         audit_writer.abort()
                     raise
                 append_stage("r2", _append_round, path, 2, round2)
+                for agent in round2:
+                    ok_r2, r2_warnings = verify_r2_new_evidence(agent, features)
+                    if not ok_r2:
+                        fail_quality_gate("r2", r2_warnings)
+                    record_quality_warnings("r2", r2_warnings)
                 completed_stages.append("r2")
 
                 # f2 §3.3/3.4：R2 后聚合 evidence_exhausted，≥3 则跳 R3
@@ -1454,6 +1504,14 @@ async def run_debate(
                 if exhausted_count >= 3:
                     da_skipped_reason = "evidence_exhausted"
                     da_result = None
+                    ok_da, da_issues = verify_da_fact_check(
+                        None,
+                        agent_ids=tuple(agents),
+                        da_skipped_reason=da_skipped_reason,
+                    )
+                    if not ok_da:
+                        fail_quality_gate("da", da_issues)
+                    record_quality_warnings("da", da_issues)
                     append_stage("da", _append_round, path, 3, None)
                 else:
                     try:
@@ -1470,6 +1528,14 @@ async def run_debate(
                         if audit_writer is not None:
                             audit_writer.abort()
                         raise
+                    ok_da, da_issues = verify_da_fact_check(
+                        da_result,
+                        agent_ids=tuple(agents),
+                        da_skipped_reason=None,
+                    )
+                    if not ok_da:
+                        fail_quality_gate("da", da_issues)
+                    record_quality_warnings("da", da_issues)
                     append_stage("da", _append_da_round, path, da_result)
                     completed_stages.append("da")
 
@@ -1493,6 +1559,10 @@ async def run_debate(
         # f2 §3.5/3.6：运行时降级时 confidence_cap=40
         if runtime_degraded and consensus and consensus.conviction > 40:
             consensus.conviction = 40
+        ok_r4, r4_issues = verify_divergence_report(consensus)
+        if not ok_r4:
+            fail_quality_gate("r4", r4_issues)
+        record_quality_warnings("r4", r4_issues)
         append_stage("synthesizer", _append_synthesizer_round, path, consensus)
         completed_stages.append("synthesizer")
 
@@ -1546,6 +1616,8 @@ async def run_debate(
         )
     if r1_quality_warnings:
         terminal_observations.extend(r1_quality_warnings)
+    if quality_warnings:
+        terminal_observations.extend(quality_warnings)
     if runtime_degraded:
         terminal_observations.append(degraded_reason or "runtime_degraded")
     if da_skipped_reason:

@@ -555,6 +555,8 @@ async def test_low_r1_error_rate_is_not_runtime_degraded(tmp_path, monkeypatch):
                         "final_signal": "neutral",
                         "conviction": 30,
                         "consensus_summary": "降级测试",
+                        "divergence_level": "medium",
+                        "calibration_status": "uncalibrated",
                     }
                 ),
                 {},
@@ -1001,6 +1003,8 @@ async def test_low_r1_error_rate_keeps_da_skip_and_all_quality_reasons(
                         "final_signal": "neutral",
                         "conviction": 30,
                         "consensus_summary": "低错误率",
+                        "divergence_level": "low",
+                        "calibration_status": "uncalibrated",
                     }
                 ),
                 {},
