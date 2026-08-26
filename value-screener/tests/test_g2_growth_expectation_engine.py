@@ -38,7 +38,7 @@ def source(field: str, *, degradation_status: str = "clean", freshness: str = "f
     }
 
 
-def input_payload(*, market_value: float = 1200.0, industry=None):
+def input_payload(*, market_value: float = 1800.0, industry=None):
     return {
         "schema_version": "g2-growth-expectation-input-v1",
         "ticker": "600519.SH",
@@ -97,7 +97,7 @@ def assumptions(mode: str = "fixed_growth_rate"):
     }
 
 
-def compute(mode="fixed_growth_rate", *, market_value=1200.0, industry=None):
+def compute(mode="fixed_growth_rate", *, market_value=1800.0, industry=None):
     return compute_growth_expectation_diagnostic(
         validate_diagnostic_input(input_payload(market_value=market_value, industry=industry)),
         validate_assumption_snapshot(assumptions(mode)),
@@ -107,7 +107,7 @@ def compute(mode="fixed_growth_rate", *, market_value=1200.0, industry=None):
 
 
 def test_fixed_growth_engine_returns_anchors_reverse_and_signed_values():
-    diagnostic = compute(market_value=100.0)
+    diagnostic = compute(market_value=1800.0)
 
     assert diagnostic.calculation_status in {"clean", "degraded"}
     assert diagnostic.current_business_value.epv_proxy_range == pytest.approx((1266.6666667, 1800.0))
@@ -130,13 +130,13 @@ def test_fixed_duration_engine_solves_only_growth_rate():
 def test_sensitivity_is_bounded_and_higher_discount_rate_reduces_epv():
     diagnostic = compute()
     values = {
-        item.assumption_key: item
+        (item.assumption_key, item.metric): item
         for item in diagnostic.sensitivity
     }
 
-    assert values["cost_of_equity"].impact_range[0] <= values["cost_of_equity"].impact_range[1]
-    assert values["maintenance_capex_ratio"].impact_range[0] <= values["maintenance_capex_ratio"].impact_range[1]
-    assert values["cost_of_equity"].value == pytest.approx(0.11)
+    assert values[("cost_of_equity", "current_business_value")].impact_range[0] <= values[("cost_of_equity", "current_business_value")].impact_range[1]
+    assert values[("maintenance_capex_ratio", "current_business_value")].impact_range[0] <= values[("maintenance_capex_ratio", "current_business_value")].impact_range[1]
+    assert values[("cost_of_equity", "current_business_value")].value == pytest.approx(0.11)
 
 
 def test_missing_industry_is_visible_as_degraded_warning():

@@ -1018,11 +1018,14 @@ class SensitivityScenario:
     assumption_key: str
     value: float
     impact_range: tuple[float, float]
+    metric: str | None = None
 
     def __post_init__(self) -> None:
         _require_text("assumption_key", self.assumption_key)
         _require_number("value", self.value)
         _require_range("impact_range", self.impact_range)
+        if self.metric is not None:
+            _require_text("metric", self.metric)
 
     @classmethod
     def from_dict(cls, value: Mapping[str, Any]) -> "SensitivityScenario":
@@ -1031,23 +1034,27 @@ class SensitivityScenario:
         _require_no_unknown_fields(
             "sensitivity scenario",
             value,
-            ("assumption_key", "value", "impact_range"),
+            ("assumption_key", "value", "impact_range", "metric"),
         )
         try:
             return cls(
                 assumption_key=value["assumption_key"],
                 value=value["value"],
                 impact_range=tuple(value["impact_range"]),
+                metric=value.get("metric"),
             )
         except (KeyError, TypeError) as exc:
             _raise_invalid_structure("sensitivity scenario", exc)
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        payload = {
             "assumption_key": self.assumption_key,
             "value": self.value,
             "impact_range": list(self.impact_range),
         }
+        if self.metric is not None:
+            payload["metric"] = self.metric
+        return payload
 
 
 @dataclass(frozen=True)
@@ -1712,7 +1719,7 @@ def _validate_sensitivity_binding(
             )
         bound_value = assumptions[scenario.assumption_key]
         if isinstance(bound_value, tuple):
-            low, high = bound_value
+            low, high = min(bound_value), max(bound_value)
             if not low <= scenario.value <= high:
                 raise ContractError(
                     f"sensitivity value is outside assumption "

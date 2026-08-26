@@ -14,13 +14,19 @@ from data.lib.growth_expectation_contract import (
     SensitivityScenario,
     AssumptionSnapshot,
     CurrentBusinessValue,
+    ContractError,
+    validate_diagnostic_binding,
+    validate_diagnostic_input,
+    validate_assumption_snapshot,
     compute_diagnostic_digest,
     compute_input_digest,
     evaluate_applicability,
 )
 
-FORMULA_VERSION = "v0-epv-proxy"
+FORMULA_VERSION = "v0-epv-proxy-repair-2"
 MAX_SOLVER_YEARS = 50
+MAX_SOLVER_GROWTH = 1_000_000.0
+SOLVER_RESIDUAL_TOLERANCE = 1e-8
 _SCENARIOS = ("conservative", "base", "optimistic")
 
 
@@ -50,92 +56,409 @@ def _epv_range(input: DiagnosticInput, assumptions: dict[str, object]) -> tuple[
     return (min(candidates), max(candidates))
 
 
-def _pv_growth(value: float, growth: float, years: float, discount: float, terminal_growth: float, terminal_multiple: float) -> float:
-    if discount <= terminal_growth or value <= 0 or growth < 0 or years < 0:
+def _pv_growth(
+    earnings_basis: float,
+    growth: float,
+    years: float,
+    discount: float,
+    terminal_growth: float,
+    terminal_multiple: float,
+    *,
+    terminal_earnings: float | None = None,
+) -> float:
+    if (
+        discount <= terminal_growth
+        or earnings_basis <= 0
+        or growth < 0
+        or years < 0
+        or (terminal_earnings is not None and terminal_earnings <= 0)
+    ):
         return math.nan
-    yearly = 0.0
-    for year in range(1, int(math.ceil(years)) + 1):
-        if year > years:
-            break
-        yearly += value * (1 + growth) ** year / (1 + discount) ** year
-    terminal_profit = value * (1 + growth) ** years
+    terminal_earnings = (
+        earnings_basis if terminal_earnings is None else terminal_earnings
+    )
+    full_years = int(math.floor(years))
+    yearly = sum(
+        earnings_basis * (1 + growth) ** year / (1 + discount) ** year
+        for year in range(1, full_years + 1)
+    )
+    fraction = years - full_years
+    if fraction:
+        next_year = full_years + 1
+        yearly += fraction * (
+            earnings_basis
+            * (1 + growth) ** next_year
+            / (1 + discount) ** next_year
+        )
+    terminal_profit = terminal_earnings * (1 + growth) ** years
     terminal = terminal_profit * terminal_multiple / (1 + discount) ** years
     return yearly + terminal
 
 
-def _solve_duration(target: float, value: float, growth: float, discount: float, terminal_growth: float, terminal_multiple: float) -> float | None:
-    if target <= value:
-        return 0.0
-    lo, hi = 0.0, float(MAX_SOLVER_YEARS)
-    if _pv_growth(value, growth, hi, discount, terminal_growth, terminal_multiple) < target:
+def _solve_duration(
+    target: float,
+    earnings_basis: float,
+    growth: float,
+    discount: float,
+    terminal_growth: float,
+    terminal_multiple: float,
+    *,
+    terminal_earnings: float,
+) -> float | None:
+    tolerance = SOLVER_RESIDUAL_TOLERANCE * max(1.0, target)
+
+    def residual(years: float) -> float:
+        value = _pv_growth(
+            earnings_basis,
+            growth,
+            years,
+            discount,
+            terminal_growth,
+            terminal_multiple,
+            terminal_earnings=terminal_earnings,
+        )
+        return value - target if math.isfinite(value) else math.nan
+
+    def solve_bracket(
+        left: float,
+        right: float,
+        left_residual: float,
+        right_residual: float,
+    ) -> float | None:
+        if abs(left_residual) <= tolerance:
+            return left
+        if abs(right_residual) <= tolerance:
+            return right
+        if left_residual * right_residual > 0:
+            return None
+        lo, hi = left, right
+        lo_residual, hi_residual = left_residual, right_residual
+        for _ in range(80):
+            mid = (lo + hi) / 2
+            mid_residual = residual(mid)
+            if not math.isfinite(mid_residual):
+                return None
+            if lo_residual * mid_residual <= 0:
+                hi, hi_residual = mid, mid_residual
+            else:
+                lo, lo_residual = mid, mid_residual
+        result = residual((lo + hi) / 2)
+        if math.isfinite(result) and abs(result) <= tolerance:
+            return (lo + hi) / 2
         return None
+
+    # Between two integer durations, the yearly component is affine in the
+    # fractional year and the terminal component is exponential. Therefore
+    # each interval has at most one stationary point and at most two roots.
+    # Bracketing around that exact stationary point avoids relying on a
+    # sampling grid to notice a narrow internal turn.
+    ratio = (1.0 + growth) / (1.0 + discount)
+    log_ratio = math.log(ratio) if ratio > 0 else math.nan
+    for integer_year in range(MAX_SOLVER_YEARS):
+        left = float(integer_year)
+        right = float(integer_year + 1)
+        left_residual = residual(left)
+        right_residual = residual(right)
+        if not (
+            math.isfinite(left_residual) and math.isfinite(right_residual)
+        ):
+            continue
+
+        split = right
+        if log_ratio != 0.0 and math.isfinite(log_ratio):
+            try:
+                yearly_slope = earnings_basis * ratio ** (integer_year + 1)
+                terminal_at_left = (
+                    terminal_earnings
+                    * terminal_multiple
+                    * ratio ** integer_year
+                )
+                stationary_argument = -yearly_slope / (
+                    terminal_at_left * log_ratio
+                )
+                if stationary_argument > 0.0:
+                    candidate = math.log(stationary_argument) / log_ratio
+                    if 0.0 < candidate < 1.0:
+                        split = left + candidate
+            except (OverflowError, ZeroDivisionError, ValueError):
+                split = right
+
+        split_residual = residual(split)
+        if not math.isfinite(split_residual):
+            continue
+        for segment_left, segment_right, segment_left_residual, segment_right_residual in (
+            (left, split, left_residual, split_residual),
+            (split, right, split_residual, right_residual),
+        ):
+            result = solve_bracket(
+                segment_left,
+                segment_right,
+                segment_left_residual,
+                segment_right_residual,
+            )
+            if result is not None:
+                return result
+    return None
+
+
+def _solve_growth(
+    target: float,
+    earnings_basis: float,
+    years: float,
+    discount: float,
+    terminal_growth: float,
+    terminal_multiple: float,
+    *,
+    terminal_earnings: float,
+) -> float | None:
+    floor = _pv_growth(
+        earnings_basis,
+        0.0,
+        years,
+        discount,
+        terminal_growth,
+        terminal_multiple,
+        terminal_earnings=terminal_earnings,
+    )
+    if not math.isfinite(floor):
+        return None
+    if target < floor:
+        return None
+    if abs(target - floor) <= SOLVER_RESIDUAL_TOLERANCE * max(1.0, target):
+        return 0.0
+    lo, hi = 0.0, 1.0
+    while True:
+        upper = _pv_growth(
+            earnings_basis,
+            hi,
+            years,
+            discount,
+            terminal_growth,
+            terminal_multiple,
+            terminal_earnings=terminal_earnings,
+        )
+        if math.isfinite(upper) and upper >= target:
+            break
+        if hi >= MAX_SOLVER_GROWTH:
+            return None
+        hi = min(hi * 2, MAX_SOLVER_GROWTH)
     for _ in range(80):
         mid = (lo + hi) / 2
-        if _pv_growth(value, growth, mid, discount, terminal_growth, terminal_multiple) >= target:
+        value = _pv_growth(
+            earnings_basis,
+            mid,
+            years,
+            discount,
+            terminal_growth,
+            terminal_multiple,
+            terminal_earnings=terminal_earnings,
+        )
+        if not math.isfinite(value):
+            return None
+        if value >= target:
             hi = mid
         else:
             lo = mid
-    return hi
-
-
-def _solve_growth(target: float, value: float, years: float, discount: float, terminal_growth: float, terminal_multiple: float) -> float | None:
-    if target <= _pv_growth(value, 0.0, years, discount, terminal_growth, terminal_multiple):
-        return 0.0
-    lo, hi = 0.0, 5.0
-    if _pv_growth(value, hi, years, discount, terminal_growth, terminal_multiple) < target:
+    result = _pv_growth(
+        earnings_basis,
+        hi,
+        years,
+        discount,
+        terminal_growth,
+        terminal_multiple,
+        terminal_earnings=terminal_earnings,
+    )
+    if abs(result - target) > SOLVER_RESIDUAL_TOLERANCE * max(1.0, target):
         return None
-    for _ in range(80):
-        mid = (lo + hi) / 2
-        if _pv_growth(value, mid, years, discount, terminal_growth, terminal_multiple) >= target:
-            hi = mid
-        else:
-            lo = mid
     return hi
 
 
-def _reverse_scenarios(input: DiagnosticInput, assumptions: dict[str, object], business_value: tuple[float, float]) -> tuple[ReverseScenario, ...]:
+def _reverse_scenarios(
+    input: DiagnosticInput, assumptions: dict[str, object]
+) -> tuple[ReverseScenario, ...]:
     target = input.current_market_value
-    base_value = sum(business_value) / 2
+    earnings_basis = (
+        input.normalized_operating_cashflow
+        if assumptions["normalized_earnings_basis"]
+        == "normalized_operating_cashflow"
+        else input.normalized_net_profit
+    )
     discount = sum(assumptions["cost_of_equity"]) / 2
     terminal_growth = float(assumptions["maintenance_growth"])
     terminal_multiple = sum(assumptions["mature_pe"]) / 2
+    terminal_earnings = input.normalized_net_profit
     mode = assumptions["reverse_mode"]
     result = []
     if mode == "fixed_growth_rate":
         for name, growth in zip(_SCENARIOS, assumptions["reverse_fixed_growth_rate"]):
-            duration = _solve_duration(target, base_value, float(growth), discount, terminal_growth, terminal_multiple)
+            duration = _solve_duration(
+                target,
+                earnings_basis,
+                float(growth),
+                discount,
+                terminal_growth,
+                terminal_multiple,
+                terminal_earnings=terminal_earnings,
+            )
             if duration is None:
                 raise LookupError("no finite reverse solution")
-            result.append(ReverseScenario(
-                scenario=name, mode=mode, growth_rate=float(growth),
-                implied_high_growth_duration=duration,
-            ))
+            result.append(
+                ReverseScenario(
+                    scenario=name,
+                    mode=mode,
+                    growth_rate=float(growth),
+                    implied_high_growth_duration=duration,
+                )
+            )
     else:
         for name, years in zip(_SCENARIOS, assumptions["reverse_fixed_duration_years"]):
-            growth = _solve_growth(target, base_value, float(years), discount, terminal_growth, terminal_multiple)
+            growth = _solve_growth(
+                target,
+                earnings_basis,
+                float(years),
+                discount,
+                terminal_growth,
+                terminal_multiple,
+                terminal_earnings=terminal_earnings,
+            )
             if growth is None:
                 raise LookupError("no finite reverse solution")
-            result.append(ReverseScenario(
-                scenario=name, mode=mode, duration_years=float(years),
-                implied_growth_rate=growth,
-            ))
+            result.append(
+                ReverseScenario(
+                    scenario=name,
+                    mode=mode,
+                    duration_years=float(years),
+                    implied_growth_rate=growth,
+                )
+            )
     return tuple(result)
 
 
-def _sensitivity(input: DiagnosticInput, assumptions: dict[str, object]) -> tuple[SensitivityScenario, ...]:
-    epv = []
-    for ratio in assumptions["maintenance_capex_ratio"]:
-        for rate in assumptions["cost_of_equity"]:
-            local = dict(assumptions)
-            local["maintenance_capex_ratio"] = (ratio, ratio)
-            local["cost_of_equity"] = (rate, rate)
-            epv.append(_epv_range(input, local)[0])
-    output = [
-        SensitivityScenario("maintenance_capex_ratio", float(assumptions["maintenance_capex_ratio"][1]), (min(epv), max(epv))),
-        SensitivityScenario("cost_of_equity", float(assumptions["cost_of_equity"][1]), (min(epv), max(epv))),
-        SensitivityScenario("mature_pe", float(assumptions["mature_pe"][1]), _range_product(input.normalized_net_profit, assumptions["mature_pe"])),
-    ]
-    return tuple(output)
+def _diagnostic_metrics(
+    input: DiagnosticInput, assumptions: dict[str, object]
+) -> dict[str, object]:
+    epv_range = _epv_range(input, assumptions)
+    mature_range = _range_product(input.normalized_net_profit, assumptions["mature_pe"])
+    business = (min(epv_range[0], mature_range[0]), max(epv_range[1], mature_range[1]))
+    reverse = _reverse_scenarios(input, assumptions)
+    credible = (
+        float(assumptions["credible_growth_rate"][0]),
+        float(assumptions["credible_growth_rate"][2]),
+    )
+    base_reverse = reverse[1]
+    implied = (
+        base_reverse.implied_growth_rate
+        if base_reverse.implied_growth_rate is not None
+        else base_reverse.growth_rate
+    )
+    credible_mid = float(assumptions["credible_growth_rate"][1])
+    if implied <= credible_mid:
+        overdraft = "within_credible_range"
+    elif implied <= credible[1]:
+        overdraft = "above_base_case"
+    else:
+        overdraft = "above_credible_upper_bound"
+    earnings_basis = (
+        input.normalized_operating_cashflow
+        if assumptions["normalized_earnings_basis"]
+        == "normalized_operating_cashflow"
+        else input.normalized_net_profit
+    )
+    pulled_forward = _solve_duration(
+        input.current_market_value,
+        earnings_basis,
+        credible_mid,
+        sum(assumptions["cost_of_equity"]) / 2,
+        float(assumptions["maintenance_growth"]),
+        sum(assumptions["mature_pe"]) / 2,
+        terminal_earnings=input.normalized_net_profit,
+    )
+    if pulled_forward is None:
+        raise LookupError("no finite value-pulled-forward duration")
+    return {
+        "epv_range": epv_range,
+        "mature_range": mature_range,
+        "business": business,
+        "reverse": reverse,
+        "credible": credible,
+        "implied": float(implied),
+        "expectation_gap": (
+            float(implied) - credible[1],
+            float(implied) - credible[0],
+        ),
+        "overdraft": overdraft,
+        "pulled_forward": pulled_forward,
+    }
+
+
+def _sensitivity(
+    input: DiagnosticInput, assumptions: dict[str, object]
+) -> tuple[tuple[SensitivityScenario, ...], tuple[str, ...]]:
+    base_rate = sum(assumptions["cost_of_equity"]) / 2
+    base_ratio = sum(assumptions["maintenance_capex_ratio"]) / 2
+    base_credible = float(assumptions["credible_growth_rate"][1])
+    base_pe = sum(assumptions["mature_pe"]) / 2
+    base_assumptions = dict(assumptions)
+    base_assumptions["maintenance_capex_ratio"] = (base_ratio, base_ratio)
+    base_assumptions["cost_of_equity"] = (base_rate, base_rate)
+    base_assumptions["credible_growth_rate"] = (
+        base_credible,
+        base_credible,
+        base_credible,
+    )
+    base_assumptions["mature_pe"] = (base_pe, base_pe)
+    points = {
+        "maintenance_capex_ratio": assumptions["maintenance_capex_ratio"],
+        "cost_of_equity": assumptions["cost_of_equity"],
+        "credible_growth_rate": assumptions["credible_growth_rate"],
+        "mature_pe": assumptions["mature_pe"],
+    }
+    metric_values: dict[tuple[str, str], list[float]] = {}
+    warnings: list[str] = []
+    for assumption_key, bounds in points.items():
+        for point in bounds:
+            local = dict(base_assumptions)
+            if assumption_key == "credible_growth_rate":
+                local[assumption_key] = (float(point), float(point), float(point))
+            else:
+                local[assumption_key] = (float(point), float(point))
+            try:
+                metrics = _diagnostic_metrics(input, local)
+            except (LookupError, OverflowError, ValueError):
+                warnings.append(
+                    f"sensitivity_incomplete:{assumption_key}={point}"
+                )
+                continue
+            scalar_values = {
+                "current_business_value": sum(metrics["business"]) / 2,
+                "reverse_base": metrics["implied"],
+                "expectation_gap": sum(metrics["expectation_gap"]) / 2,
+                "value_pulled_forward_years": metrics["pulled_forward"],
+                "expectation_overdraft": float(
+                    {
+                        "within_credible_range": 0,
+                        "above_base_case": 1,
+                        "above_credible_upper_bound": 2,
+                    }[metrics["overdraft"]]
+                ),
+            }
+            for metric, scalar in scalar_values.items():
+                metric_values.setdefault((assumption_key, metric), []).append(scalar)
+    output = []
+    for (assumption_key, metric), values in metric_values.items():
+        bound = assumptions[assumption_key]
+        value = float(bound[1])
+        output.append(
+            SensitivityScenario(
+                assumption_key,
+                value,
+                (min(values), max(values)),
+                metric=metric,
+            )
+        )
+    if not output:
+        raise LookupError("no evaluable sensitivity perturbation")
+    return tuple(output), tuple(sorted(set(warnings)))
 
 
 def _failure(input: DiagnosticInput, snapshot: AssumptionSnapshot, *, dossier_snapshot: str, profile_version: str, failure_kind: str, reason_code: str, reason: str) -> GrowthExpectationDiagnostic:
@@ -151,14 +474,25 @@ def _failure(input: DiagnosticInput, snapshot: AssumptionSnapshot, *, dossier_sn
         currency=input.currency, value_scale=input.value_scale, calculation_status=status,
         quality_status="failed" if status == "failed" else "warning", decision_grade="diagnostic",
         failure_kind=failure_kind, reason_codes=(reason_code,), reasons=(reason,), warnings=(),
-        current_market_value=None, input_snapshot=None, assumption_snapshot=snapshot,
+        current_market_value=None, input_snapshot=input, assumption_snapshot=snapshot,
         current_business_value=None, priced_growth_value_range=None, priced_growth_share_range=None,
         reverse_scenarios=(), credible_growth_range=None, expectation_gap=None,
         value_pulled_forward_years=None, expectation_overdraft="not_evaluable",
         sensitivity=(), evidence=(), counter_evidence=(), unknowns=(), what_would_change_my_mind=(),
         provenance=provenance, input_digest=input_digest, diagnostic_digest="0" * 64,
     )
-    return replace(payload, diagnostic_digest=compute_diagnostic_digest(payload.to_dict()))
+    finalized = replace(
+        payload, diagnostic_digest=compute_diagnostic_digest(payload.to_dict())
+    )
+    return validate_growth_expectation_artifact(
+        finalized.to_dict(),
+        ticker=input.ticker,
+        input_payload=input.to_dict(),
+        assumption_snapshot=snapshot.to_dict(),
+        formula_version=FORMULA_VERSION,
+        dossier_snapshot=dossier_snapshot,
+        profile_version=profile_version,
+    )
 
 
 def compute_growth_expectation_diagnostic(
@@ -180,14 +514,25 @@ def compute_growth_expectation_diagnostic(
         )
     assumptions = _values(assumption_snapshot)
     try:
+        if input.normalized_net_profit <= 0:
+            return _failure(
+                input,
+                assumption_snapshot,
+                dossier_snapshot=dossier_snapshot,
+                profile_version=profile_version,
+                failure_kind="data_insufficient",
+                reason_code="invalid_value",
+                reason="positive normalized net profit is required for mature PE anchor",
+            )
         epv_range = _epv_range(input, assumptions)
         mature_range = _range_product(input.normalized_net_profit, assumptions["mature_pe"])
         business = (min(epv_range[0], mature_range[0]), max(epv_range[1], mature_range[1]))
-        reverse = _reverse_scenarios(input, assumptions, business)
+        reverse = _reverse_scenarios(input, assumptions)
+        sensitivity, sensitivity_warnings = _sensitivity(input, assumptions)
     except LookupError as exc:
         return _failure(input, assumption_snapshot, dossier_snapshot=dossier_snapshot, profile_version=profile_version,
                         failure_kind="computation_failed", reason_code="solver_no_solution", reason=str(exc))
-    except ValueError as exc:
+    except (ValueError, OverflowError) as exc:
         return _failure(input, assumption_snapshot, dossier_snapshot=dossier_snapshot, profile_version=profile_version,
                         failure_kind="computation_failed", reason_code="solver_non_finite", reason=str(exc))
     priced = (input.current_market_value - business[1], input.current_market_value - business[0])
@@ -196,14 +541,26 @@ def compute_growth_expectation_diagnostic(
     base_reverse = reverse[1]
     implied = base_reverse.implied_growth_rate if base_reverse.implied_growth_rate is not None else base_reverse.growth_rate
     gap = (float(implied) - credible[1], float(implied) - credible[0])
-    overdraft = "within_credible_range" if implied <= credible[1] else "above_credible_upper_bound"
+    credible_mid = float(assumptions["credible_growth_rate"][1])
+    if implied <= credible_mid:
+        overdraft = "within_credible_range"
+    elif implied <= credible[1]:
+        overdraft = "above_base_case"
+    else:
+        overdraft = "above_credible_upper_bound"
     pulled_forward = _solve_duration(
         input.current_market_value,
-        sum(business) / 2,
+        (
+            input.normalized_operating_cashflow
+            if assumptions["normalized_earnings_basis"]
+            == "normalized_operating_cashflow"
+            else input.normalized_net_profit
+        ),
         float(assumptions["credible_growth_rate"][1]),
         sum(assumptions["cost_of_equity"]) / 2,
         float(assumptions["maintenance_growth"]),
         sum(assumptions["mature_pe"]) / 2,
+        terminal_earnings=input.normalized_net_profit,
     )
     if pulled_forward is None:
         return _failure(
@@ -212,6 +569,7 @@ def compute_growth_expectation_diagnostic(
             reason_code="solver_no_solution", reason="no finite value-pulled-forward duration",
         )
     warnings = list(verdict.warnings)
+    warnings.extend(sensitivity_warnings)
     if any(source.freshness != "fresh" for source in input.sources):
         warnings.append("source_freshness_degraded")
     if any(source.degradation_status != "clean" for source in input.sources):
@@ -235,8 +593,164 @@ def compute_growth_expectation_diagnostic(
             epv_range, mature_range, "wide" if "anchor_divergence" in warnings else None),
         priced_growth_value_range=priced, priced_growth_share_range=share, reverse_scenarios=reverse,
         credible_growth_range=credible, expectation_gap=gap, value_pulled_forward_years=pulled_forward,
-        expectation_overdraft=overdraft, sensitivity=_sensitivity(input, assumptions),
+        expectation_overdraft=overdraft, sensitivity=sensitivity,
         evidence=(), counter_evidence=(), unknowns=(), what_would_change_my_mind=(),
         provenance=provenance, input_digest=input_digest, diagnostic_digest="0" * 64,
     )
-    return replace(artifact, diagnostic_digest=compute_diagnostic_digest(artifact.to_dict()))
+    finalized = replace(
+        artifact, diagnostic_digest=compute_diagnostic_digest(artifact.to_dict())
+    )
+    return validate_growth_expectation_artifact(
+        finalized.to_dict(),
+        ticker=input.ticker,
+        input_payload=input.to_dict(),
+        assumption_snapshot=assumption_snapshot.to_dict(),
+        formula_version=FORMULA_VERSION,
+        dossier_snapshot=dossier_snapshot,
+        profile_version=profile_version,
+    )
+
+
+def validate_growth_expectation_artifact(
+    value: dict[str, object],
+    *,
+    ticker: str,
+    input_payload: dict[str, object],
+    assumption_snapshot: dict[str, object],
+    formula_version: str,
+    dossier_snapshot: str,
+    profile_version: str,
+) -> GrowthExpectationDiagnostic:
+    """Validate contract binding plus deterministic derived conclusions."""
+    diagnostic = validate_diagnostic_binding(
+        value,
+        ticker=ticker,
+        input_payload=input_payload,
+        assumption_snapshot=assumption_snapshot,
+        formula_version=formula_version,
+        dossier_snapshot=dossier_snapshot,
+        profile_version=profile_version,
+    )
+    legacy_formula = "v0-epv-proxy"
+    if formula_version == legacy_formula:
+        return diagnostic
+    if formula_version != FORMULA_VERSION:
+        raise ContractError("unsupported engine formula version")
+    parsed_input = validate_diagnostic_input(input_payload)
+    parsed_snapshot = validate_assumption_snapshot(assumption_snapshot)
+    assumptions = _values(parsed_snapshot)
+    verdict = evaluate_applicability(
+        parsed_input,
+        assumption_snapshot=parsed_snapshot,
+    )
+    if diagnostic.calculation_status in {"not_evaluable", "failed"}:
+        if diagnostic.warnings:
+            raise ContractError("failure warnings are not reproducible")
+        if not verdict.applicable:
+            expected_status = verdict.calculation_status
+            expected_kind = verdict.failure_kind
+            expected_code = verdict.reason_codes[0]
+            if (
+                diagnostic.calculation_status != expected_status
+                or diagnostic.failure_kind != expected_kind
+                or diagnostic.reason_codes != (expected_code,)
+                or diagnostic.reasons != verdict.reasons
+                or diagnostic.input_snapshot != parsed_input
+            ):
+                raise ContractError("failure artifact is not reproducible")
+            return diagnostic
+        if parsed_input.normalized_net_profit <= 0:
+            if (
+                diagnostic.calculation_status != "not_evaluable"
+                or diagnostic.failure_kind != "data_insufficient"
+                or diagnostic.reason_codes != ("invalid_value",)
+                or diagnostic.reasons
+                != (
+                    "positive normalized net profit is required for mature PE anchor",
+                )
+            ):
+                raise ContractError("failure reason is not reproducible")
+            return diagnostic
+        try:
+            _diagnostic_metrics(parsed_input, assumptions)
+        except LookupError as exc:
+            if diagnostic.failure_kind != "computation_failed" or diagnostic.reason_codes != (
+                "solver_no_solution",
+            ) or diagnostic.reasons != (str(exc),):
+                raise ContractError("solver failure reason is not reproducible")
+            return diagnostic
+        except (ValueError, OverflowError) as exc:
+            if diagnostic.failure_kind != "computation_failed" or diagnostic.reason_codes != (
+                "solver_non_finite",
+            ) or diagnostic.reasons != (str(exc),):
+                raise ContractError("numeric failure reason is not reproducible")
+            return diagnostic
+        raise ContractError("failure artifact claims failure for computable input")
+    if parsed_input.normalized_net_profit <= 0:
+        raise ContractError("positive normalized net profit is required")
+    try:
+        metrics = _diagnostic_metrics(parsed_input, assumptions)
+        expected_sensitivity, sensitivity_warnings = _sensitivity(
+            parsed_input, assumptions
+        )
+    except (LookupError, ValueError, OverflowError) as exc:
+        raise ContractError("derived artifact cannot be recomputed") from exc
+    expected_business = CurrentBusinessValue(
+        metrics["epv_range"],
+        metrics["mature_range"],
+        "wide"
+        if abs(metrics["epv_range"][1] - metrics["mature_range"][0])
+        > max(metrics["epv_range"][1], metrics["mature_range"][1]) * 0.5
+        else None,
+    )
+    expected_priced = (
+        parsed_input.current_market_value - metrics["business"][1],
+        parsed_input.current_market_value - metrics["business"][0],
+    )
+    expected_share = (
+        expected_priced[0] / parsed_input.current_market_value,
+        expected_priced[1] / parsed_input.current_market_value,
+    )
+    expected_warnings = list(verdict.warnings)
+    expected_warnings.extend(sensitivity_warnings)
+    if any(source.freshness != "fresh" for source in parsed_input.sources):
+        expected_warnings.append("source_freshness_degraded")
+    if any(source.degradation_status != "clean" for source in parsed_input.sources):
+        expected_warnings.append("source_degradation_visible")
+    if abs(metrics["epv_range"][1] - metrics["mature_range"][0]) > max(
+        metrics["epv_range"][1], metrics["mature_range"][1]
+    ) * 0.5:
+        expected_warnings.append("anchor_divergence")
+    expected_warnings = tuple(expected_warnings)
+    expected_status = "degraded" if expected_warnings else "clean"
+    if diagnostic.calculation_status != expected_status:
+        raise ContractError("calculation_status is not reproducible")
+    if diagnostic.warnings != expected_warnings:
+        raise ContractError("warnings are not reproducible")
+    if diagnostic.failure_kind is not None:
+        raise ContractError("successful artifact has failure_kind")
+    if diagnostic.current_business_value != expected_business:
+        raise ContractError("current_business_value is not reproducible")
+    expected_credible = (
+        float(assumptions["credible_growth_rate"][0]),
+        float(assumptions["credible_growth_rate"][2]),
+    )
+    if diagnostic.credible_growth_range != expected_credible:
+        raise ContractError("credible_growth_range is not reproducible")
+    if diagnostic.priced_growth_value_range != expected_priced:
+        raise ContractError("priced_growth_value_range is not reproducible")
+    if diagnostic.priced_growth_share_range != expected_share:
+        raise ContractError("priced_growth_share_range is not reproducible")
+    if diagnostic.reverse_scenarios != metrics["reverse"]:
+        raise ContractError("reverse_scenarios are not reproducible")
+    if diagnostic.expectation_gap != metrics["expectation_gap"]:
+        raise ContractError("expectation_gap is not reproducible")
+    if diagnostic.expectation_overdraft != metrics["overdraft"]:
+        raise ContractError("expectation_overdraft is not reproducible")
+    if diagnostic.value_pulled_forward_years != metrics["pulled_forward"]:
+        raise ContractError("value_pulled_forward_years is not reproducible")
+    if diagnostic.sensitivity != expected_sensitivity:
+        raise ContractError("sensitivity is not reproducible")
+    if diagnostic.evidence:
+        raise ContractError("engine V0 does not produce evidence records")
+    return diagnostic

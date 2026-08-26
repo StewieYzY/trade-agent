@@ -1,0 +1,11 @@
+- [x] 1.1 Add RED tests for reverse residual, negative net profit, midpoint overdraft, adaptive growth search, sensitivity independence and failure snapshot.
+- [x] 1.2 Add OpenSpec repair proposal/design/spec/tasks and validate them.
+- [x] 2.1 Separate reverse earnings/terminal basis from current-business anchor.
+- [x] 2.2 Add solver bracket, adaptive upper-bound and residual validation.
+- [x] 2.3 Implement single-variable complete sensitivity and midpoint overdraft classification.
+- [x] 2.4 Return input-preserving failure artifacts and validate binding inside facade.
+- [x] 3.1 Run focused and full regression tests.
+- [x] 3.2 Run compileall, OpenSpec strict validation and diff check.
+- [ ] 3.3 Complete independent repair child-only review.
+- [ ] 4.1 Archive repair change.
+- [ ] 4.2 Merge, push and clean repair worktree/branch.
