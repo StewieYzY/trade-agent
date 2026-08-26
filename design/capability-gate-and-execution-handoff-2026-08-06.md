@@ -175,6 +175,7 @@
 - 独立 review 最终结论：P0/P1 均为 0；review 发现已修复，剩余 P2 测试覆盖建议已
   补充或明确为 contract-level fixture 边界。
 - 专用 child worktree、分支和测试生成产物已清理；根目录既有 WIP 保持 untouched。
+- 该 child 已完成并关闭；当前无 active child，下一执行入口为 G2 3.4。
 - G2 capability 仍为 `not passed`，不启动 G3；下一步推进 G2 3.4，证明强单 Agent
   与 Council 共享同一 diagnostic artifact/assumption snapshot，且共享确定性计算
   不计为 Council 独有信息增量。
@@ -1202,8 +1203,9 @@ G1 umbrella 7.1/7.2/7.3 已完成，release decision 已记录
 `G1=passed`、`G2=approved_to_start_formal_acceptance`。
 G2 1.1、1.2、1.3、2.1、2.2、2.3、3.1、3.2 和 3.3 已完成并归档。f3f 的有界诊断已
 停止串台根因循环；dossier data-quality 已补齐事实来源与追溯；growth expectation
-contract、v0 engine 和 dossier integration 已完成并归档；当前
-`main == origin/main == 8e0ef35`，专用 child worktree/branch 已清理。下一步推进
+contract、v0 engine 和 dossier integration 已完成并归档；`dcfbcae` 为 3.2
+engine repair 的代码合入点，专用 child worktree/branch 已清理。当前无 active child，
+当前 push 状态以 Git 实况为准，下一步推进
 G2 3.4：证明强单 Agent 与 Council 使用同一 diagnostic artifact/assumption snapshot，
 共享确定性计算不计为 Council 独有信息增量。不得将 G2 capability/runtime 描述为已
 通过，也不得提前启动 G3 runtime 或产品化。
