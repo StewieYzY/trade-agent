@@ -105,22 +105,6 @@ def _solve_duration(
     *,
     terminal_earnings: float,
 ) -> float | None:
-    points = [
-        MAX_SOLVER_YEARS * index / 200
-        for index in range(201)
-    ]
-    values = [
-        _pv_growth(
-            earnings_basis,
-            growth,
-            years,
-            discount,
-            terminal_growth,
-            terminal_multiple,
-            terminal_earnings=terminal_earnings,
-        )
-        for years in points
-    ]
     tolerance = SOLVER_RESIDUAL_TOLERANCE * max(1.0, target)
 
     def residual(years: float) -> float:
@@ -163,72 +147,57 @@ def _solve_duration(
             return (lo + hi) / 2
         return None
 
-    def scan(
-        scan_points: list[float],
-        scan_values: list[float],
-    ) -> float | None:
-        for years, value in zip(scan_points, scan_values):
-            if math.isfinite(value) and abs(value - target) <= tolerance:
-                return years
-        for left, right, left_value, right_value in zip(
-            scan_points[:-1],
-            scan_points[1:],
-            scan_values[:-1],
-            scan_values[1:],
+    # Between two integer durations, the yearly component is affine in the
+    # fractional year and the terminal component is exponential. Therefore
+    # each interval has at most one stationary point and at most two roots.
+    # Bracketing around that exact stationary point avoids relying on a
+    # sampling grid to notice a narrow internal turn.
+    ratio = (1.0 + growth) / (1.0 + discount)
+    log_ratio = math.log(ratio) if ratio > 0 else math.nan
+    for integer_year in range(MAX_SOLVER_YEARS):
+        left = float(integer_year)
+        right = float(integer_year + 1)
+        left_residual = residual(left)
+        right_residual = residual(right)
+        if not (
+            math.isfinite(left_residual) and math.isfinite(right_residual)
         ):
-            if not (math.isfinite(left_value) and math.isfinite(right_value)):
-                continue
+            continue
+
+        split = right
+        if log_ratio != 0.0 and math.isfinite(log_ratio):
+            try:
+                yearly_slope = earnings_basis * ratio ** (integer_year + 1)
+                terminal_at_left = (
+                    terminal_earnings
+                    * terminal_multiple
+                    * ratio ** integer_year
+                )
+                stationary_argument = -yearly_slope / (
+                    terminal_at_left * log_ratio
+                )
+                if stationary_argument > 0.0:
+                    candidate = math.log(stationary_argument) / log_ratio
+                    if 0.0 < candidate < 1.0:
+                        split = left + candidate
+            except (OverflowError, ZeroDivisionError, ValueError):
+                split = right
+
+        split_residual = residual(split)
+        if not math.isfinite(split_residual):
+            continue
+        for segment_left, segment_right, segment_left_residual, segment_right_residual in (
+            (left, split, left_residual, split_residual),
+            (split, right, split_residual, right_residual),
+        ):
             result = solve_bracket(
-                left,
-                right,
-                left_value - target,
-                right_value - target,
+                segment_left,
+                segment_right,
+                segment_left_residual,
+                segment_right_residual,
             )
             if result is not None:
                 return result
-        return None
-
-    direct = scan(points, values)
-    if direct is not None:
-        return direct
-
-    # A fixed-growth curve can turn around within a coarse cell. Refine the
-    # cells adjacent to sampled local extrema, then scan them in duration order
-    # so the first returned root is the shortest deterministic solution.
-    extrema_cells: set[int] = set()
-    residual_values = [
-        value - target if math.isfinite(value) else math.nan for value in values
-    ]
-    for index in range(1, len(points) - 1):
-        left_residual, center_residual, right_residual = (
-            residual_values[index - 1],
-            residual_values[index],
-            residual_values[index + 1],
-        )
-        if not all(
-            math.isfinite(item)
-            for item in (left_residual, center_residual, right_residual)
-        ):
-            continue
-        if (
-            (center_residual <= left_residual and center_residual <= right_residual)
-            or (
-                center_residual >= left_residual
-                and center_residual >= right_residual
-            )
-        ):
-            extrema_cells.update((index - 1, index))
-
-    for index in sorted(extrema_cells):
-        left, right = points[index], points[index + 1]
-        refined_points = [
-            left + (right - left) * offset / 64
-            for offset in range(65)
-        ]
-        refined_values = [residual(years) + target for years in refined_points]
-        result = scan(refined_points, refined_values)
-        if result is not None:
-            return result
     return None
 
 

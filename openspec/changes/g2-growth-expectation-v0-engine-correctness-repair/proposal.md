@@ -24,5 +24,8 @@
 ## Impact
 
 - 修改 `value-screener/data/lib/growth_expectation_engine.py`。
+- 修改 `value-screener/data/lib/growth_expectation_contract.py`：增加向后兼容的可选
+  `SensitivityScenario.metric` 字段，并调整三值
+  `credible_growth_rate` sensitivity 的边界绑定。
 - 扩展 engine focused tests。
 - 新增本 repair 的 OpenSpec artifacts；不接入 dossier、InvestmentThesis、Council、G1/G3，不修改根目录 WIP。

@@ -139,6 +139,22 @@ def test_fixed_growth_finds_shortest_of_two_roots_in_one_coarse_cell():
     assert duration == pytest.approx(0.493221, abs=1e-5)
 
 
+def test_fixed_growth_finds_narrow_roots_hidden_inside_coarse_cell():
+    target = 1627.292319682054
+
+    duration = _solve_duration(
+        target,
+        150.0,
+        0.01,
+        0.10,
+        0.02,
+        20.0,
+        terminal_earnings=81.36608972178529,
+    )
+
+    assert duration == pytest.approx(0.029259845285, abs=1e-8)
+
+
 def test_fixed_duration_reverse_can_solve_growth_above_five_without_false_failure():
     growth = _solve_growth(
         1_000_000_000.0,
@@ -322,8 +338,9 @@ def test_extreme_finite_credible_growth_degrades_on_incomplete_sensitivity():
     )
 
     assert diagnostic.calculation_status == "degraded"
-    assert any(
-        warning.startswith("sensitivity_incomplete:credible_growth_rate=")
+    assert diagnostic.warnings
+    assert all(
+        warning.startswith("sensitivity_incomplete:")
         for warning in diagnostic.warnings
     )
     assert validate_growth_expectation_artifact(
