@@ -17,4 +17,4 @@
 - [x] 3.2 Run full tests, compileall, OpenSpec strict validation, and git diff check.
 - [x] 3.3 Complete an independent child-only review and address any findings.
 - [x] 3.4 Archive this child with engineering evidence; do not mark G2 capability passed.
-- [ ] 3.5 Commit, merge into main, push origin/main, and remove only this change worktree/branch.
+- [x] 3.5 Commit, merge into main, push origin/main, and remove only this change worktree/branch.
