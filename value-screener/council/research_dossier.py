@@ -23,6 +23,7 @@ build_research_dossier(symbol, core_snapshot=None) 组装分层 dossier：
 from __future__ import annotations
 
 from council.features import assemble_council_features
+from council.growth_expectation_integration import add_growth_expectation_to_dossier
 
 
 def _is_error(data) -> bool:
@@ -90,6 +91,10 @@ def build_research_dossier(
     retrieved_at: str | None = None,
     now=None,
     stale_after_days: int = 730,
+    growth_expectation_diagnostic=None,
+    dossier_snapshot: str | None = None,
+    profile_version: str | None = None,
+    growth_expectation_assumption_snapshot=None,
 ) -> dict:
     """组装分层研究档案（L3 专用结构化研究档案层）.
 
@@ -205,4 +210,13 @@ def build_research_dossier(
     dossier["fact_contract"] = fact_contract
     dossier["quality_status"] = quality_status
     dossier["quality_reasons"] = quality_reasons
+    if growth_expectation_diagnostic is not None:
+        dossier = add_growth_expectation_to_dossier(
+            dossier,
+            growth_expectation_diagnostic,
+            ticker=symbol,
+            dossier_snapshot=dossier_snapshot,
+            profile_version=profile_version,
+            assumption_snapshot=growth_expectation_assumption_snapshot,
+        )
     return dossier

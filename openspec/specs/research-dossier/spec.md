@@ -2,7 +2,6 @@
 
 ## Purpose
 L3 专用结构化研究档案层 —— 把 L3 输入从 21 扁平量化字段升级为分层 dossier：公共底座（core_snapshot）+ 角色侧重（定性维度按 agent 分发），制造 R1 信息不对称，不污染 L2 快管线（assemble_snapshot 保持不变）。
-
 ## Requirements
 ### Requirement: 分层研究档案结构
 `build_research_dossier(symbol: str, core_snapshot: dict | None = None) -> dict` SHALL 组装分层 dossier（L3 专用结构化研究档案层——把 L3 输入从 21 扁平量化字段升级为分层 dossier：公共底座 + 角色侧重，制造 R1 信息不对称；`core_snapshot` 全员共享、定性维度按角色分发，不污染 L2 快管线 `assemble_snapshot` 不变），返回结构：
@@ -184,3 +183,36 @@ agent 的 user message SHALL 物理分区，研报不当事实：
 #### Scenario: 研报引用写明市场预期
 - **WHEN** user message 含研报数据
 - **THEN** SHALL 标注「市场预期认为……」，不当事实陈述
+
+### Requirement: Dossier preserves a bound growth diagnostic artifact
+
+`build_research_dossier` SHALL accept an optional already-computed `growth_expectation_diagnostic` and, when supplied, SHALL validate its complete contract binding against the canonical dossier identity before returning. The returned dossier SHALL preserve the artifact as JSON-compatible data under `growth_expectation_diagnostic` and expose the same data as `valuation_expectation` without recomputation or numeric field rewriting.
+
+#### Scenario: Valid artifact is injected and preserved
+
+- **WHEN** a valid diagnostic artifact for the requested ticker is supplied with matching dossier/profile/formula provenance
+- **THEN** the dossier SHALL contain the artifact, its `valuation_expectation` view, both digests, the assumption snapshot, provenance and the original calculation/quality status
+
+#### Scenario: Identity or digest mismatch fails closed
+
+- **WHEN** the supplied artifact ticker, input snapshot, assumption snapshot, provenance or input/diagnostic digest does not match the requested dossier identity
+- **THEN** dossier construction SHALL raise a contract validation error and SHALL NOT return a partially bound dossier
+
+#### Scenario: Legacy dossier call remains compatible
+
+- **WHEN** no growth diagnostic is supplied
+- **THEN** dossier construction SHALL retain its existing fact sections and SHALL NOT invoke the growth expectation engine implicitly
+
+### Requirement: Dossier preserves diagnostic quality and failure semantics
+
+The dossier SHALL retain `clean`, `degraded`, `not_evaluable` and `failed` `calculation_status` values, diagnostic `quality_status`, warnings/reasons, failure kind/reason codes, assumption snapshot and provenance exactly as supplied by the validated artifact. A `not_evaluable` or `failed` artifact SHALL not be transformed into a numeric conclusion.
+
+#### Scenario: Degraded warnings remain visible
+
+- **WHEN** the diagnostic has `calculation_status=degraded`
+- **THEN** the dossier SHALL expose its non-empty warnings and preserve `quality_status=warning` without promoting it to clean
+
+#### Scenario: Failure result contains no numeric conclusion
+
+- **WHEN** the diagnostic has `calculation_status=not_evaluable` or `failed`
+- **THEN** the dossier diagnostic and valuation view SHALL contain no current market value, business value, growth range, reverse scenario or sensitivity conclusion
