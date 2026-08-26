@@ -781,6 +781,8 @@ DA_LLM_RESPONSE = json.dumps({
     "what_would_change_my_mind": "证据不足",
     "out_of_circle": False,
     "historical_parallel": None,
+    "evidence_quality_assessment": {"buffett": "accurate"},
+    "recommendation": "no_clear_winner",
     "blind_spots": [
         {"title": "管理层风险", "detail": "具体数据", "which_agents_missed_it": ["buffett"]}
     ],
@@ -792,6 +794,8 @@ SYNTHESIZER_LLM_RESPONSE = json.dumps({
     "consensus_summary": "共识总结",
     "dissent_points": [{"topic": "估值", "who_disagrees": "munger", "their_reason": "PE过高"}],
     "pending_verification": ["现金流验证"],
+    "divergence_level": "medium",
+    "calibration_status": "uncalibrated",
 }, ensure_ascii=False)
 
 
@@ -944,6 +948,8 @@ class TestFullCouncil:
             "core_thesis": "盲点", "key_metrics": [], "risks": [],
             "what_would_change_my_mind": "证据", "out_of_circle": False,
             "historical_parallel": None,
+            "evidence_quality_assessment": {"buffett": "accurate"},
+            "recommendation": "no_clear_winner",
             "blind_spots": [{"title": "test", "detail": "detail", "which_agents_missed_it": ["buffett"]}],
         }, ensure_ascii=False, indent=2)
         syn_json = json.dumps({
@@ -951,6 +957,8 @@ class TestFullCouncil:
             "consensus_summary": "缓存共识",
             "dissent_points": [{"topic": "估值", "who_disagrees": "munger", "their_reason": "PE高"}],
             "pending_verification": ["缓存验证"],
+            "divergence_level": "medium",
+            "calibration_status": "uncalibrated",
         }, ensure_ascii=False, indent=2)
 
         md = f"""
