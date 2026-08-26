@@ -17,10 +17,10 @@
 > 架构决策：`design/architecture-decisions.md`
 >
 > runtime/integration baseline：
-> `dcfbcae merge: g2 growth expectation v0 repair`
+> `ad02683 docs(g2): close shared diagnostic proof child`
 >
 > 当前 main/docs baseline：
-> 代码合入基线为 `dcfbcae`；本 handoff 以本次 docs-only sync 为准，当前 push
+> 代码合入基线为 `ad02683`；本 handoff 以本次 docs-only sync 为准，当前 push
 > 状态以 Git 实况为准。
 > 根目录既有 untracked user WIP（`.cache/`、`data/`、`debate/`、`watchlist/`
 > 等）保持 untouched，未被本次 stage/commit。
@@ -28,7 +28,7 @@
 > 历史 GitHub 审查入口：
 > `PR #1 codex/mainline-sync-2026-08-05 → main`
 >
-> 当前本地集成以代码基线 `main@dcfbcae` 为准；本次 handoff docs 仅同步当前
+> 当前本地集成以代码基线 `main@ad02683` 为准；本次 handoff docs 仅同步当前
 > 状态，不改变代码合入基线。PR #1 以下信息仅作
 > 历史审查快照，不再作为当前 branch 或 merge 状态判断依据。
 >
@@ -179,6 +179,27 @@
 - G2 capability 仍为 `not passed`，不启动 G3；下一步推进 G2 3.4，证明强单 Agent
   与 Council 共享同一 diagnostic artifact/assumption snapshot，且共享确定性计算
   不计为 Council 独有信息增量。
+
+## 0.9. 2026-08-26 G2 3.4 shared diagnostic/assumption proof closure
+
+- `g2-shared-diagnostic-assumption-proof` 已完成独立 child-only review、archive、
+  merge 和 push；归档目录为
+  `openspec/changes/archive/2026-08-26-g2-shared-diagnostic-assumption-proof/`。
+- child commit：`5364738 feat(g2): prove shared diagnostic assumptions`；
+  main 收口 commit：`ad02683 docs(g2): close shared diagnostic proof child`。
+- proof/harness 以只读、确定性方式验证 strong single-agent 与 Council 共享
+  `growth_expectation_diagnostic`、`assumption_snapshot` 及 ticker/run/dossier/
+  diagnostic digest 审计链；artifact、sidecar、digest 或 path mismatch 均
+  fail closed。共享确定性计算不计入 Council 独有增量，只有有效新增反证、风险、
+  关键变量或假设质疑计入。
+- focused tests：`13 passed`；全量测试：`1296 passed`；OpenSpec strict：
+  `35 passed, 0 failed`；compileall、`git diff --check` 通过。
+- 本 child 未调用真实 LLM/provider，未修改 growth expectation engine，未接入
+  G2 4.1 主流程质量门。
+- child worktree 和分支已清理；根目录既有 WIP 保持 untouched。当前无 active
+  child。
+- G2 capability 仍为 `not passed`，不启动 G3；下一步推进 G2 4.1
+  `g2-main-flow-quality-gates`（具体 child 名称需在提案时冻结）。
 
 ## 1. 本文件的唯一权威地位
 
@@ -1068,8 +1089,8 @@ M4: not started as current execution milestone
 - 不进入 G1 ranking/hard gate。
 
 ```text
-M4.5: 3.1 contract, 3.2 v0 engine, and 3.3 dossier integration closed; 3.4 shared
-diagnostic/assumption evidence is next
+M4.5: 3.1 contract, 3.2 v0 engine, 3.3 dossier integration, and 3.4 shared
+diagnostic/assumption evidence closed
 ```
 
 ## 18. M5：InvestmentThesis 与 A/B
@@ -1201,14 +1222,12 @@ Queue 1 repair closure 已完成：`R-G1-001`、`R-G1-002`、`R-G1-003`、
 `main@8513096`，M3 6.1/6.2 = closed，Top 20 evidence 已保留。
 G1 umbrella 7.1/7.2/7.3 已完成，release decision 已记录
 `G1=passed`、`G2=approved_to_start_formal_acceptance`。
-G2 1.1、1.2、1.3、2.1、2.2、2.3、3.1、3.2 和 3.3 已完成并归档。f3f 的有界诊断已
-停止串台根因循环；dossier data-quality 已补齐事实来源与追溯；growth expectation
-contract、v0 engine 和 dossier integration 已完成并归档；`dcfbcae` 为 3.2
-engine repair 的代码合入点，专用 child worktree/branch 已清理。当前无 active child，
-当前 push 状态以 Git 实况为准，下一步推进
-G2 3.4：证明强单 Agent 与 Council 使用同一 diagnostic artifact/assumption snapshot，
-共享确定性计算不计为 Council 独有信息增量。不得将 G2 capability/runtime 描述为已
-通过，也不得提前启动 G3 runtime 或产品化。
+G2 1.1、1.2、1.3、2.1、2.2、2.3、3.1、3.2、3.3 和 3.4 已完成并归档。f3f 的
+有界诊断已停止串台根因循环；dossier data-quality 已补齐事实来源与追溯；
+growth expectation contract、v0 engine、dossier integration 和 shared
+diagnostic/assumption proof 已完成并归档；当前无 active child，下一步推进
+G2 4.1 main-flow quality-gates。不得将 G2 capability/runtime 描述为已通过，也不得
+提前启动 G3 runtime 或产品化。
 
 ## 23. 下一窗口启动方式
 
