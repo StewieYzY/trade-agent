@@ -157,6 +157,28 @@
 - G2 capability 仍为 `not passed`，不启动 G3；下一步推进 G2 3.3
   `g2-growth-expectation-dossier-integration`。
 
+## 0.8. 2026-08-26 G2 3.3 growth expectation dossier integration closure
+
+- `g2-growth-expectation-dossier-integration` 已完成独立 child-only review、
+  archive、merge 和 push；归档目录为
+  `openspec/changes/archive/2026-08-26-g2-growth-expectation-dossier-integration/`。
+- implementation commit：`17b6bd7 feat(g2): integrate growth expectation dossier artifact`；
+  archive/spec sync commit：`1c8d298 docs(g2): archive dossier integration change`；
+  已通过 merge commit `ce357ea` 合入 `main`，并以 closure commit `8e0ef35`
+  完成 child tasks 收口后 push。
+- dossier 与 InvestmentThesis integration 保留并重新校验 diagnostic artifact 的
+  identity/digest、assumption snapshot、provenance、calculation/quality status、
+  warnings/reasons 和 `clean/degraded/not_evaluable/failed` 语义；失败结果禁止发布
+  数值结论。不修改 growth expectation engine 计算逻辑。
+- focused integration tests：`12 passed`；合入前全量测试：`1283 passed`；
+  OpenSpec strict：`35 passed, 0 failed`；compileall、`git diff --check` 通过。
+- 独立 review 最终结论：P0/P1 均为 0；review 发现已修复，剩余 P2 测试覆盖建议已
+  补充或明确为 contract-level fixture 边界。
+- 专用 child worktree、分支和测试生成产物已清理；根目录既有 WIP 保持 untouched。
+- G2 capability 仍为 `not passed`，不启动 G3；下一步推进 G2 3.4，证明强单 Agent
+  与 Council 共享同一 diagnostic artifact/assumption snapshot，且共享确定性计算
+  不计为 Council 独有信息增量。
+
 ## 1. 本文件的唯一权威地位
 
 本文件是当前唯一生效的大规划 Handoff，统一记录：
@@ -1045,7 +1067,8 @@ M4: not started as current execution milestone
 - 不进入 G1 ranking/hard gate。
 
 ```text
-M4.5: 3.1 contract and 3.2 v0 engine closed; 3.3 dossier integration is next
+M4.5: 3.1 contract, 3.2 v0 engine, and 3.3 dossier integration closed; 3.4 shared
+diagnostic/assumption evidence is next
 ```
 
 ## 18. M5：InvestmentThesis 与 A/B
@@ -1177,11 +1200,13 @@ Queue 1 repair closure 已完成：`R-G1-001`、`R-G1-002`、`R-G1-003`、
 `main@8513096`，M3 6.1/6.2 = closed，Top 20 evidence 已保留。
 G1 umbrella 7.1/7.2/7.3 已完成，release decision 已记录
 `G1=passed`、`G2=approved_to_start_formal_acceptance`。
-G2 1.1、1.2、1.3、2.1、2.2、2.3、3.1 和 3.2 已完成并归档。f3f 的有界诊断已
+G2 1.1、1.2、1.3、2.1、2.2、2.3、3.1、3.2 和 3.3 已完成并归档。f3f 的有界诊断已
 停止串台根因循环；dossier data-quality 已补齐事实来源与追溯；growth expectation
-contract 与 v0 engine 已完成。下一步推进 G2 3.3
-`g2-growth-expectation-dossier-integration`。不得将 G2 capability/runtime 描述为已通过，
-也不得提前启动 G3 runtime 或产品化。
+contract、v0 engine 和 dossier integration 已完成并归档；当前
+`main == origin/main == 8e0ef35`，专用 child worktree/branch 已清理。下一步推进
+G2 3.4：证明强单 Agent 与 Council 使用同一 diagnostic artifact/assumption snapshot，
+共享确定性计算不计为 Council 独有信息增量。不得将 G2 capability/runtime 描述为已
+通过，也不得提前启动 G3 runtime 或产品化。
 
 ## 23. 下一窗口启动方式
 
