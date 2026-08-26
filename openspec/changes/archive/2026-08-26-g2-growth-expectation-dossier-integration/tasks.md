@@ -15,5 +15,5 @@
 - [x] 3.1 运行 focused tests 并完成 RED→GREEN，确认 engine/既有 dossier 行为无回归
 - [x] 3.2 运行 full pytest、compileall、`openspec validate --all --strict` 和 `git diff --check`
 - [x] 3.3 完成独立 child-only review，按当前 diff/代码/测试复核并修复 finding
-- [ ] 3.4 归档 child change，更新 G2 umbrella 3.3 勾选，提交并合入 main、push origin/main
-- [ ] 3.5 仅清理本 change worktree 与分支，确认根目录 WIP untouched
+- [x] 3.4 归档 child change，更新 G2 umbrella 3.3 勾选，提交并合入 main、push origin/main
+- [x] 3.5 仅清理本 change worktree 与分支，确认根目录 WIP untouched
