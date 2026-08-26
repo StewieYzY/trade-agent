@@ -17,10 +17,10 @@
 > 架构决策：`design/architecture-decisions.md`
 >
 > runtime/integration baseline：
-> `ad02683 docs(g2): close shared diagnostic proof child`
+> `7e74ef0 merge: g2 main flow quality gates`
 >
 > 当前 main/docs baseline：
-> 代码合入基线为 `ad02683`；本 handoff 以本次 docs-only sync 为准，当前 push
+> 代码合入基线为 `7e74ef0`；本 handoff 以本次 docs-only sync 为准，当前 push
 > 状态以 Git 实况为准。
 > 根目录既有 untracked user WIP（`.cache/`、`data/`、`debate/`、`watchlist/`
 > 等）保持 untouched，未被本次 stage/commit。
@@ -28,7 +28,7 @@
 > 历史 GitHub 审查入口：
 > `PR #1 codex/mainline-sync-2026-08-05 → main`
 >
-> 当前本地集成以代码基线 `main@ad02683` 为准；本次 handoff docs 仅同步当前
+> 当前本地集成以代码基线 `main@7e74ef0` 为准；本次 handoff docs 仅同步当前
 > 状态，不改变代码合入基线。PR #1 以下信息仅作
 > 历史审查快照，不再作为当前 branch 或 merge 状态判断依据。
 >
@@ -200,6 +200,23 @@
   child。
 - G2 capability 仍为 `not passed`，不启动 G3；下一步推进 G2 4.1
   `g2-main-flow-quality-gates`（具体 child 名称需在提案时冻结）。
+
+## 0.10. 2026-08-26 G2 4.1 main-flow quality-gates closure
+
+- `g2-main-flow-quality-gates` 已完成独立 child-only review、archive、merge 和
+  push；归档目录为
+  `openspec/changes/archive/2026-08-26-g2-main-flow-quality-gates/`。
+- child commit：`3e946fa feat(g2): wire quality gates into council flow`；
+  main merge commit：`7e74ef0 merge: g2 main flow quality gates`。
+- R1 grounding、R2 revision/new evidence、DA fact-check、R4 divergence 已接入
+  正常 Council 主流程；warning、skip、degraded、failed、incomplete 状态和原因
+  被传播并保留，污染或不完整结果不能成为 clean success 或成功缓存。
+- focused tests：`6 passed`；全量测试：`1302 passed`；OpenSpec strict：
+  `35 passed, 0 failed`；compileall、`git diff --check` 通过。
+- child worktree 和分支已清理；根目录既有 WIP 保持 untouched。未调用真实
+  LLM/provider，未完成 G2 4.2、4.3、正式 A/B 或真实 LLM 实跑。
+- G2 capability 仍为 `not passed`，不启动 G3；下一步推进 G2 4.2，持久化所有
+  soft warning、skip reason、runtime degraded 和 failed 状态。
 
 ## 1. 本文件的唯一权威地位
 
@@ -458,7 +475,8 @@ scope:
 | `g1-r-g1-003-rejected-canonical-visibility` | 4/4 | archived / integrated at `main@98570a1` | R-G1-003 closed after independent re-review |
 | `g2-strong-single-agent-fallback` | archived | archived; CR2 repair chain closed and governance synced at `main@0a9fb8a` after fresh independent review | R-G2-001/R-G2-002/R-G2-003 closed |
 | `g2-incomplete-cache-quality-status` | archived | archived / integrated at `main@d2d29c8` | G2 1.2 closed |
-| `g2-deep-investment-thesis` | 2/27 | in-progress | G2 umbrella，含 M4.5 |
+| `g2-main-flow-quality-gates` | archived / integrated at `main@7e74ef0` | closed | G2 4.1 closed |
+| `g2-deep-investment-thesis` | 11/27 | in-progress | G2 umbrella，含 M4.5 |
 | `f3c-r1-crosstalk-root-cause` | 5/17 | in-progress | M0 前置未闭 |
 | `g1-4-data-source-resilience` | 0/48 | in-progress | P2 已映射到既有 D1/D6 |
 | `g1-fast-personal-value-screening` | 16/16 | closed for G1 | 4.1/4.2/5.1/5.2/5.3/6.x/7.x 已闭环；G2 仅获准进入正式验收 |
@@ -1222,12 +1240,13 @@ Queue 1 repair closure 已完成：`R-G1-001`、`R-G1-002`、`R-G1-003`、
 `main@8513096`，M3 6.1/6.2 = closed，Top 20 evidence 已保留。
 G1 umbrella 7.1/7.2/7.3 已完成，release decision 已记录
 `G1=passed`、`G2=approved_to_start_formal_acceptance`。
-G2 1.1、1.2、1.3、2.1、2.2、2.3、3.1、3.2、3.3 和 3.4 已完成并归档。f3f 的
+G2 1.1、1.2、1.3、2.1、2.2、2.3、3.1、3.2、3.3、3.4 和 4.1 已完成并归档。f3f 的
 有界诊断已停止串台根因循环；dossier data-quality 已补齐事实来源与追溯；
 growth expectation contract、v0 engine、dossier integration 和 shared
-diagnostic/assumption proof 已完成并归档；当前无 active child，下一步推进
-G2 4.1 main-flow quality-gates。不得将 G2 capability/runtime 描述为已通过，也不得
-提前启动 G3 runtime 或产品化。
+diagnostic/assumption proof、main-flow quality-gates 已完成并归档；当前无 active
+child，下一步推进 G2 4.2：持久化所有 soft warning、skip reason、runtime degraded
+和 failed 状态。不得将 G2 capability/runtime 描述为已通过，也不得提前启动 G3
+runtime 或产品化。
 
 ## 23. 下一窗口启动方式
 

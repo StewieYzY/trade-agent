@@ -23,7 +23,7 @@
 
 ## 4. 主流程质量门
 
-- [ ] 4.1 完成并归档 main-flow quality-gates child change，将 R1 grounding、R2 revision/new evidence、DA fact-check、R4 divergence 接入正常运行
+- [x] 4.1 完成并归档 main-flow quality-gates child change，将 R1 grounding、R2 revision/new evidence、DA fact-check、R4 divergence 接入正常运行
 - [ ] 4.2 持久化所有 soft warning、skip reason、runtime degraded 和 failed 状态
 - [ ] 4.3 证明污染或不完整结果不会被下游当作 clean success
 
