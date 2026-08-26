@@ -18,7 +18,7 @@
 
 - [x] 3.1 完成并归档 `g2-growth-expectation-contract` child change，冻结输入/输出、用户 assumption snapshot、模型适用性、失败语义和 golden cases
 - [x] 3.2 完成并归档 `g2-growth-expectation-v0-engine` child change，实现 EPV proxy、成熟期估值交叉锚、两种 reverse 求解和敏感性分析
-- [ ] 3.3 完成并归档 `g2-growth-expectation-dossier-integration` child change，将不可变 diagnostic artifact 接入 dossier 与 `InvestmentThesis`
+- [x] 3.3 完成并归档 `g2-growth-expectation-dossier-integration` child change，将不可变 diagnostic artifact 接入 dossier 与 `InvestmentThesis`
 - [ ] 3.4 证明强单 Agent 与 Council 使用相同 diagnostic artifact/assumption snapshot，且共享确定性计算不计为 Council 独有增量
 
 ## 4. 主流程质量门
