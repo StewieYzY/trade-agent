@@ -6,6 +6,6 @@
 - [x] 2.4 Return input-preserving failure artifacts and validate binding inside facade.
 - [x] 3.1 Run focused and full regression tests.
 - [x] 3.2 Run compileall, OpenSpec strict validation and diff check.
-- [ ] 3.3 Complete independent repair child-only review.
-- [ ] 4.1 Archive repair change.
-- [ ] 4.2 Merge, push and clean repair worktree/branch.
+- [x] 3.3 Complete independent repair child-only review.
+- [x] 4.1 Archive repair change.
+- [x] 4.2 Merge and push repair change; retain worktrees/branches because they contain pre-existing untracked WIP.

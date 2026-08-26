@@ -17,19 +17,19 @@
 > 架构决策：`design/architecture-decisions.md`
 >
 > runtime/integration baseline：
-> `ed85508 merge: g2 growth expectation contract`
+> `dcfbcae merge: g2 growth expectation v0 repair`
 >
 > 当前 main/docs baseline：
-> 代码合入基线为 `ed85508`；当前 handoff 已提交并 push，`main` 与
-> `origin/main` 已同步。
+> 代码合入基线为 `dcfbcae`；本 handoff 以本次 docs-only sync 为准，当前 push
+> 状态以 Git 实况为准。
 > 根目录既有 untracked user WIP（`.cache/`、`data/`、`debate/`、`watchlist/`
 > 等）保持 untouched，未被本次 stage/commit。
 >
 > 历史 GitHub 审查入口：
 > `PR #1 codex/mainline-sync-2026-08-05 → main`
 >
-> 当前本地集成以代码基线 `main@ed85508` 为准；handoff docs 已在其后同步提交并
-> push。PR #1 以下信息仅作
+> 当前本地集成以代码基线 `main@dcfbcae` 为准；本次 handoff docs 仅同步当前
+> 状态，不改变代码合入基线。PR #1 以下信息仅作
 > 历史审查快照，不再作为当前 branch 或 merge 状态判断依据。
 >
 > 当前直接执行阶段：
@@ -137,6 +137,25 @@
 - `main` 与 `origin/main` 已同步；专用 child worktree 和分支已清理。
 - G2 capability 仍为 `not passed`，不启动 G3；下一步推进 G2 3.2
   `g2-growth-expectation-v0-engine`。
+
+## 0.7. 2026-08-26 G2 3.2 growth expectation v0 engine repair closure
+
+- `g2-growth-expectation-v0-engine` 已 archive，随后完成 correctness repair；
+  repair archive 位于
+  `openspec/changes/archive/2026-08-26-g2-growth-expectation-v0-engine-correctness-repair/`。
+- repair archive commit：`47251b0 chore(g2): archive growth expectation engine repair`；
+  已通过 merge commit `dcfbcae` 合入并 push 到 `main`。
+- repair 覆盖 reverse solver 残差/窄区间求根、敏感性完整性、midpoint overdraft、
+  failure artifact binding 和 legacy compatibility 边界。
+- focused tests：`31 passed`；全量测试：`1271 passed`；
+  OpenSpec strict：`34 passed, 0 failed`；compileall、`git diff --check` 通过。
+- `dcfbcae` 合入点已 push；repair worktree 和分支仍保留，因其中存在未跟踪
+  WIP，未修改、未 stage、未删除。
+- 本次 change 未修改 provider-health 文件。此前关于 provider-health 首次时序失败
+  后复跑通过的说法，当前归档未保留可独立核验的日志，因此不作为本 handoff 的已验证
+  evidence。
+- G2 capability 仍为 `not passed`，不启动 G3；下一步推进 G2 3.3
+  `g2-growth-expectation-dossier-integration`。
 
 ## 1. 本文件的唯一权威地位
 
@@ -1026,7 +1045,7 @@ M4: not started as current execution milestone
 - 不进入 G1 ranking/hard gate。
 
 ```text
-M4.5: 3.1 contract closed; 3.2 v0 engine is next
+M4.5: 3.1 contract and 3.2 v0 engine closed; 3.3 dossier integration is next
 ```
 
 ## 18. M5：InvestmentThesis 与 A/B
@@ -1158,9 +1177,10 @@ Queue 1 repair closure 已完成：`R-G1-001`、`R-G1-002`、`R-G1-003`、
 `main@8513096`，M3 6.1/6.2 = closed，Top 20 evidence 已保留。
 G1 umbrella 7.1/7.2/7.3 已完成，release decision 已记录
 `G1=passed`、`G2=approved_to_start_formal_acceptance`。
-G2 1.1、1.2、1.3 和 2.1、2.2、2.3 已完成并归档。f3f 的有界诊断已停止串台
-根因循环；dossier data-quality 已补齐事实来源与追溯。下一步推进 G2 3.1
-`g2-growth-expectation-contract`。不得将 G2 capability/runtime 描述为已通过，
+G2 1.1、1.2、1.3、2.1、2.2、2.3、3.1 和 3.2 已完成并归档。f3f 的有界诊断已
+停止串台根因循环；dossier data-quality 已补齐事实来源与追溯；growth expectation
+contract 与 v0 engine 已完成。下一步推进 G2 3.3
+`g2-growth-expectation-dossier-integration`。不得将 G2 capability/runtime 描述为已通过，
 也不得提前启动 G3 runtime 或产品化。
 
 ## 23. 下一窗口启动方式
