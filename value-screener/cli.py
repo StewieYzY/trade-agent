@@ -215,6 +215,32 @@ def fetch(ticker: str, dim: str = "basic"):
     typer.echo(json.dumps(data, ensure_ascii=False, default=str, indent=2))
 
 
+@app.command(name="growth-diagnostic")
+def growth_diagnostic(
+    input_path: str = typer.Option(..., "--input", help="冻结 input bundle JSON 路径"),
+    output_dir: str = typer.Option(..., "--output-dir", help="JSON/Markdown 输出目录"),
+):
+    """从显式冻结输入生成 deterministic growth diagnostic 产物。"""
+    from data.lib.frozen_growth_diagnostic import (
+        FrozenInputBundleError,
+        run_frozen_input_growth_diagnostic,
+    )
+
+    try:
+        path = Path(input_path)
+        if not path.is_file():
+            raise typer.BadParameter(
+                f"input file not found: {input_path}",
+                param_hint="--input",
+            )
+        bundle = json.loads(path.read_text(encoding="utf-8"))
+        artifacts = run_frozen_input_growth_diagnostic(bundle, output_dir)
+    except (OSError, ValueError, UnicodeError, json.JSONDecodeError, FrozenInputBundleError) as exc:
+        raise typer.BadParameter(str(exc), param_hint="--input") from exc
+    typer.echo(f"JSON: {artifacts.json_path}")
+    typer.echo(f"Markdown: {artifacts.markdown_path}")
+
+
 @app.command()
 def batch(tickers_file: str, dims: str = "basic,financials,kline,valuation,risk"):
     """从文件读 ticker 列表（每行一个），批量采集全维度."""
