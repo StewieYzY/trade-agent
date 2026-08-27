@@ -391,6 +391,7 @@ def _read_l3_output(ticker: str, run_date: str, watchlist_dir: Path) -> dict[str
         source_run_id: str | None = None,
     ) -> dict[str, Any]:
         from data.lib.quality_status import (
+            is_quality_artifact_bound,
             is_success_cache_eligible,
             quality_record_path as build_quality_record_path,
             read_quality_record,
@@ -398,6 +399,7 @@ def _read_l3_output(ticker: str, run_date: str, watchlist_dir: Path) -> dict[str
 
         payload_ticker = l3_data.get("ticker")
         payload_run_id = l3_data.get("run_id")
+        payload_execution_mode = l3_data.get("execution_mode")
         expected_run_id = source_run_id or payload_run_id
         expected_record_suffix = (
             f"quality_status/{canonical}/{expected_run_id}/record.json"
@@ -436,6 +438,24 @@ def _read_l3_output(ticker: str, run_date: str, watchlist_dir: Path) -> dict[str
                         expected_run_id,
                     )
                     quality_proof_valid = quality_record is not None
+                    if quality_record is not None and quality_record.artifact_path:
+                        quality_proof_valid = is_quality_artifact_bound(
+                            quality_root,
+                            quality_record,
+                            expected_date=run_date,
+                        )
+                    if (
+                        quality_record is not None
+                        and payload_execution_mode is not None
+                        and payload_execution_mode != quality_record.execution_mode
+                    ):
+                        quality_proof_valid = False
+                    if (
+                        quality_record is not None
+                        and quality_record.status == "complete"
+                        and payload_execution_mode != quality_record.execution_mode
+                    ):
+                        quality_proof_valid = False
             except (OSError, TypeError, ValueError):
                 quality_proof_valid = False
 
@@ -448,6 +468,14 @@ def _read_l3_output(ticker: str, run_date: str, watchlist_dir: Path) -> dict[str
             run_quality_reasons = list(quality_record.reasons)
             final_quality_gate = quality_record.final_quality_gate
             success_cache_eligible = is_success_cache_eligible(quality_record)
+        if not quality_proof_valid:
+            success_cache_eligible = False
+            if run_quality_status == "complete":
+                run_quality_status = "incomplete"
+                if not isinstance(run_quality_reasons, list):
+                    run_quality_reasons = []
+                if "quality_record_proof_invalid" not in run_quality_reasons:
+                    run_quality_reasons.append("quality_record_proof_invalid")
         dossier_quality_status = l3_data.get("dossier_quality_status", "degraded")
         dossier_quality_reasons = l3_data.get(
             "dossier_quality_reasons",

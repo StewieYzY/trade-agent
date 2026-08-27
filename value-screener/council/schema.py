@@ -369,6 +369,7 @@ class CouncilResult:
     # f2 §3.5/3.6 运行时降级标记（R1 error rate ≥0.4 触发，跳 R2/R3 + confidence_cap=40）
     council_degraded: bool = False
     degraded_reason: str | None = None
+    execution_mode: str = "council"
     run_id: str | None = None
     profile_version: str | None = None
     input_hash: str | None = None
@@ -414,6 +415,7 @@ class CouncilResult:
             "da_skipped_reason": self.da_skipped_reason,
             "council_degraded": self.council_degraded,
             "degraded_reason": self.degraded_reason,
+            "execution_mode": self.execution_mode,
             "run_id": self.run_id,
             "profile_version": self.profile_version,
             "input_hash": self.input_hash,

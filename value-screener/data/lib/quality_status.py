@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import os
 from dataclasses import asdict, dataclass, replace as dataclass_replace
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -108,7 +109,8 @@ class RunQualityRecord:
             raise QualityStatusError("canonical_ticker is invalid") from exc
         if canonical != self.canonical_ticker:
             raise QualityStatusError("canonical_ticker must be canonical")
-        _validate_run_id(self.run_id)
+        normalized_run_id = _validate_run_id(self.run_id)
+        object.__setattr__(self, "run_id", normalized_run_id)
         if self.execution_mode not in QUALITY_EXECUTION_MODES:
             raise QualityStatusError(
                 f"unknown execution_mode: {self.execution_mode!r}"
@@ -159,6 +161,34 @@ def is_success_cache_eligible(record: RunQualityRecord) -> bool:
     )
 
 
+def is_quality_artifact_bound(
+    base_dir: str | Path,
+    record: RunQualityRecord,
+    *,
+    expected_date: str | None = None,
+) -> bool:
+    """Validate that a quality record points to its own current run artifact."""
+    if not isinstance(record, RunQualityRecord) or not record.artifact_path:
+        return False
+    base = Path(base_dir).resolve()
+    artifact = Path(record.artifact_path)
+    if not artifact.is_absolute():
+        artifact = base / artifact
+    expected_root = (
+        base
+        / "debate"
+        / record.canonical_ticker
+        / record.run_id
+    ).resolve()
+    try:
+        artifact.resolve().relative_to(expected_root)
+    except ValueError:
+        return False
+    if expected_date is not None and artifact.name != f"{expected_date}.md":
+        return False
+    return artifact.is_file()
+
+
 def quality_record_path(
     base_dir: str | Path,
     canonical_ticker_value: str,
@@ -192,6 +222,9 @@ def write_quality_record(
 def replace_quality_record(
     base_dir: str | Path,
     record: RunQualityRecord,
+    *,
+    completed_stages_to_remove: tuple[str, ...] = (),
+    allow_complete_upgrade: bool = False,
 ) -> Path:
     """Atomically update a record already created for the same run."""
     path = quality_record_path(base_dir, record.canonical_ticker, record.run_id)
@@ -204,16 +237,50 @@ def replace_quality_record(
     )
     if (
         existing is not None
-        and STATUS_SAFETY_RANK[record.status] < STATUS_SAFETY_RANK[existing.status]
+        and record.status == "complete"
+        and existing.status != "complete"
+        and not (
+            allow_complete_upgrade
+            and existing.status == "incomplete"
+            and not existing.reasons
+            and not existing.completed_stages
+        )
     ):
         raise QualityStatusError(
             f"refusing status upgrade from {existing.status} to {record.status}"
         )
     if existing is not None:
-        record = dataclass_replace(
-            record,
-            reasons=tuple(dict.fromkeys((*existing.reasons, *record.reasons))),
+        initial_incomplete = (
+            existing.status == "incomplete"
+            and not existing.reasons
+            and not existing.completed_stages
         )
+        if (
+            not initial_incomplete
+            and existing.status != "complete"
+            and record.status != "incomplete"
+            and STATUS_SAFETY_RANK[record.status] < STATUS_SAFETY_RANK[existing.status]
+        ):
+            raise QualityStatusError(
+                f"refusing unsafe status transition from {existing.status} to "
+                f"{record.status}"
+            )
+        removals = set(_validate_stages(completed_stages_to_remove))
+        if not (record.status == "complete" and allow_complete_upgrade):
+            record = dataclass_replace(
+                record,
+                reasons=tuple(dict.fromkeys((*existing.reasons, *record.reasons))),
+                completed_stages=tuple(
+                    dict.fromkeys((*existing.completed_stages, *record.completed_stages))
+                ),
+            )
+        if removals:
+            record = dataclass_replace(
+                record,
+                completed_stages=tuple(
+                    stage for stage in record.completed_stages if stage not in removals
+                ),
+            )
     temp_path = path.with_suffix(".tmp")
     payload = json.dumps(record.to_dict(), ensure_ascii=False, indent=2)
     try:
@@ -240,6 +307,24 @@ def read_quality_record(
         return None
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(payload, dict):
+            raise QualityStatusError("invalid quality record: must be a JSON object")
+        required_fields = {
+            "canonical_ticker",
+            "run_id",
+            "status",
+            "reasons",
+            "completed_stages",
+            "final_quality_gate",
+            "execution_mode",
+            "schema_version",
+        }
+        missing_fields = sorted(required_fields - payload.keys())
+        if missing_fields:
+            raise QualityStatusError(
+                "invalid quality record: missing fields "
+                + ", ".join(missing_fields)
+            )
         record = RunQualityRecord(
             canonical_ticker=payload["canonical_ticker"],
             run_id=payload["run_id"],
@@ -248,8 +333,8 @@ def read_quality_record(
             completed_stages=payload.get("completed_stages", ()),
             final_quality_gate=payload.get("final_quality_gate", "not_run"),
             artifact_path=payload.get("artifact_path"),
-            execution_mode=payload.get("execution_mode", "council"),
-            schema_version=payload.get("schema_version", ""),
+            execution_mode=payload["execution_mode"],
+            schema_version=payload["schema_version"],
         )
         if (
             record.canonical_ticker != canonical
@@ -259,5 +344,5 @@ def read_quality_record(
                 "quality record payload identity does not match requested path"
             )
         return record
-    except (OSError, KeyError, TypeError, json.JSONDecodeError) as exc:
+    except (OSError, UnicodeError, KeyError, TypeError, json.JSONDecodeError) as exc:
         raise QualityStatusError(f"invalid quality record: {path}") from exc

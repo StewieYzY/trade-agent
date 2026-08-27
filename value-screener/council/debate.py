@@ -908,6 +908,7 @@ def _parse_debate_markdown(content: str, ticker: str) -> CouncilResult | None:
         da_skipped_reason=da_skipped_reason,
         council_degraded=council_degraded,
         degraded_reason=degraded_reason,
+        execution_mode="council",
         dossier_quality_status=dossier_quality_status,
         dossier_quality_reasons=dossier_quality_reasons,
         dossier_quality_contract=dossier_quality_contract,
@@ -991,13 +992,19 @@ def _check_cache(
     if not path.exists():
         return None
 
-    content = path.read_text(encoding="utf-8")
+    if not path.is_file():
+        return None
+    try:
+        content = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeError):
+        return None
     if "## Round 1" not in content:
         return None
 
     result = _parse_debate_markdown(content, ticker)
     if result is not None:
         result.run_id = matching_quality_record.run_id
+        result.execution_mode = matching_quality_record.execution_mode
         result.run_quality_status = matching_quality_record.status
         result.run_quality_reasons = list(matching_quality_record.reasons)
         result.final_quality_gate = matching_quality_record.final_quality_gate
@@ -1187,6 +1194,7 @@ async def run_debate(
         *,
         reasons: tuple[str, ...],
         final_quality_gate: str,
+        allow_complete_upgrade: bool = False,
     ) -> RunQualityRecord:
         nonlocal quality_path
         record = RunQualityRecord(
@@ -1201,6 +1209,12 @@ async def run_debate(
         )
         if quality_path is None:
             quality_path = write_quality_record(".", record)
+        else:
+            replace_quality_record(
+                ".",
+                record,
+                allow_complete_upgrade=allow_complete_upgrade,
+            )
         return record
 
     def persist_incomplete(stage: str) -> None:
@@ -1210,14 +1224,30 @@ async def run_debate(
             final_quality_gate="not_run",
         )
 
-    def append_stage(stage: str, writer, *args) -> None:
+    def append_stage(
+        stage: str,
+        writer,
+        *args,
+        completed_stage: str | None = "",
+        failure_stage: str | None = None,
+    ) -> None:
         try:
             writer(*args)
+            if completed_stage == "":
+                completed_stage = stage
+            if completed_stage is not None and completed_stage not in completed_stages:
+                completed_stages.append(completed_stage)
         except (Exception, asyncio.CancelledError):
-            persist_incomplete(stage)
+            persist_incomplete(failure_stage or stage)
             if audit_writer is not None:
                 audit_writer.abort()
             raise
+
+    persist_quality(
+        "incomplete",
+        reasons=(),
+        final_quality_gate="not_run",
+    )
 
     # f1-deviation-fix §7：token usage 累加器（供 AD-03 成本实测，写入辩论记录 md，不改 schema）
     usage_log: list[dict] = []
@@ -1335,9 +1365,6 @@ async def run_debate(
             )
         if ground_issues:
             record_quality_warnings("r1", [f"{agent.name}: {issue}" for issue in ground_issues])
-    if not r1_errors:
-        completed_stages.append("r1")
-
     # f2 §3.5/3.6：error rate ≥ 0.4 触发运行时降级（动态比，spec review #4）
     active_count = len(agents)
     failed_count = len(r1_errors)
@@ -1381,16 +1408,16 @@ async def run_debate(
             fail_quality_gate("da", da_issues)
         record_quality_warnings("da", da_issues)
         append_stage("r1", _append_round, path, 1, round1 if round1 else None)
-        append_stage("r2", _append_round, path, 2, None)  # 跳 R2
-        append_stage("da", _append_round, path, 3, None)  # 跳 R3
+        append_stage("r2", _append_round, path, 2, None, completed_stage=None)  # 跳 R2
+        append_stage("da", _append_round, path, 3, None, completed_stage=None)  # 跳 R3
     elif len(agents) == 1 and not mock_opinions:
         # 单 agent 且无 mock 注入：跳过 R2/R3（沿用原逻辑，不调分歧度分流——
         # 单 agent compute_divergence 无意义且会因 other_opinions 缺失影响 R2）
         round2 = None
         da_result = None
         append_stage("r1", _append_round, path, 1, round1)
-        append_stage("r2", _append_round, path, 2, None)
-        append_stage("da", _append_round, path, 3, None)
+        append_stage("r2", _append_round, path, 2, None, completed_stage=None)
+        append_stage("da", _append_round, path, 3, None, completed_stage=None)
     else:
         append_stage("r1", _append_round, path, 1, round1)
 
@@ -1430,7 +1457,6 @@ async def run_debate(
                 if not ok_r2:
                     fail_quality_gate("r2", r2_warnings)
                 record_quality_warnings("r2", r2_warnings)
-            completed_stages.append("r2")
             da_result = None
             append_stage("da", _append_round, path, 3, None)
         else:
@@ -1458,8 +1484,8 @@ async def run_debate(
                 if not ok_da:
                     fail_quality_gate("da", da_issues)
                 record_quality_warnings("da", da_issues)
-                append_stage("r2", _append_round, path, 2, None)
-                append_stage("da", _append_round, path, 3, None)
+                append_stage("r2", _append_round, path, 2, None, completed_stage=None)
+                append_stage("da", _append_round, path, 3, None, completed_stage=None)
             else:
                 # medium/high：跑 R2
                 r2_tasks = []
@@ -1495,8 +1521,6 @@ async def run_debate(
                     if not ok_r2:
                         fail_quality_gate("r2", r2_warnings)
                     record_quality_warnings("r2", r2_warnings)
-                completed_stages.append("r2")
-
                 # f2 §3.3/3.4：R2 后聚合 evidence_exhausted，≥3 则跳 R3
                 exhausted_count = sum(
                     1 for a in round2 if getattr(a, "evidence_exhausted", False)
@@ -1537,12 +1561,17 @@ async def run_debate(
                         fail_quality_gate("da", da_issues)
                     record_quality_warnings("da", da_issues)
                     append_stage("da", _append_da_round, path, da_result)
-                    completed_stages.append("da")
-
     # Round 4: 收敛共识（单 agent 或降级时仍跑 R4，用幸存 R1）
     if len(agents) == 1 and not runtime_degraded:
         consensus = None
-        append_stage("synthesizer", _append_round, path, 4, None)
+        append_stage(
+            "synthesizer",
+            _append_round,
+            path,
+            4,
+            None,
+            completed_stage=None,
+        )
     else:
         try:
             consensus = await _call_synthesizer(
@@ -1564,10 +1593,15 @@ async def run_debate(
             fail_quality_gate("r4", r4_issues)
         record_quality_warnings("r4", r4_issues)
         append_stage("synthesizer", _append_synthesizer_round, path, consensus)
-        completed_stages.append("synthesizer")
-
     # f1-deviation-fix §7：把 token usage 汇总写入辩论记录（AD-03 成本实测，不改 CouncilResult schema）
-    append_stage("synthesizer", _append_usage_summary, path, usage_log)
+    append_stage(
+        "quality_artifact",
+        _append_usage_summary,
+        path,
+        usage_log,
+        completed_stage=None,
+        failure_stage="quality_artifact",
+    )
 
     # f2 CR P2：编排状态写入 debate md，供缓存恢复（da_skipped_reason/council_degraded/degraded_reason）
     append_stage(
@@ -1603,12 +1637,12 @@ async def run_debate(
         da_skipped_reason=da_skipped_reason,
         council_degraded=council_degraded,
         degraded_reason=degraded_reason,
+        execution_mode=execution_mode,
         dossier_quality_status=dossier_quality_status,
         dossier_quality_reasons=dossier_quality_reasons,
         dossier_quality_contract=dossier_quality_contract,
     )
 
-    completed_stages.append("final_validation")
     terminal_observations: list[str] = []
     if r1_errors:
         terminal_observations.append(
@@ -1641,6 +1675,7 @@ async def run_debate(
         terminal_status,
         reasons=terminal_reasons,
         final_quality_gate=final_quality_gate,
+        allow_complete_upgrade=terminal_status == "complete",
     )
     result.run_id = quality_run_id
     result.run_quality_status = quality_record.status
@@ -1762,6 +1797,7 @@ async def run_debate(
                     artifact_path=str(path),
                     execution_mode=execution_mode,
                 ),
+                completed_stages_to_remove=("final_validation",),
             )
             audit_writer.abort()
             raise
@@ -1789,7 +1825,11 @@ async def run_debate(
                 artifact_path=str(path),
                 execution_mode=execution_mode,
             )
-            replace_quality_record(".", failed_record)
+            replace_quality_record(
+                ".",
+                failed_record,
+                completed_stages_to_remove=("final_validation",),
+            )
             raise
 
     return result
@@ -1869,6 +1909,7 @@ def _build_council_output(result: CouncilResult, debate_path: Path) -> dict:
         "da_skipped_reason": result.da_skipped_reason,
         "council_degraded": result.council_degraded,
         "degraded_reason": result.degraded_reason,
+        "execution_mode": result.execution_mode,
         "run_id": result.run_id,
         "profile_version": result.profile_version,
         "input_hash": result.input_hash,
