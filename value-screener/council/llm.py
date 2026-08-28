@@ -69,6 +69,7 @@ async def _http_call(
     user_message: str,
     model: str,
     timeout: float = 120.0,
+    max_attempts: int = 2,
 ) -> tuple[str, dict]:
     """共享的 OpenAI 兼容 HTTP 调用，返回 (content, usage).
 
@@ -87,9 +88,11 @@ async def _http_call(
     api_key = os.environ["LLM_API_KEY"]
     api_base = os.environ["LLM_API_BASE"]
 
-    # 重试逻辑：1 次重试，退避 2s
+    if not isinstance(max_attempts, int) or max_attempts < 1:
+        raise ValueError("max_attempts must be a positive integer")
+    # 重试逻辑：默认 1 次重试；M0.2 通过 call_llm_once 显式关闭
     last_exc = None
-    for attempt in range(2):
+    for attempt in range(max_attempts):
         try:
             async with httpx.AsyncClient(timeout=timeout) as client:
                 resp = await client.post(
@@ -115,7 +118,7 @@ async def _http_call(
                 return content, usage
         except (httpx.HTTPStatusError, httpx.TimeoutException) as e:
             last_exc = e
-            if attempt == 0:
+            if attempt + 1 < max_attempts:
                 await asyncio.sleep(2)  # 退避 2s
             else:
                 raise last_exc
@@ -156,6 +159,23 @@ async def call_llm(
     """
     resolved_model = model or _get_model_for_level(reasoning_level)
     return await _http_call(system_prompt, user_message, resolved_model, timeout=120.0)
+
+
+async def call_llm_once(
+    system_prompt: str,
+    user_message: str,
+    reasoning_level: str = "heavy",
+    model: str | None = None,
+) -> tuple[str, dict]:
+    """OpenAI-compatible LLM call with exactly one provider request."""
+    resolved_model = model or _get_model_for_level(reasoning_level)
+    return await _http_call(
+        system_prompt,
+        user_message,
+        resolved_model,
+        timeout=120.0,
+        max_attempts=1,
+    )
 
 
 async def call_llm_light(
