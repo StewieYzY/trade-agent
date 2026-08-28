@@ -241,6 +241,41 @@ def growth_diagnostic(
     typer.echo(f"Markdown: {artifacts.markdown_path}")
 
 
+@app.command(name="strong-agent-thesis-draft")
+def strong_agent_thesis_draft(
+    input_path: str = typer.Option(..., "--input", help="M0.1 diagnostic/dossier input JSON 路径"),
+    output_dir: str = typer.Option(..., "--output-dir", help="JSON/Markdown 输出目录"),
+    model: str = typer.Option(None, "--model", help="可选 strong model 覆盖"),
+):
+    """从 M0.1 diagnostic 和 dossier 生成一次 strong-agent Thesis 草稿。"""
+    import asyncio
+
+    from council.thesis_draft import (
+        ThesisDraftInputError,
+        run_strong_agent_thesis_draft,
+    )
+
+    try:
+        path = Path(input_path)
+        if not path.is_file():
+            raise typer.BadParameter(
+                f"input file not found: {input_path}",
+                param_hint="--input",
+            )
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        artifacts = asyncio.run(
+            run_strong_agent_thesis_draft(
+                payload,
+                output_dir,
+                model=model,
+            )
+        )
+    except (OSError, ValueError, UnicodeError, json.JSONDecodeError, ThesisDraftInputError) as exc:
+        raise typer.BadParameter(str(exc), param_hint="--input") from exc
+    typer.echo(f"JSON: {artifacts.json_path}")
+    typer.echo(f"Markdown: {artifacts.markdown_path}")
+
+
 @app.command()
 def batch(tickers_file: str, dims: str = "basic,financials,kline,valuation,risk"):
     """从文件读 ticker 列表（每行一个），批量采集全维度."""
