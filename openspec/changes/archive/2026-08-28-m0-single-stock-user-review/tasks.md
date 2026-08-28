@@ -27,4 +27,4 @@
 - [x] 4.2 运行全量 pytest，记录实际通过/跳过数量；确认没有 npm lint script，不声称存在 `npm run lint`。
 - [x] 4.3 做一次 fresh child-only review，检查 identity/digest 绑定、四维用户输入、template/evidence 边界、无 provider/LLM side effect、无交易语义和输出目录隔离；记录 `P0/P1/P2/残余风险`。
 - [x] 4.4 修复 review findings 后重新运行 focused、相关回归、全量 pytest、compileall、OpenSpec strict 和 diff check，确认根目录 WIP 未被纳入 child diff。
-- [ ] 4.5 归档 M0.3 OpenSpec，提交并合入 `main`、push `origin/main`，清理仅本 child 的 branch/worktree；若没有真实用户 feedback artifact，明确保留 `capability_status=not_evidence` 与 `M0 product loop=pending user review`。
+- [x] 4.5 归档 M0.3 OpenSpec，提交并合入 `main`、push `origin/main`，清理仅本 child 的 branch/worktree；若没有真实用户 feedback artifact，明确保留 `capability_status=not_evidence` 与 `M0 product loop=pending user review`。
