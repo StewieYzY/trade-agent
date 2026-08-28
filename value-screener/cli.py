@@ -276,6 +276,39 @@ def strong_agent_thesis_draft(
     typer.echo(f"Markdown: {artifacts.markdown_path}")
 
 
+@app.command(name="single-stock-user-review")
+def single_stock_user_review(
+    input_path: str = typer.Option(..., "--input", help="M0.3 review input JSON 路径"),
+    output_dir: str = typer.Option(..., "--output-dir", help="JSON/Markdown 输出目录"),
+):
+    """从显式 M0.1/M0.2 artifacts 和用户反馈生成离线人工复核记录。"""
+    from council.user_review import (
+        UserReviewInputError,
+        write_user_review_record,
+    )
+
+    try:
+        path = Path(input_path)
+        if not path.is_file():
+            raise typer.BadParameter(
+                f"input file not found: {input_path}",
+                param_hint="--input",
+            )
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, UnicodeError, json.JSONDecodeError) as exc:
+        raise typer.BadParameter(str(exc), param_hint="--input") from exc
+    try:
+        artifacts = write_user_review_record(payload, output_dir)
+    except UserReviewInputError as exc:
+        message = str(exc)
+        hint = "--output-dir" if message.startswith("output_dir") else "--input"
+        raise typer.BadParameter(message, param_hint=hint) from exc
+    except OSError as exc:
+        raise typer.BadParameter(str(exc), param_hint="--output-dir") from exc
+    typer.echo(f"JSON: {artifacts.json_path}")
+    typer.echo(f"Markdown: {artifacts.markdown_path}")
+
+
 @app.command()
 def batch(tickers_file: str, dims: str = "basic,financials,kline,valuation,risk"):
     """从文件读 ticker 列表（每行一个），批量采集全维度."""
