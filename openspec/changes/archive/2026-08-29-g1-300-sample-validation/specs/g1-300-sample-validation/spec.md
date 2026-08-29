@@ -1,8 +1,5 @@
-# g1-300-sample-validation Specification
+## ADDED Requirements
 
-## Purpose
-TBD - created by archiving change g1-300-sample-validation. Update Purpose after archive.
-## Requirements
 ### Requirement: Injectable deterministic sample selection
 
 The validation sample selector SHALL accept spot-shaped records and an industry mapping through explicit function inputs, and MUST NOT call AkShare, Eastmoney, another provider, or an LLM. The selector SHALL normalize records before sampling and SHALL produce the same ticker set and metadata for the same normalized inputs, seed, and configuration regardless of input row order.
@@ -83,11 +80,6 @@ The sample design SHALL expose the actual selected sample size and `full_market_
 
 - **WHEN** the selector has 300 selected records but some selected records are `source_failed`, `record_not_found`, `invalid_value`, or otherwise unusable
 - **THEN** `full_market_qualified_size` SHALL exclude those records and `full_market_eligible` SHALL remain false when fewer than 300 usable records remain
-
-#### Scenario: Unmapped records do not unlock full-market semantics
-
-- **WHEN** the selector has 300 selected records but their industry mappings are `_unmapped`, `source_failed`, `record_not_found`, or invalid
-- **THEN** `full_market_qualified_size` SHALL exclude those records and `full_market_eligible` SHALL remain false
 
 #### Scenario: Threshold cannot be reduced below three hundred
 

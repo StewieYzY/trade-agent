@@ -59,6 +59,18 @@ def _industry_mapping(
 
 def _run(records: list[dict], industries: dict, **kwargs) -> dict:
     module = _selector_module()
+    records = list(records)
+    kwargs.setdefault(
+        "input_ticker_set_hash",
+        module.compute_input_ticker_set_hash(
+            sorted(
+                {
+                    module.canonical_ticker(record["ticker"])
+                    for record in records
+                }
+            )
+        ),
+    )
     return module.select_validation_sample(
         records,
         industries,
@@ -345,6 +357,46 @@ def test_duplicate_canonical_records_merge_complementary_risk_fields():
     assert "risk:smallcap_h3" in selected["600001.SH"]["strata"]
 
 
+def test_duplicate_canonical_records_merge_status_and_provenance_fail_closed():
+    """Bug caught: duplicate metadata must not depend on row order or hide a failure."""
+    records = [
+        _record(
+            "600001",
+            status="complete",
+        ),
+        {
+            **_record("600001.SH", status="source_failed"),
+            "provenance": {
+                "source": "fixture/reference-failed",
+                "attempted_sources": ["fixture/reference"],
+            },
+        },
+    ]
+    industries = _industry_mapping({"600001.SH": "银行"})
+    module = _selector_module()
+    config = module.SampleSelectionConfig(
+        industry_quota_total=1,
+        industry_cap=1,
+        risk_st_max=0,
+        risk_smallcap_max=0,
+        risk_negative_pe_max=0,
+        risk_overheat_max=0,
+    )
+
+    forward = _run(records, industries, config=config)
+    backward = _run(list(reversed(records)), industries, config=config)
+
+    assert forward == backward
+    selected = forward["sample"][0]
+    assert selected["status"] == "source_failed"
+    assert selected["provenance"]["merged_duplicate_count"] == 2
+    assert selected["provenance"]["duplicate_sources"] == [
+        "fixture/reference",
+        "fixture/reference-failed",
+    ]
+    assert forward["design"]["full_market_qualified_size"] == 0
+
+
 def test_selector_is_deterministic_and_merges_duplicate_strata():
     """Bug caught: reader order or overlapping strata changes output/duplicates ticker."""
     records = [
@@ -512,6 +564,113 @@ def test_fixture_envelope_carries_identity_and_isolated_provenance():
     assert result["provenance"]["not_live_provider_evidence"] is True
     assert "provider_qualification" not in result
     assert "canonical_promotion" not in result
+
+
+def test_selector_accepts_explicit_input_hash_and_fixture_provenance():
+    """Bug caught: caller-provided replay identity/provenance was not contract-bound."""
+    module = _selector_module()
+    records = [_record("600001"), _record("000002")]
+    expected_hash = module.compute_input_ticker_set_hash(
+        ["600001.SH", "000002.SZ"]
+    )
+    fixture_provenance = {
+        "source": "checked-in-test-fixture",
+        "fixture_id": "g1-sample-contract-v1",
+        "not_live_provider_evidence": True,
+    }
+
+    result = module.select_validation_sample(
+        records,
+        _industry_mapping({"600001.SH": "银行", "000002.SZ": "白酒"}),
+        run_id="fixture-sample-run",
+        profile_version="g1-fixture-v1",
+        input_ticker_set_hash=expected_hash,
+        as_of="2026-08-07",
+        fixture_provenance=fixture_provenance,
+    )
+
+    assert result["input_ticker_set_hash"] == expected_hash
+    assert result["provenance"]["fixture_id"] == "g1-sample-contract-v1"
+    assert result["provenance"]["not_live_provider_evidence"] is True
+
+
+def test_selector_rejects_mismatched_input_hash():
+    """Bug caught: a forged input hash could detach the sample from its ticker set."""
+    with pytest.raises(ValueError, match="input_ticker_set_hash"):
+        _selector_module().select_validation_sample(
+            [_record("600001")],
+            _industry_mapping({"600001.SH": "银行"}),
+            run_id="fixture-sample-run",
+            profile_version="g1-fixture-v1",
+            input_ticker_set_hash="not-the-computed-hash",
+            as_of="2026-08-07",
+        )
+
+
+def test_selector_rejects_live_fixture_provenance():
+    """Bug caught: development output must not accept provenance marked as live."""
+    with pytest.raises(ValueError, match="live evidence"):
+        _selector_module().select_validation_sample(
+            [_record("600001")],
+            _industry_mapping({"600001.SH": "银行"}),
+            run_id="fixture-sample-run",
+            profile_version="g1-fixture-v1",
+            input_ticker_set_hash=_selector_module().compute_input_ticker_set_hash(
+                ["600001.SH"]
+            ),
+            as_of="2026-08-07",
+            fixture_provenance={"not_live_provider_evidence": False},
+        )
+
+
+def test_selector_rejects_live_fixture_source():
+    """Bug caught: provenance source must remain a development fixture source."""
+    module = _selector_module()
+    with pytest.raises(ValueError, match="live"):
+        module.select_validation_sample(
+            [_record("600001")],
+            _industry_mapping({"600001.SH": "银行"}),
+            run_id="fixture-sample-run",
+            profile_version="g1-fixture-v1",
+            input_ticker_set_hash=module.compute_input_ticker_set_hash(
+                ["600001.SH"]
+            ),
+            as_of="2026-08-07",
+            fixture_provenance={
+                "source": "live-provider",
+                "not_live_provider_evidence": True,
+            },
+        )
+
+
+def test_invalid_record_status_does_not_count_full_market_qualified_size():
+    """Bug caught: invalid records could unlock the 300 qualified-size semantic."""
+    count = 300
+    records = [
+        _record(
+            f"{600000 + index:06d}",
+            status="invalid_value" if index == 0 else "complete",
+        )
+        for index in range(count)
+    ]
+    industries = _industry_mapping(
+        {f"{600000 + index:06d}.SH": "银行" for index in range(count)}
+    )
+    module = _selector_module()
+    config = module.SampleSelectionConfig(
+        industry_quota_total=count,
+        industry_cap=count,
+        risk_st_max=0,
+        risk_smallcap_max=0,
+        risk_negative_pe_max=0,
+        risk_overheat_max=0,
+    )
+
+    result = _run(records, industries, config=config)
+
+    assert result["design"]["sample_size"] == count
+    assert result["design"]["full_market_qualified_size"] == count - 1
+    assert result["design"]["full_market_eligible"] is False
 
 
 def test_selector_accepts_reader_iterable_without_external_imports_or_artifacts(

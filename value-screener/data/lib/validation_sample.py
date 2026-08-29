@@ -19,6 +19,21 @@ from data.lib.provenance import STATUSES as _PROVENANCE_STATUSES
 _FIELD_STATUSES = _PROVENANCE_STATUSES | {"complete", "degraded", "stale"}
 _EVALUABLE_FIELD_STATUSES = {"complete", "degraded", "available"}
 _USABLE_MAPPING_STATUSES = {"complete", "available", "partial"}
+_STATUS_SEVERITY = {
+    "complete": 0,
+    "available": 0,
+    "degraded": 1,
+    "partial": 1,
+    "stale": 1,
+    "record_not_found": 2,
+    "not_evaluated": 2,
+    "source_failed": 3,
+    "permission_denied": 3,
+    "rate_limited": 3,
+    "not_supported_for_market": 3,
+    "conflict": 3,
+    "invalid_value": 4,
+}
 
 
 @dataclass(frozen=True)
@@ -41,9 +56,11 @@ def select_validation_sample(
     *,
     run_id: str,
     profile_version: str,
+    input_ticker_set_hash: str,
     as_of: str,
     seed: int = 20260806,
     config: SampleSelectionConfig | None = None,
+    fixture_provenance: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """选择可复放的 G1 验证样本，不产生任何 live 或 runtime artifact。"""
     if not run_id:
@@ -58,6 +75,38 @@ def select_validation_sample(
     normalized_records = _normalize_records(spot_records)
     mapping = _normalize_industry_mapping(industry_mapping)
     records = _deduplicate_records(normalized_records)
+    computed_input_hash = compute_input_ticker_set_hash(
+        [record["ticker"] for record in records]
+    )
+    if (
+        not isinstance(input_ticker_set_hash, str)
+        or input_ticker_set_hash != computed_input_hash
+    ):
+        raise ValueError(
+            "input_ticker_set_hash does not match the canonical ticker set"
+        )
+    envelope_provenance = {
+        "source": "fixture/reference",
+        "attempted_sources": list(mapping["attempted_sources"]),
+        "not_live_provider_evidence": True,
+        "input_record_count": len(normalized_records),
+        "unique_record_count": len(records),
+        "industry_mapping_status": mapping["status"],
+    }
+    if fixture_provenance is not None:
+        if not isinstance(fixture_provenance, Mapping):
+            raise ValueError("fixture_provenance must be a mapping")
+        if fixture_provenance.get("not_live_provider_evidence") is False:
+            raise ValueError("fixture_provenance must not be marked as live evidence")
+        source = str(fixture_provenance.get("source", "")).strip().casefold()
+        if "live" in source or source in {"provider", "production"}:
+            raise ValueError("fixture_provenance source must not be live")
+        envelope_provenance.update(dict(fixture_provenance))
+        envelope_provenance["not_live_provider_evidence"] = True
+        envelope_provenance["attempted_sources"] = list(mapping["attempted_sources"])
+        envelope_provenance["input_record_count"] = len(normalized_records)
+        envelope_provenance["unique_record_count"] = len(records)
+        envelope_provenance["industry_mapping_status"] = mapping["status"]
     rng = random.Random(seed)
     selected: dict[str, dict[str, Any]] = {}
 
@@ -133,7 +182,9 @@ def select_validation_sample(
     sample = [selected[ticker] for ticker in sorted(selected)]
     sample_size = len(sample)
     full_market_qualified_size = sum(
-        item["industry"] != "_unmapped" and item["industry_status"] == "complete"
+        item["industry"] != "_unmapped"
+        and item["industry_status"] == "complete"
+        and item["status"] in {"complete", "available"}
         for item in sample
     )
     full_market_eligible = (
@@ -145,18 +196,9 @@ def select_validation_sample(
         "mode": "simulated/development",
         "run_id": run_id,
         "profile_version": profile_version,
-        "input_ticker_set_hash": compute_input_ticker_set_hash(
-            [record["ticker"] for record in records]
-        ),
+        "input_ticker_set_hash": computed_input_hash,
         "as_of": as_of,
-        "provenance": {
-            "source": "fixture/reference",
-            "attempted_sources": list(mapping["attempted_sources"]),
-            "not_live_provider_evidence": True,
-            "input_record_count": len(normalized_records),
-            "unique_record_count": len(records),
-            "industry_mapping_status": mapping["status"],
-        },
+        "provenance": envelope_provenance,
         "sample": sample,
         "design": {
             "seed": seed,
@@ -284,6 +326,45 @@ def _merge_duplicate_records(
             merged["field_statuses"][field_name] = candidate["status"]
     if not merged["name"] and second["name"]:
         merged["name"] = second["name"]
+    merged["status"] = _merge_status(first["status"], second["status"])
+    merged["provenance"] = _merge_duplicate_provenance(
+        first["provenance"],
+        second["provenance"],
+    )
+    return merged
+
+
+def _merge_status(first: str, second: str) -> str:
+    """Merge duplicate statuses conservatively and independently of row order."""
+    statuses = (first, second)
+    return max(
+        statuses,
+        key=lambda status: (_STATUS_SEVERITY.get(status, 99), status),
+    )
+
+
+def _merge_duplicate_provenance(
+    first: Mapping[str, Any],
+    second: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Retain duplicate source evidence without making output order-dependent."""
+    candidates = [dict(first), dict(second)]
+    merged = min(
+        candidates,
+        key=lambda value: json.dumps(value, ensure_ascii=False, sort_keys=True, default=str),
+    )
+    sources: set[str] = set()
+    counts = 0
+    for provenance in candidates:
+        source = provenance.get("source")
+        if source:
+            sources.add(str(source))
+        for duplicate_source in provenance.get("duplicate_sources", []):
+            sources.add(str(duplicate_source))
+        count = provenance.get("merged_duplicate_count", 1)
+        counts += count if isinstance(count, int) and count > 0 else 1
+    merged["merged_duplicate_count"] = counts
+    merged["duplicate_sources"] = sorted(sources)
     return merged
 
 

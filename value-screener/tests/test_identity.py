@@ -149,5 +149,12 @@ def test_input_ticker_set_hash_canonicalizes_tickers():
            "同证券不同形式 MUST 产出相同 hash（canonical 归一后 hash）"
 
 
+def test_input_ticker_set_hash_is_set_invariant_for_duplicate_tickers():
+    """Duplicate canonical identities MUST NOT change a set hash."""
+    assert compute_input_ticker_set_hash(
+        ["600519", "600519.SH", "000001"]
+    ) == compute_input_ticker_set_hash(["600519", "000001"])
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

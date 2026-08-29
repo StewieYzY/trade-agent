@@ -103,7 +103,7 @@ def compute_input_ticker_set_hash(tickers: list[str]) -> str:
     if not tickers:
         # 空集合也需稳定 hash（不抛错，L1 输入可能为空边界）
         return hashlib.sha256("".encode("utf-8")).hexdigest()[:12]
-    canonical_sorted = sorted(canonical_ticker(t) for t in tickers)
+    canonical_sorted = sorted({canonical_ticker(t) for t in tickers})
     joined = "|".join(canonical_sorted)
     return hashlib.sha256(joined.encode("utf-8")).hexdigest()[:12]
 
