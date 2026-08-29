@@ -440,9 +440,28 @@ M1 的目标是验证 G1 筛选结果是否符合个人价值风格。现有
 
 | 顺序 | Child Change | 唯一用户问题 | 用户可见产物 | 明确不做 | 初始状态 |
 |---|---|---|---|---|---|
-| M1.1 | `g1-300-sample-validation` | 如何构造可重复、状态诚实的小样本？ | fixture/sample contract 与选择汇总 | 不调用 provider/LLM；不代表真实 G1 Gate | `existing-wip` |
+| M1.1 | `g1-300-sample-validation` | 如何构造可重复、状态诚实的小样本？ | fixture/sample contract 与选择汇总 | 不调用 provider/LLM；不代表真实 G1 Gate | `merged / not_evidence` |
 | M1.2 | `g1-mvp-small-sample-run` | 小样本筛选是否符合用户风格？ | 每只股票的分数、通过/排除原因、质量状态和候选列表 | 不运行全市场；不做 300+ 正式证据 | `pending` |
 | M1.3 | `g1-small-sample-user-review` | 用户是否认可候选及排除理由？ | 逐只人工反馈和阈值问题清单 | 不直接修改 G1 Gate；不预防性重写筛选器 | `pending` |
+
+M1.1 已于 2026-08-29 完成离线工程闭环：
+
+- merge/push commit：`adb0dfa`；`main == origin/main`；
+- OpenSpec 已归档至
+  `openspec/changes/archive/2026-08-29-g1-300-sample-validation/`；
+- 产物为标准库、可注入、确定性 selector/contract，补齐 canonical
+  ticker-set hash 去重、重复记录的 fail-closed status/provenance 合并和
+  fixture provenance 隔离；
+- selector focused 测试：`26 passed`；直接相关 identity/provenance 回归：
+  `53 passed`；merged-main 全量测试：`1390 passed, 1 skipped`；
+- `openspec validate --all --strict`：`35 passed, 0 failed`；
+  compileall、`git diff --check` 和 fresh child-only review 已通过；
+- 未运行 AkShare、东财、LongPort/Longbridge 或其他 provider/LLM，未执行真实
+  300+ 样本，未生成 live evidence、provider qualification、canonical
+  promotion、watchlist 或 debate 产物；
+- M1.1 的 `capability_status=not_evidence`，G1 Capability Gate 保持
+  `not_passed`；M1.2 仍为 `pending`，在 M0.3 真实用户复核完成并作出明确
+  进入决定前不自动开始。
 
 #### M2：强单 Agent G2 MVP
 
