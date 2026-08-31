@@ -441,7 +441,7 @@ M1 的目标是验证 G1 筛选结果是否符合个人价值风格。现有
 | 顺序 | Child Change | 唯一用户问题 | 用户可见产物 | 明确不做 | 初始状态 |
 |---|---|---|---|---|---|
 | M1.1 | `g1-300-sample-validation` | 如何构造可重复、状态诚实的小样本？ | fixture/sample contract 与选择汇总 | 不调用 provider/LLM；不代表真实 G1 Gate | `merged / not_evidence` |
-| M1.2 | `g1-mvp-small-sample-run` | 小样本筛选是否符合用户风格？ | 每只股票的分数、通过/排除原因、质量状态和候选列表 | 不运行全市场；不做 300+ 正式证据 | `pending` |
+| M1.2 | `g1-mvp-small-sample-run` | 小样本筛选是否符合用户风格？ | 每只股票的分数、通过/排除原因、质量状态和候选列表 | 不运行全市场；不做 300+ 正式证据 | `merged / not_evidence` |
 | M1.3 | `g1-small-sample-user-review` | 用户是否认可候选及排除理由？ | 逐只人工反馈和阈值问题清单 | 不直接修改 G1 Gate；不预防性重写筛选器 | `pending` |
 
 M1.1 已于 2026-08-29 完成离线工程闭环：
@@ -460,8 +460,28 @@ M1.1 已于 2026-08-29 完成离线工程闭环：
   300+ 样本，未生成 live evidence、provider qualification、canonical
   promotion、watchlist 或 debate 产物；
 - M1.1 的 `capability_status=not_evidence`，G1 Capability Gate 保持
-  `not_passed`；M1.2 仍为 `pending`，在 M0.3 真实用户复核完成并作出明确
-  进入决定前不自动开始。
+  `not_passed`；M1.2 已完成工程闭环，但仍不产生正式 G1 evidence。
+
+M1.2 `g1-mvp-small-sample-run` 已于 2026-08-31 完成工程闭环并合入
+`main`：
+
+- 起始 baseline：`433ce65`；
+- 实现提交：`0b11398`；
+- OpenSpec archive 与主 spec 同步：`07ba15d`；
+- spec EOF 格式修复：`fa02eee`；
+- merge commit：`cb17d6f`；
+- active change 清理提交：`01b653e`；
+- OpenSpec 已归档至
+  `openspec/changes/archive/2026-08-31-g1-mvp-small-sample-run/`；
+- 新增离线 `small-sample-run --input ... --output-dir ...`，复用既有
+  Stage A/B/C、hard gates、factor scores、anti-trap 和 heat filter；
+- focused/相关测试：`37 passed`；merged-main 全量测试：`1404 passed,
+  1 skipped`；`openspec validate --all --strict`：`36 passed, 0 failed`；
+- compileall、`git diff --check` 和独立 child-only review 已通过；
+- 未调用 provider、LLM、Scout 或 Council，未运行真实全市场/300+ 样本，
+  未生成 G1 Capability Gate evidence；
+- `engineering_status=merged`、`capability_status=not_evidence`、
+  `gate_status=not_passed`；M1.3 仍为 `pending`。
 
 #### M2：强单 Agent G2 MVP
 
@@ -579,7 +599,7 @@ M0.1 冻结输入与 growth diagnostic
 当前下一步是：
 
 ```text
-完成真实 M0.3 用户人工复核，并依据反馈决定是否进入 M1.1
+完成真实 M0.3 用户人工复核；随后基于 M1.2 产物决定是否进入 M1.3
 ```
 
 执行窗口必须先读取：
@@ -609,5 +629,7 @@ git worktree list
 openspec list --json
 ```
 
-在当前 child 完成独立 review、archive、strict validation、合入 main、
-push 和 worktree 清理前，不开始第二个 active child。
+当前没有 active child。M1.2 已完成独立 review、archive、strict validation、
+合入 main 和 active change 清理；完成远端 push 后再确认 `main == origin/main`
+以及 child worktree/branch 已清理。没有真实用户复核前，不把 M0 或 M1
+Capability Gate 标记为通过。
