@@ -741,5 +741,22 @@ def top20_finalize(
     raise typer.Exit(code=2)
 
 
+@app.command(name="small-sample-run")
+def small_sample_run(
+    input_path: str = typer.Option(..., "--input", help="离线小样本 fixture JSON 路径"),
+    output_dir: str = typer.Option(..., "--output-dir", help="run-scoped JSON/Markdown 输出目录"),
+):
+    """运行离线小样本 G1 MVP，不调用 provider/LLM。"""
+    from screener.small_sample import write_small_sample_artifacts
+
+    try:
+        bundle = json.loads(Path(input_path).read_text(encoding="utf-8"))
+        json_path, markdown_path = write_small_sample_artifacts(bundle, output_dir)
+    except (OSError, json.JSONDecodeError, TypeError, ValueError) as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    typer.echo(f"JSON 产物已写入：{json_path}")
+    typer.echo(f"Markdown 产物已写入：{markdown_path}")
+
+
 if __name__ == "__main__":
     app()

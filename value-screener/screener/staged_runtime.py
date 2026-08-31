@@ -432,6 +432,42 @@ def _score_final_candidates(
     canonical_by_raw: Mapping[str, str] | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
     """Preserve the legacy score -> top 300 -> heat-filter order."""
+    scored, failures = _score_candidates(
+        ticker_data,
+        tickers,
+        canonical_by_raw=canonical_by_raw,
+    )
+    top_300 = scored[:300]
+    candidates: list[dict[str, Any]] = []
+    heat_failures: list[dict[str, str]] = []
+    for candidate in top_300:
+        raw_ticker = candidate["_raw_ticker"]
+        heat = check_heat_filter(ticker_data[raw_ticker])
+        if not heat["pass"]:
+            heat_failures.append(
+                {
+                    "ticker": raw_ticker,
+                    "dimension": "kline",
+                    "status": "not_evaluated",
+                    "reason": "heat_filter_failed",
+                    "failed_filters": list(heat.get("failed_filters", [])),
+                }
+            )
+            continue
+        candidate = dict(candidate)
+        candidate.pop("_raw_ticker", None)
+        candidate["heat_filter"] = heat
+        candidates.append(candidate)
+    return candidates, failures + heat_failures
+
+
+def _score_candidates(
+    ticker_data: dict[str, dict[str, Any]],
+    tickers: list[str],
+    *,
+    canonical_by_raw: Mapping[str, str] | None = None,
+) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
+    """Return all successfully scored rows before the heat filter."""
     eligible_data = {
         ticker: data
         for ticker, data in ticker_data.items()
@@ -481,28 +517,7 @@ def _score_final_candidates(
                 }
             )
     scored.sort(key=lambda item: item["adjusted_composite"], reverse=True)
-    top_300 = scored[:300]
-    candidates: list[dict[str, Any]] = []
-    heat_failures: list[dict[str, str]] = []
-    for candidate in top_300:
-        raw_ticker = candidate["_raw_ticker"]
-        heat = check_heat_filter(ticker_data[raw_ticker])
-        if not heat["pass"]:
-            heat_failures.append(
-                {
-                    "ticker": raw_ticker,
-                    "dimension": "kline",
-                    "status": "not_evaluated",
-                    "reason": "heat_filter_failed",
-                    "failed_filters": list(heat.get("failed_filters", [])),
-                }
-            )
-            continue
-        candidate = dict(candidate)
-        candidate.pop("_raw_ticker", None)
-        candidate["heat_filter"] = heat
-        candidates.append(candidate)
-    return candidates, failures + heat_failures
+    return scored, failures
 
 
 def _dimensions_available(data: dict[str, Any], dimensions: tuple[str, ...]) -> bool:
