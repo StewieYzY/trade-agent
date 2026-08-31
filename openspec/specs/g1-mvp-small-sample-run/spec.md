@@ -73,4 +73,3 @@ The runner SHALL produce deterministic JSON and Markdown artifacts sorted by can
 
 - **WHEN** two executions use different run ids and the same output directory
 - **THEN** the runner SHALL write distinct run-scoped filenames and preserve both artifacts
-
