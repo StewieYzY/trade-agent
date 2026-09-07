@@ -30,5 +30,5 @@
 - [x] 5.2 Fix any P0/P1/P2 findings with RED-first regression tests; otherwise record no findings and residual risks.
 - [x] 5.3 Re-run focused/related/full verification and strict validation after review fixes.
 - [x] 5.4 Archive the OpenSpec change only after tasks/tests/review are complete; verify archive spec consistency.
-- [ ] 5.5 Commit child, merge into `main`, push `origin/main`, rerun merged-main verification, and remove only this child branch/worktree; preserve root user WIP.
-- [ ] 5.6 Record final states: `engineering_status=merged`, `capability_status=not_evidence`, `gate_status=not_passed`, `M0.3 real user review=pending`, `G1 Capability Gate=not_passed`.
+- [x] 5.5 Commit child, merge into `main`, push `origin/main`, rerun merged-main verification, and remove only this child branch/worktree; preserve root user WIP.
+- [x] 5.6 Record final states: `engineering_status=merged`, `capability_status=not_evidence`, `gate_status=not_passed`, `M0.3 real user review=pending`, `G1 Capability Gate=not_passed`.

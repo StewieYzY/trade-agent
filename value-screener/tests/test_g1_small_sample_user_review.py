@@ -26,6 +26,14 @@ from council.small_sample_user_review import (
 )
 
 
+def _canonical_checkout_root() -> Path:
+    checkout_root = Path(__file__).resolve().parents[2]
+    for candidate in (checkout_root, *checkout_root.parents):
+        if candidate.name == "trade-agent" and (candidate / ".git").is_dir():
+            return candidate
+    raise AssertionError("canonical trade-agent checkout root not found")
+
+
 def test_build_template_binds_m1_2_identity_and_four_review_dimensions():
     source = run_small_sample(_bundle(tickers=["600005", "600001", "600004", "600002", "600003"]))
 
@@ -1032,7 +1040,7 @@ def test_protected_output_root_is_rejected_before_write():
 
 def test_canonical_project_production_root_is_rejected_before_write():
     source = run_small_sample(_bundle())
-    canonical_root = Path(__file__).resolve().parents[4]
+    canonical_root = _canonical_checkout_root()
     protected = canonical_root / "value-screener" / "data" / "cache"
 
     with pytest.raises(SmallSampleUserReviewInputError, match="protected"):
