@@ -30,6 +30,8 @@ _PRODUCTION_ROOT_RELATIVE_PATHS = (
     ("data", "growth_diagnostics"),
     ("data", "growth-diagnostic"),
     ("data", "growth-diagnostics"),
+    ("data", "evidence"),
+    ("data", "live_runs"),
     ("growth_diagnostic",),
     ("growth_diagnostics",),
     ("growth-diagnostic",),

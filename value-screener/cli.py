@@ -758,5 +758,61 @@ def small_sample_run(
     typer.echo(f"Markdown 产物已写入：{markdown_path}")
 
 
+@app.command(name="small-sample-user-review")
+def small_sample_user_review(
+    input_path: str = typer.Option(..., "--input", help="M1.2 小样本结果 JSON 路径"),
+    markdown_path: str = typer.Option(
+        None,
+        "--markdown",
+        help="可选的对应 M1.2 Markdown 产物路径",
+    ),
+    output_dir: str = typer.Option(..., "--output-dir", help="run-scoped 复核产物目录"),
+):
+    """从 M1.2 离线结果生成人工复核 template，不调用外部服务。"""
+    from council.small_sample_user_review import (
+        SmallSampleUserReviewInputError,
+        write_small_sample_user_review_record,
+    )
+
+    try:
+        path = Path(input_path)
+        if not path.is_file():
+            raise typer.BadParameter(
+                f"input file not found: {input_path}",
+                param_hint="--input",
+            )
+        source = json.loads(path.read_text(encoding="utf-8"))
+        artifacts = write_small_sample_user_review_record(
+            source,
+            output_dir,
+            markdown_path=markdown_path,
+        )
+    except (
+        OSError,
+        UnicodeError,
+        json.JSONDecodeError,
+        SmallSampleUserReviewInputError,
+    ) as exc:
+        message = str(exc)
+        output_error_markers = (
+            "output_dir",
+            "protected production output root",
+            "G1 protected production output root rejected",
+            "immutable run artifact",
+            "cannot read existing artifact",
+            "output_dir write failed",
+            "output_dir cannot be created",
+        )
+        if "optional M1.2 Markdown" in message:
+            hint = "--markdown"
+        elif any(marker in message for marker in output_error_markers):
+            hint = "--output-dir"
+        else:
+            hint = "--input"
+        raise typer.BadParameter(message, param_hint=hint) from exc
+    typer.echo(f"JSON 复核记录已写入：{artifacts.json_path}")
+    typer.echo(f"Markdown 复核记录已写入：{artifacts.markdown_path}")
+
+
 if __name__ == "__main__":
     app()
