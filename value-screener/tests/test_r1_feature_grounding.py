@@ -82,6 +82,80 @@ def test_key_metrics_number_matches_different_field():
     assert ok is True
 
 
+def test_percent_labeled_metric_matches_ratio_feature_in_decimal_storage():
+    """显式百分数应匹配输入中以小数保存的比例字段."""
+    agent = _make_agent(key_metrics=["毛利率 18.7%", "维护性资本开支率 40%"])
+    features = {
+        "gross_margin": 0.186901,
+        "maintenance_capex_ratio": 0.4,
+        "market_cap": 698.41,
+    }
+
+    ok, issues = verify_r1_feature_grounding(agent, features)
+
+    assert ok is True
+    assert issues == []
+
+
+def test_percent_labeled_metric_does_not_match_unrelated_plain_number():
+    """百分数换算不能把普通非比例字段的相近小数当作来源."""
+    agent = _make_agent(key_metrics=["毛利率 40%"])
+    features = {"market_cap": 0.4, "pe_ttm": 17.83}
+
+    ok, issues = verify_r1_feature_grounding(agent, features)
+
+    assert ok is False
+    assert any("40" in issue for issue in issues)
+
+
+def test_percent_labeled_metric_does_not_scale_percentile_field():
+    """分位数字本身采用 0-100 标度，不能再做百分比 x100 换算."""
+    agent = _make_agent(key_metrics=["PE 分位 40%"])
+    features = {"pe_percentile_5y": 0.4}
+
+    ok, issues = verify_r1_feature_grounding(agent, features)
+
+    assert ok is False
+    assert any("40" in issue for issue in issues)
+
+
+@pytest.mark.parametrize(
+    "field",
+    ["corporate_value", "share_price", "shareholder_count"],
+)
+def test_percent_labeled_metric_does_not_match_marker_substring_collision(field):
+    """rate/share 子串不能把普通公司价值、股价或股东数字当作比例."""
+    agent = _make_agent(key_metrics=["测试比例 40%"])
+    features = {field: 0.4}
+
+    ok, issues = verify_r1_feature_grounding(agent, features)
+
+    assert ok is False
+    assert any("40" in issue for issue in issues)
+
+
+def test_positive_percent_does_not_match_negative_decimal_ratio():
+    """百分比换算必须保留正负号，不能掩盖利润率方向反转."""
+    agent = _make_agent(key_metrics=["毛利率 10.1%"])
+    features = {"gross_margin": -0.101306}
+
+    ok, issues = verify_r1_feature_grounding(agent, features)
+
+    assert ok is False
+    assert any("10.1" in issue for issue in issues)
+
+
+def test_negative_percent_matches_negative_decimal_ratio():
+    """同号的负百分比仍可匹配负小数比例."""
+    agent = _make_agent(key_metrics=["毛利率 -10.1%"])
+    features = {"gross_margin": -0.101306}
+
+    ok, issues = verify_r1_feature_grounding(agent, features)
+
+    assert ok is True
+    assert issues == []
+
+
 # ── 环形引用检测 ──────────────────────────────────────────────
 
 

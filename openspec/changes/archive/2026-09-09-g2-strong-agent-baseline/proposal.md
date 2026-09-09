@@ -22,6 +22,9 @@ claiming that the G2 Capability Gate has passed.
   run-scoped output directory.
 - Reuse M0.2 validation, strong-agent call, `AgentOutput`, dossier quality, and
   failure semantics; do not create a second LLM/dossier/diagnostic validator.
+- Repair the existing M0.2 grounding reuse boundary so an explicitly labeled
+  percentage can match a decimal-stored ratio field without allowing unlabeled
+  or unrelated numbers to bypass fabricated-number rejection.
 - Keep tests provider-free by using a fake seam and asserting the exact call
   signature and parameter shape.
 

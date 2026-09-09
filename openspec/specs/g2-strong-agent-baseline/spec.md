@@ -1,5 +1,8 @@
-## ADDED Requirements
+# g2-strong-agent-baseline Specification
 
+## Purpose
+TBD - created by archiving change g2-strong-agent-baseline. Update Purpose after archive.
+## Requirements
 ### Requirement: Fixed baseline input identity
 The system SHALL accept a versioned M2.1 baseline envelope that explicitly
 binds canonical ticker, `run_id`, attempt index, M0.1 diagnostic digest,

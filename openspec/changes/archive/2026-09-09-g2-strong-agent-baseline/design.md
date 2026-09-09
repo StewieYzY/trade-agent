@@ -151,3 +151,53 @@ modified.
   remain later experiment inputs; this child does not choose or execute them.
 - M2.2 owns the stable investment eligibility semantics. This baseline records
   M0.2 output states without promoting them to that interface.
+
+## Real-provider repair slice (2026-09-09)
+
+After the original engineering closure, one authorized fixed-input experiment
+ran `002709.SZ` three times through the real M0.2 provider path with the same
+run, diagnostic, dossier, prompt/profile, model, and budget identity. Two
+attempts failed the existing grounding check and one attempt skipped, while
+all structural identity checks remained stable. This is new failure evidence
+inside the scope of this same change, so the change is restored for a bounded
+repair rather than opening another child.
+
+The repair SHALL:
+
+- preserve every prior real-run artifact as failed/warning diagnostic evidence;
+- make at most one additional diagnostic provider call before a root-cause
+  hypothesis is fixed;
+- keep the prompt, profile, model, frozen input, diagnostic values, and Council
+  path unchanged;
+- retain hard rejection of fabricated numbers;
+- add a failing regression before production changes;
+- use a new attempt identity for any post-repair real rerun;
+- keep `capability_status=not_evidence` and `gate_status=not_passed`.
+
+The bounded diagnostic and frozen-input inspection support one repair
+hypothesis. The frozen input stores some semantically proportional fields as
+decimals, including
+`maintenance_capex_ratio=0.4/0.6` and historical `gross_margin` values near
+`0.187`. Real AgentOutput formatting may express these same values as
+`40%/60%/18.7%`. The old checker discarded field paths and compared only the
+literal magnitudes, so it could not distinguish a valid decimal-to-percent
+presentation from a fabricated value.
+
+This is not direct proof of the exact historical failures because attempts 1-3
+retained only response digests and normalized safe outputs; their original
+metric strings and percent suffixes are unavailable. The repair therefore
+closes a demonstrated checker defect while retaining the historical incident
+as a residual risk rather than claiming complete causal proof.
+
+The minimal repair preserves the existing literal comparison and adds one
+additional match only when all conditions hold:
+
+1. the output number has an explicit `%` or `％` suffix;
+2. the input value is in decimal-ratio range and has the same sign;
+3. its leaf field name has an exact ratio/rate/margin/ROE/share/percentage
+   token and is not a percentile/price/value/count field;
+4. the value matches after multiplying the input by 100 within the existing
+   numeric tolerance.
+
+Unlabeled numbers and values found only in ordinary numeric fields do not use
+this conversion.

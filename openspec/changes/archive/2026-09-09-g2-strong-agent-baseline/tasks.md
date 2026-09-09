@@ -24,3 +24,14 @@
 - [x] 4.2 Re-run focused/full verification after review, then archive the OpenSpec child and commit only child-scoped files.
 - [x] 4.3 Merge the child into `main`, push `origin/main`, and re-run key tests plus strict OpenSpec validation on merged main.
 - [x] 4.4 Remove only the child branch/worktree, verify root WIP is unchanged, and report engineering/capability/Gate/provider/user-review/M2.2 status separately.
+
+## 5. Real-provider evidence repair
+
+- [x] 5.1 Record the fixed-input three-attempt real-provider result and restore this same change for an evidence-driven repair without creating another child change.
+- [x] 5.2 Perform one bounded diagnostic call that captures the raw AgentOutput outside Git and identifies one root cause without changing prompt, profile, or model.
+- [x] 5.3 RED→GREEN the smallest grounding regression that distinguishes supported input-unit normalization from fabricated numbers.
+- [x] 5.4 Re-run M2.1 focused tests, M0.2/grounding regressions, full pytest, compileall, strict OpenSpec validation, and diff checks.
+- [x] 5.5 Re-run the same frozen real input once under a new attempt identity when the repair changes real output validation; preserve the prior failed evidence.
+- [x] 5.6 Perform one fresh read-only review limited to this repair and resolve or explicitly retain every in-scope finding.
+- [x] 5.7 Re-archive this same change and commit only repair-scoped files.
+- [ ] 5.8 Merge into `main`, push `origin/main`, verify merged main, remove only the repair branch/worktree, and retain `capability_status=not_evidence` plus `gate_status=not_passed`.
