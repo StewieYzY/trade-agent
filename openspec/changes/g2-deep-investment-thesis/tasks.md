@@ -34,7 +34,7 @@
 
 ## 6. Baseline 与 A/B Harness
 
-- [ ] 6.1 完成并归档 strong-single-agent baseline child change
+- [x] 6.1 完成并归档 strong-single-agent baseline child change
 - [ ] 6.2 完成并归档 Council A/B harness child change，固定相同模型、dossier、diagnostic artifact、工具权限、预算口径和匿名评分 rubric
 - [ ] 6.3 冻结 8-10 只多类型股票样本和评价规则，其中至少覆盖高估值成长股与 diagnostic `not_evaluable` 场景
 

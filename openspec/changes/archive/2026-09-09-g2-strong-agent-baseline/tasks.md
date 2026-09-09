@@ -34,4 +34,4 @@
 - [x] 5.5 Re-run the same frozen real input once under a new attempt identity when the repair changes real output validation; preserve the prior failed evidence.
 - [x] 5.6 Perform one fresh read-only review limited to this repair and resolve or explicitly retain every in-scope finding.
 - [x] 5.7 Re-archive this same change and commit only repair-scoped files.
-- [ ] 5.8 Merge into `main`, push `origin/main`, verify merged main, remove only the repair branch/worktree, and retain `capability_status=not_evidence` plus `gate_status=not_passed`.
+- [x] 5.8 Merge into `main`, push `origin/main`, verify merged main, remove only the repair branch/worktree, and retain `capability_status=not_evidence` plus `gate_status=not_passed`.

@@ -2,7 +2,7 @@
 
 ## Status boundary
 
-- engineering_status: `repair_in_progress`
+- engineering_status: `repair_complete`
 - capability_status: `not_evidence`
 - gate_status: `not_passed`
 - user_review_status: `not_performed`
@@ -159,8 +159,34 @@ No P0/P1/P2 finding remains unaddressed. No second reviewer was started.
   `openspec/specs/g2-strong-agent-baseline/spec.md`
 - same change re-archived at
   `openspec/changes/archive/2026-09-09-g2-strong-agent-baseline/`
-- merge/push/merged-main verification and repair worktree cleanup remain task
-  5.8 and are not claimed complete in this archive commit
+- task 5.8 merge/push/merged-main verification and repair worktree cleanup:
+  completed in the final closure follow-up
+
+## Final closure
+
+- repair commit: `97300ac`
+- merge commit: `1e2ad0d`
+- `origin/main`: merge commit pushed; this section is the final closure
+  follow-up record
+- merged-main focused regression: `71 passed`
+- merged-main OpenSpec strict validation: `38 passed, 0 failed`
+- repair worktree: removed
+- repair branch: removed
+- root tracked WIP fingerprint:
+  `2807a495355d282da84fdf69976e764d1642c21bcfe7d9f4e47a0e499c14ad90`
+  before and after merge
+- root untracked WIP fingerprint:
+  `2e35f563d9b2cacae6a93f8da4ff830fdc38ecefaad894097d2d0653523a6908`
+  before and after merge
+- root staged files: none
+
+Final status remains:
+
+- engineering_status: `repair_complete`
+- capability_status: `not_evidence`
+- gate_status: `not_passed`
+- user_review_status: `not_performed`
+- M2.2_status: `not_started`
 
 ## Residual risk
 
