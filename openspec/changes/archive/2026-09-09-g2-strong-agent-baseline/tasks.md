@@ -22,5 +22,5 @@
 
 - [x] 4.1 Perform one fresh read-only child-only review and resolve or explicitly retain each in-scope P0/P1/P2 finding.
 - [x] 4.2 Re-run focused/full verification after review, then archive the OpenSpec child and commit only child-scoped files.
-- [ ] 4.3 Merge the child into `main`, push `origin/main`, and re-run key tests plus strict OpenSpec validation on merged main.
-- [ ] 4.4 Remove only the child branch/worktree, verify root WIP is unchanged, and report engineering/capability/Gate/provider/user-review/M2.2 status separately.
+- [x] 4.3 Merge the child into `main`, push `origin/main`, and re-run key tests plus strict OpenSpec validation on merged main.
+- [x] 4.4 Remove only the child branch/worktree, verify root WIP is unchanged, and report engineering/capability/Gate/provider/user-review/M2.2 status separately.
