@@ -114,6 +114,69 @@ def _collect_feature_numbers(features) -> list[float]:
     return numbers
 
 
+def _collect_feature_number_paths(features) -> list[tuple[float, tuple[str, ...]]]:
+    """递归收集数值及字段路径，供显式百分比单位校验使用."""
+    if not features:
+        return []
+    numbers: list[tuple[float, tuple[str, ...]]] = []
+
+    def _walk(node, path: tuple[str, ...]):
+        if isinstance(node, bool):
+            return
+        if isinstance(node, (int, float)):
+            numbers.append((float(node), path))
+        elif isinstance(node, dict):
+            for key, value in node.items():
+                _walk(value, path + (str(key).lower(),))
+        elif isinstance(node, (list, tuple)):
+            for item in node:
+                _walk(item, path)
+
+    _walk(features, ())
+    return numbers
+
+
+def _extract_metric_number_references(metrics) -> list[tuple[float, bool]]:
+    """提取数据点及其是否带显式百分号，保留现有时间/单位标签过滤."""
+    references: list[tuple[float, bool]] = []
+    if not metrics:
+        return references
+    for metric in metrics:
+        if not isinstance(metric, str):
+            continue
+        for match in re.finditer(r"([+−-]?\d+\.?\d*)", metric):
+            end = match.end()
+            next_char = metric[end:end + 1]
+            if next_char in ("日", "年", "季", "倍", "期"):
+                continue
+            suffix = metric[end:]
+            is_percent = re.match(r"\s*[%％]", suffix) is not None
+            number = match.group(1).replace("−", "-")
+            references.append((float(number), is_percent))
+    return references
+
+
+def _is_decimal_ratio_path(path: tuple[str, ...]) -> bool:
+    """字段路径是否明确表达比例语义，避免任意小数被放大 100 倍."""
+    if not path:
+        return False
+    tokens = {
+        token
+        for token in re.split(r"[^a-z0-9]+", path[-1])
+        if token
+    }
+    if "percentile" in tokens:
+        return False
+    if tokens & {"ratio", "rate", "margin", "roe", "percentage", "pct"}:
+        return True
+    return "share" in tokens and not tokens & {
+        "price",
+        "count",
+        "holder",
+        "holders",
+    }
+
+
 def _extract_metric_numbers(metrics) -> set[float]:
     """从 key_metrics/new_evidence 文本列表提取数据点数字集合（f3a §6 D6 修订）.
 
@@ -124,20 +187,10 @@ def _extract_metric_numbers(metrics) -> set[float]:
 
     返回绝对值集合（跌幅 -15.86 与 15.86 视为同源）。
     """
-    out: set[float] = set()
-    if not metrics:
-        return out
-    for metric in metrics:
-        if not isinstance(metric, str):
-            continue
-        for m in re.finditer(r"(\d+\.?\d*)", metric):
-            n = m.group(1)
-            end = m.end()
-            next_char = metric[end:end + 1]
-            if next_char in ("日", "年", "季", "倍", "期"):
-                continue  # 单位/时间窗标签，跳过
-            out.add(abs(float(n)))
-    return out
+    return {
+        abs(value)
+        for value, _is_percent in _extract_metric_number_references(metrics)
+    }
 
 
 def verify_r1_feature_grounding(output: AgentOutput, features: dict) -> tuple[bool, list[str]]:
@@ -159,17 +212,27 @@ def verify_r1_feature_grounding(output: AgentOutput, features: dict) -> tuple[bo
     # 按绝对值 + 容差归一化。用于模糊匹配：R1 常把 -17.84 写成 "17.84"（跌幅取绝对值），
     # 或 2.22 写成 "2.2"（四舍五入）。
     feature_numbers: list[float] = _collect_feature_numbers(features)
+    feature_number_paths = _collect_feature_number_paths(features)
 
-    def _found_in_features(n: float) -> bool:
+    def _found_in_features(n: float, *, is_percent: bool) -> bool:
         """数字 n 是否在 features 任一字段值中（绝对值 + 0.5 容差，模糊匹配）."""
         target = abs(n)
-        return any(abs(fv - target) <= 0.5 for fv in feature_numbers)
+        if any(abs(fv - target) <= 0.5 for fv in feature_numbers):
+            return True
+        if not is_percent:
+            return False
+        return any(
+            -1.0 <= value <= 1.0
+            and _is_decimal_ratio_path(path)
+            and abs(value * 100.0 - n) <= 0.5
+            for value, path in feature_number_paths
+        )
 
     # f3a §6 D6：复用 _extract_metric_numbers 提取 key_metrics 数字点（跳过时间窗/单位标签），
     # 与 compute_citation_divergence 共享数字提取规则。
-    metric_numbers = _extract_metric_numbers(output.key_metrics)
-    for n_val in metric_numbers:
-        if _found_in_features(n_val):
+    metric_numbers = _extract_metric_number_references(output.key_metrics)
+    for n_val, is_percent in metric_numbers:
+        if _found_in_features(n_val, is_percent=is_percent):
             continue
         # 该数字在 features 中找不到来源 → 凭空
         issues.append(

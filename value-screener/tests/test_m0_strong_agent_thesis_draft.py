@@ -360,6 +360,28 @@ def test_fabricated_metric_and_forbidden_stable_fields_are_not_published(
     assert any("fabricated" in reason or "schema" in reason for reason in payload["quality_reasons"])
 
 
+def test_percent_metrics_ground_to_decimal_ratio_fields_through_public_runner(
+    tmp_path, monkeypatch
+):
+    envelope = _input_envelope(tmp_path)
+
+    artifacts, _ = _run(
+        envelope,
+        tmp_path / "draft",
+        monkeypatch,
+        response=_agent_response(
+            key_metrics=["可信增长率 18%", "维护性资本开支率 40%"]
+        ),
+    )
+
+    payload = json.loads(artifacts.json_path.read_text(encoding="utf-8"))
+    assert payload["failure_kind"] is None
+    assert payload["agent_output"]["key_metrics"] == [
+        "可信增长率 18%",
+        "维护性资本开支率 40%",
+    ]
+
+
 def test_nested_diagnostic_tampering_is_rejected_after_outer_digest_recomputed(
     tmp_path, monkeypatch
 ):
