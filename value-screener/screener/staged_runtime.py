@@ -198,6 +198,7 @@ def run_staged_screening(
     )
     for failure in heat_failures:
         _append_failure(stage_c.failures, failure)
+    candidates = sorted(candidates, key=lambda item: item["ticker"])
     stage_c.output_tickers = [
         _raw_ticker_for_candidate(candidate, canonical_by_raw)
         for candidate in candidates

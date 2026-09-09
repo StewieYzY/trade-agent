@@ -6,9 +6,16 @@
 >
 > 更新日期：2026-08-27
 >
+> 动态状态修订：2026-09-07
+>
 > 规划版本：`MASTER-2026-08-27`
 >
 > 核心调整：先形成可运行的最小闭环，再用实验结果推动工程增强与正式 Capability Gate。
+
+G1 正式 Capability Gate 状态以
+`openspec/changes/g1-fast-personal-value-screening/evidence/g1-umbrella-closure/g1-release-decision.md`
+为准：`g1_capability_status=passed`（G1-RELEASE-2026-08-14）。M1.3 记录自身的
+`gate_status=not_passed` 是单次小样本复核的固定语义，不代表 G1 未通过。
 
 ## 1. 当前结论
 
@@ -50,11 +57,12 @@ git worktree list
 openspec list --json
 ```
 
-本次规划更新时已核验：
+本次动态状态修订时已核验：
 
 ```text
-main == origin/main == d53134f
-G1 umbrella：16/16，complete
+main == origin/main == 0379bc5（工作区仍有未提交 WIP）
+G1 umbrella：g1-fast-personal-value-screening 16/16，complete
+G1-4 umbrella：0/48，in-progress
 G2 umbrella：11/27，in-progress
 G3 umbrella：0/29，in-progress，runtime locked
 ```
@@ -379,7 +387,7 @@ M0.3 记录用户反馈；三者完成后才算 M0 产品闭环成立。
 |---|---|---|---|---|---|
 | M0.1 | `m0-frozen-input-growth-diagnostic` | 当前价格隐含了多少未来预期？ | 带来源、报告期、假设快照和状态的 diagnostic JSON/Markdown | 不调用 provider/LLM；不做 Thesis | `merged / mvp_evidence` |
 | M0.2 | `m0-strong-agent-thesis-draft` | 如何把诊断和事实转成可读研究判断？ | 单股 Thesis 草稿 JSON/Markdown | 不做 Council；不实现稳定版 `InvestmentThesis`；不做 G3 | `merged / mvp_evidence` |
-| M0.3 | `m0-single-stock-user-review` | 用户能否理解并指出结果的问题？ | 人工复核记录、反馈和下一步决策 | 不把单次反馈写成 G2 Gate 证据 | `merged / not_evidence; pending real user review` |
+| M0.3 | `m0-single-stock-user-review` | 用户能否理解并指出结果的问题？ | 人工复核记录、反馈和下一步决策 | 不把单次反馈写成 G2 Gate 证据 | `merged / mvp_evidence; 002709.SZ reviewed 2026-09-04` |
 
 M0.1 已于 2026-08-27 完成工程闭环并生成 MVP evidence：
 
@@ -413,7 +421,8 @@ diagnostic 为 `not_evaluable`/`failed` 时保留失败元数据并安全降级�
 InvestmentThesis，不代表 M0 产品闭环或 G2 Capability Gate 通过。
 M0.3 的完成条件是保存用户对事实、假设、预期透支和结论可用性的反馈。
 
-M0.3 已于 2026-08-28 完成工程闭环，但尚未产生真实用户填写的复核反馈：
+M0.3 已于 2026-08-28 完成工程闭环，并于 2026-09-04 产生了
+`002709.SZ` 的真实用户复核反馈：
 
 - merge commits：`721a865`（实现）、`39ac693`（OpenSpec archive）；`main` 与
   `origin/main` 已对齐；
@@ -424,25 +433,32 @@ M0.3 已于 2026-08-28 完成工程闭环，但尚未产生真实用户填写的
 - `openspec validate --all --strict`：`36 passed, 0 failed`；
 - compileall、CLI help、`git diff --check` 和 fresh child-only review 已通过；
 - 未运行真实 provider/LLM；M0.3 只提供离线 review record 入口；
-- 由于真实用户反馈尚未填写，当前 `capability_status=not_evidence`，
-  `M0 product loop=pending user review`，G2 Capability Gate 仍为
-  `not_passed`。
+- 真实复核记录位于
+  `value-screener/data/live_runs/2026-09-04-m0-002709/review-completed/`，
+  archive addendum 位于
+  `openspec/changes/archive/2026-08-28-m0-single-stock-user-review/evidence.md`；
+- 四个维度均为 `accepted`，该记录的 `review_status=completed`、
+  `capability_status=mvp_evidence`、`gate_status=not_passed`；
+- 用户保留的 residual risk 为行业映射缺失、同行数据缺失和部分
+  sensitivity 不完整；G2 Capability Gate 仍为 `not_passed`。
 
-M0.3 的工程入口已完成，但 M0 整体产品闭环仍 pending；下一步应先让用户
-基于真实 M0.1/M0.2 artifact 填写 review record，再根据反馈决定是否进入
-M1.1，不自动开始新的 M1 child。
+M0.3 的工程入口和本次真实产品反馈均已完成；M0 的单股产品闭环对
+`002709.SZ` 该次运行已形成 MVP evidence。下一步可进入已单独隔离的
+M1.3 `g1-small-sample-user-review` 工程闭环，但不得把一次单股反馈扩展为
+G1/G2 Capability Gate 证据。
 
 #### M1：小样本 G1 MVP
 
-M1 的目标是验证 G1 筛选结果是否符合个人价值风格。现有
-`g1-300-sample-validation` 是根目录用户未跟踪 WIP，不能自动视为
-已完成或当前 active child；若继续使用，必须先按当前 baseline 单独核验。
+M1 的目标是验证 G1 筛选结果是否符合个人价值风格。`g1-300-sample-validation`
+已归档，当前唯一权威版本为
+`openspec/changes/archive/2026-08-29-g1-300-sample-validation/`；
+不得重新创建同名 active change。
 
 | 顺序 | Child Change | 唯一用户问题 | 用户可见产物 | 明确不做 | 初始状态 |
 |---|---|---|---|---|---|
 | M1.1 | `g1-300-sample-validation` | 如何构造可重复、状态诚实的小样本？ | fixture/sample contract 与选择汇总 | 不调用 provider/LLM；不代表真实 G1 Gate | `merged / not_evidence` |
 | M1.2 | `g1-mvp-small-sample-run` | 小样本筛选是否符合用户风格？ | 每只股票的分数、通过/排除原因、质量状态和候选列表 | 不运行全市场；不做 300+ 正式证据 | `merged / not_evidence` |
-| M1.3 | `g1-small-sample-user-review` | 用户是否认可候选及排除理由？ | 逐只人工反馈和阈值问题清单 | 不直接修改 G1 Gate；不预防性重写筛选器 | `pending` |
+| M1.3 | `g1-small-sample-user-review` | 用户是否认可候选及排除理由？ | 逐只人工反馈和阈值问题清单 | 不直接修改 G1 Gate；不预防性重写筛选器 | `merged / mvp_evidence; 5 票 reviewed 2026-09-08` |
 
 M1.1 已于 2026-08-29 完成离线工程闭环：
 
@@ -459,8 +475,9 @@ M1.1 已于 2026-08-29 完成离线工程闭环：
 - 未运行 AkShare、东财、LongPort/Longbridge 或其他 provider/LLM，未执行真实
   300+ 样本，未生成 live evidence、provider qualification、canonical
   promotion、watchlist 或 debate 产物；
-- M1.1 的 `capability_status=not_evidence`，G1 Capability Gate 保持
-  `not_passed`；M1.2 已完成工程闭环，但仍不产生正式 G1 evidence。
+- M1.1 的 `capability_status=not_evidence`；M1.1/M1.2 是 M1 MVP 的工程
+  里程碑，本身不产生正式 G1 evidence。G1 正式 Gate 见 release decision，
+  已记录 `passed`。
 
 M1.2 `g1-mvp-small-sample-run` 已于 2026-08-31 完成工程闭环并合入
 `main`：
@@ -480,8 +497,8 @@ M1.2 `g1-mvp-small-sample-run` 已于 2026-08-31 完成工程闭环并合入
 - compileall、`git diff --check` 和独立 child-only review 已通过；
 - 未调用 provider、LLM、Scout 或 Council，未运行真实全市场/300+ 样本，
   未生成 G1 Capability Gate evidence；
-- `engineering_status=merged`、`capability_status=not_evidence`、
-  `gate_status=not_passed`；M1.3 仍为 `pending`。
+- `engineering_status=merged`、`capability_status=mvp_evidence`、
+  `gate_status=not_passed`；M1.3 的真实用户复核已于 2026-09-08 完成。
 
 #### M2：强单 Agent G2 MVP
 
@@ -599,7 +616,7 @@ M0.1 冻结输入与 growth diagnostic
 当前下一步是：
 
 ```text
-完成真实 M0.3 用户人工复核；随后基于 M1.2 产物决定是否进入 M1.3
+继续 M2 强单 Agent G2 MVP；首个 child 为 g2-strong-agent-baseline
 ```
 
 执行窗口必须先读取：
@@ -613,9 +630,9 @@ design/growth-expectation-capitalization-prd-2026-08-04.md
 openspec/changes/g2-deep-investment-thesis/tasks.md
 ```
 
-M0.1 和 M0.2 均已完成工程闭环并生成 MVP evidence。M0.3 已完成工程闭环，
-但只负责用户人工复核和反馈记录，不新增研究运行时能力；当前仍等待真实
-用户填写。后续如需继续开发，仍须重新核验当前 baseline、根目录用户 WIP、
+M0.1、M0.2 和 M0.3 均已完成工程闭环并生成对应 MVP 产物；M0.3 的
+`002709.SZ` 真实用户复核已完成，但只代表该次 M0 实验反馈，不新增研究
+运行时能力。后续如需继续开发，仍须重新核验当前 baseline、根目录用户 WIP、
 worktree 状态和 OpenSpec 状态，并继续遵守同一时间只允许一个 active child
 和一个 active worktree。
 
@@ -629,7 +646,8 @@ git worktree list
 openspec list --json
 ```
 
-当前没有 active child。M1.2 已完成独立 review、archive、strict validation、
-合入 main 和 active change 清理；完成远端 push 后再确认 `main == origin/main`
-以及 child worktree/branch 已清理。没有真实用户复核前，不把 M0 或 M1
-Capability Gate 标记为通过。
+当前没有 active implementation child；G1-4、G2、G3 umbrella 仍作为未完成的
+治理 change 保留。M1 已完成 M1.1/M1.2/M1.3 工程闭环；M1.3 已归档 5 票真实
+用户复核的 `mvp_evidence`。G1 正式 Capability Gate 的权威结论是
+`g1-fast-personal-value-screening` release decision：`passed`。下一步按
+roadmap 推进 M2 强单 Agent G2 MVP。当前工作区存在未提交 WIP。

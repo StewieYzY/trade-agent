@@ -4,21 +4,30 @@
 >
 > 状态：`CURRENT POINTER`
 >
-> 更新日期：2026-08-06
+> 更新日期：2026-09-07
 >
 > 本文件不是第二份大规划，不记录动态 milestone、Repair 状态或执行细节。
 
 ## 当前唯一生效的大规划
 
 ```text
-design/capability-gate-and-execution-handoff-2026-08-06.md
+design/capability-gate-and-execution-handoff-2026-08-27.md
 ```
 
 Master ID：
 
 ```text
-MASTER-2026-08-06
+MASTER-2026-08-27
 ```
+
+当前执行模式：
+
+```text
+MVP-first execution
+```
+
+先形成可运行的最小闭环，再推进工程增强与正式 Capability Gate。正式
+Capability Gate 仍然有效，但不再作为用户看到第一个可运行产物的前置条件。
 
 任何新窗口、SubAgent、rolling handoff、OpenSpec repair 或 PR review 都必须先读取
 该 CURRENT master。
@@ -30,7 +39,7 @@ MASTER-2026-08-06
   design/three-goal-capability-roadmap.md
 
 唯一当前执行大规划
-  design/capability-gate-and-execution-handoff-2026-08-06.md
+  design/capability-gate-and-execution-handoff-2026-08-27.md
 
 微观执行恢复点
   当前 master 指定的 rolling handoff
@@ -47,6 +56,7 @@ MASTER-2026-08-06
 design/capability-gate-and-execution-handoff-2026-08-05.md
 design/capability-gate-and-execution-handoff-2026-08-04.md
 design/capability-gate-and-execution-handoff-2026-08-03.md
+design/capability-gate-and-execution-handoff-2026-08-06.md
 ```
 
 历史文件用于复盘里程碑，不得作为当前执行入口。

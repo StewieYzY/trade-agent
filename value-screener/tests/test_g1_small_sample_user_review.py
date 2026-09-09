@@ -119,6 +119,57 @@ def test_completed_review_preserves_user_text_and_explicit_issue_categories():
     assert record["ticker_reviews"][-1]["ticker"] == "600005.SH"
 
 
+def test_candidate_score_order_may_differ_from_canonical_ticker_order():
+    from test_g1_mvp_small_sample_run import _bundle as _m12_bundle
+
+    data = {ticker: _complete_dimensions() for ticker in
+            ["600001", "600002", "600003", "600004", "600005"]}
+    data["600003"]["financials"] = {
+        "__error__": True,
+        "error": "fixture financials failed",
+    }
+    data["600001"]["valuation"]["pb"] = 3.0
+
+    source = run_small_sample(
+        _m12_bundle(
+            tickers=["600001", "600002", "600003", "600004", "600005"],
+            data=data,
+        )
+    )
+
+    record = build_small_sample_user_review_record(source)
+    assert [item["ticker"] for item in record["ticker_reviews"]] == [
+        "600001.SH",
+        "600002.SH",
+        "600003.SH",
+        "600004.SH",
+        "600005.SH",
+    ]
+    assert {
+        item["ticker"] for item in source["staged_evidence"]["candidates"]
+    } == {"600001.SH", "600002.SH", "600004.SH", "600005.SH"}
+
+
+def test_real_full_financial_payload_fields_are_accepted():
+    data = {ticker: _complete_dimensions() for ticker in
+            ["600001", "600002", "600003", "600004", "600005"]}
+    data["600003"]["financials"] = {
+        "__error__": True,
+        "error": "fixture financials failed",
+    }
+    for ticker in ("600001", "600002", "600004", "600005"):
+        financials = data[ticker]["financials"]
+        financials["income"]["revenue"] = [100.0, 105.0, 110.0]
+        financials["income"]["operating_cost"] = [60.0, 62.0, 64.0]
+        financials["income"]["operating_cash_flow"] = [12.0, 13.0, 14.0]
+        financials["balance_sheet"]["TOTAL_CURRENT_ASSETS"] = [60.0, 62.0, 64.0]
+        financials["balance_sheet"]["SHARE_CAPITAL"] = [10.0, 10.0, 10.0]
+
+    source = run_small_sample(_bundle(data=data))
+    record = build_small_sample_user_review_record(source)
+    assert record["review_status"] == "template"
+
+
 def test_partial_issue_summary_defaults_unspecified_categories_to_empty():
     source = run_small_sample(_bundle())
     reviews = _completed_reviews(source)

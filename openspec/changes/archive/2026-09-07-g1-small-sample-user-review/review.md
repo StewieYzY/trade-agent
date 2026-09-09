@@ -50,7 +50,8 @@ Residual risks retained by scope:
 ## Final engineering and capability state
 
 - `engineering_status=merged` (set only after merge and push)
-- `capability_status=not_evidence`
+- `capability_status=mvp_evidence`
 - `gate_status=not_passed`
 - `M0.3 real user review=completed (2026-09-04)`
+- `M1.3 real user review=completed (2026-09-08)`
 - `G1 Capability Gate=not_passed`

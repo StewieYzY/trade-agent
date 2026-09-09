@@ -112,6 +112,70 @@ _CANDIDATE_FIELDS = {
     "pledge_ratio",
     "heat_filter",
 }
+_DIMENSION_PAYLOAD_FIELDS = {
+    "basic": {
+        "name",
+        "price",
+        "last_price",
+        "pe",
+        "pb",
+        "market_cap",
+        "industry",
+        "industry_status",
+        "code",
+    },
+    "financials": {"years", "income", "balance_sheet", "cash_flow", "status"},
+    "risk": {
+        "pledge_ratio",
+        "pledge_status",
+        "goodwill",
+        "audit_opinion",
+        "status",
+    },
+    "valuation": {
+        "pe_ttm",
+        "pb",
+        "pe_percentile_5y",
+        "pb_percentile_5y",
+        "pe_history",
+        "pb_history",
+        "graham_number",
+        "pe_ttm_status",
+        "pe_ttm_provenance",
+        "status",
+    },
+    "kline": {"dates", "close", "volume", "turnover_rate"},
+}
+_DIMENSION_PAYLOAD_REQUIRED = {
+    "basic": {"name", "price", "pe", "pb", "market_cap", "industry"},
+    "financials": {"years", "income", "balance_sheet", "cash_flow"},
+    "risk": {"pledge_ratio", "pledge_status", "audit_opinion"},
+    "valuation": {"pe_ttm", "pb", "pe_percentile_5y", "pe_history"},
+    "kline": {"close", "turnover_rate"},
+}
+_FINANCIALS_INCOME_FIELDS = {
+    "revenue",
+    "net_profit",
+    "operating_cost",
+    "operating_cash_flow",
+    "goodwill",
+}
+_FINANCIALS_INCOME_REQUIRED = {"net_profit"}
+_FINANCIALS_BALANCE_FIELDS = {
+    "TOTAL_ASSETS",
+    "TOTAL_CURRENT_ASSETS",
+    "TOTAL_CURRENT_LIAB",
+    "TOTAL_NONCURRENT_LIAB",
+    "SHARE_CAPITAL",
+    "GOODWILL",
+}
+_FINANCIALS_BALANCE_REQUIRED = {
+    "TOTAL_ASSETS",
+    "TOTAL_CURRENT_LIAB",
+    "TOTAL_NONCURRENT_LIAB",
+}
+_FINANCIALS_CASH_FIELDS = {"NETCASH_OPERATE", "CONSTRUCT_LONG_ASSET"}
+_FINANCIALS_CASH_REQUIRED = {"NETCASH_OPERATE"}
 _TICKER_EVIDENCE_FIELDS = {"raw_ticker", "canonical_fields"}
 _CANONICAL_FIELD_FIELDS = {
     "value",
@@ -1283,14 +1347,9 @@ def _validate_dimension_payload(
                 f"M1.2 {stage_name} error payload is invalid for {ticker}"
             )
         return
-    expected = {
-        "basic": {"name", "price", "pe", "pb", "market_cap", "industry"},
-        "financials": {"years", "income", "balance_sheet", "cash_flow"},
-        "risk": {"pledge_ratio", "pledge_status", "audit_opinion"},
-        "valuation": {"pe_ttm", "pb", "pe_percentile_5y", "pe_history"},
-        "kline": {"close", "turnover_rate"},
-    }[dimension]
-    if set(value) != expected:
+    if not _DIMENSION_PAYLOAD_REQUIRED[dimension].issubset(value) or (
+        set(value) - _DIMENSION_PAYLOAD_FIELDS[dimension]
+    ):
         raise SmallSampleUserReviewInputError(
             f"M1.2 {stage_name} {dimension} payload fields are invalid for {ticker}"
         )
@@ -1308,12 +1367,16 @@ def _validate_dimension_payload(
             not isinstance(value["years"], list)
             or any(not isinstance(year, str) for year in value["years"])
             or not isinstance(value["income"], Mapping)
-            or set(value["income"]) != {"net_profit"}
+            or not _FINANCIALS_INCOME_REQUIRED.issubset(value["income"])
+            or set(value["income"]) - _FINANCIALS_INCOME_FIELDS
             or not isinstance(value["balance_sheet"], Mapping)
-            or set(value["balance_sheet"])
-            != {"TOTAL_ASSETS", "TOTAL_CURRENT_LIAB", "TOTAL_NONCURRENT_LIAB"}
+            or not _FINANCIALS_BALANCE_REQUIRED.issubset(
+                value["balance_sheet"]
+            )
+            or set(value["balance_sheet"]) - _FINANCIALS_BALANCE_FIELDS
             or not isinstance(value["cash_flow"], Mapping)
-            or set(value["cash_flow"]) != {"NETCASH_OPERATE"}
+            or not _FINANCIALS_CASH_REQUIRED.issubset(value["cash_flow"])
+            or set(value["cash_flow"]) - _FINANCIALS_CASH_FIELDS
         ):
             raise SmallSampleUserReviewInputError(
                 f"M1.2 {stage_name} financials nested fields are invalid for {ticker}"
@@ -1714,6 +1777,7 @@ def _validate_staged_evidence(source: Mapping[str, Any]) -> None:
                 "M1.2 candidate ticker must be canonical"
             )
         actual_candidates.append(dict(item))
+    actual_candidates.sort(key=lambda item: item["ticker"])
     expected_candidates = [
         _candidate_view(row)
         for row in sorted(source_rows, key=lambda row: row["ticker"])
